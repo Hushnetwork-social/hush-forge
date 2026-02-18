@@ -12,12 +12,12 @@ export interface TokenInfo {
   contractHash: string; // 0x-prefixed, 42 chars
   symbol: string;
   name: string;
-  creator: string; // Neo N3 address (Nw...)
+  creator: string | null; // null for non-factory tokens
   supply: bigint; // raw integer (never number — precision loss risk)
   decimals: number;
-  mode: "community" | "premium";
-  tier: number;
-  createdAt: number; // Unix timestamp in milliseconds
+  mode: "community" | "premium" | null; // null for non-factory tokens
+  tier: number | null; // null for non-factory tokens
+  createdAt: number | null; // null for non-factory tokens
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */

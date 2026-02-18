@@ -1,0 +1,280 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  fetchCreationFee,
+  checkGasBalance,
+  pollForConfirmation,
+  parseTokenCreatedEvent,
+  TxFaultedError,
+  TxTimeoutError,
+} from "./forge-service";
+import type { ApplicationLog } from "./types";
+
+// Mock dependencies
+vi.mock("./forge-config", () => ({
+  FACTORY_CONTRACT_HASH: "0xfactory",
+  GAS_CONTRACT_HASH: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
+  TX_POLLING_TIMEOUT_MS: 500, // Short timeout for fast tests
+  TX_POLLING_INTERVAL_MS: 100,
+}));
+
+vi.mock("./neo-rpc-client", () => ({
+  invokeFunction: vi.fn(),
+  getApplicationLog: vi.fn(),
+  getTokenBalance: vi.fn(),
+}));
+
+vi.mock("./neo-dapi-adapter", () => ({
+  invokeForge: vi.fn(),
+}));
+
+import {
+  invokeFunction as mockInvokeFunction,
+  getApplicationLog as mockGetApplicationLog,
+  getTokenBalance as mockGetTokenBalance,
+} from "./neo-rpc-client";
+import "./neo-dapi-adapter"; // mock only — no named imports needed
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Builds a valid ApplicationLog with one TokenCreated notification. */
+function buildTokenCreatedLog(contractHashBase64: string): ApplicationLog {
+  return {
+    txid: "0xtx",
+    executions: [
+      {
+        trigger: "Application",
+        vmstate: "HALT",
+        gasconsumed: "1000000",
+        stack: [],
+        notifications: [
+          {
+            contract: "0xfactory",
+            eventname: "TokenCreated",
+            state: {
+              type: "Array",
+              value: [
+                { type: "ByteString", value: contractHashBase64 },
+                { type: "ByteString", value: contractHashBase64 }, // creator (reuse for test)
+                { type: "ByteString", value: btoa("HUSH") },
+                { type: "Integer", value: "21000000" },
+                { type: "ByteString", value: btoa("community") },
+                { type: "Integer", value: "0" },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/** Builds an ApplicationLog with FAULT state. */
+function buildFaultLog(): ApplicationLog {
+  return {
+    txid: "0xtx",
+    executions: [
+      {
+        trigger: "Application",
+        vmstate: "FAULT",
+        gasconsumed: "100000",
+        stack: [],
+        notifications: [],
+        exception: "An unhandled exception was thrown",
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// fetchCreationFee
+// ---------------------------------------------------------------------------
+
+describe("fetchCreationFee", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("returns fee in datoshi and displayGas", async () => {
+    vi.mocked(mockInvokeFunction).mockResolvedValue({
+      state: "HALT",
+      gasconsumed: "100000",
+      script: "",
+      stack: [{ type: "Integer", value: "1500000000" }],
+    });
+
+    const fee = await fetchCreationFee();
+
+    expect(fee.datoshi).toBe(1_500_000_000n);
+    expect(fee.displayGas).toBe("15");
+  });
+
+  it("falls back to 15 GAS when RPC call fails", async () => {
+    vi.mocked(mockInvokeFunction).mockRejectedValue(
+      new Error("RPC unreachable")
+    );
+
+    const fee = await fetchCreationFee();
+
+    expect(fee.datoshi).toBe(1_500_000_000n);
+    expect(fee.displayGas).toBe("15");
+  });
+
+  it("falls back when stack is empty", async () => {
+    vi.mocked(mockInvokeFunction).mockResolvedValue({
+      state: "HALT",
+      gasconsumed: "100000",
+      script: "",
+      stack: [],
+    });
+
+    const fee = await fetchCreationFee();
+
+    expect(fee.datoshi).toBe(1_500_000_000n);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkGasBalance
+// ---------------------------------------------------------------------------
+
+describe("checkGasBalance", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("returns sufficient=true when balance exceeds fee + 10% buffer", async () => {
+    vi.mocked(mockGetTokenBalance).mockResolvedValue(2_000_000_000n); // 20 GAS
+
+    const result = await checkGasBalance("NwAddress", 1_500_000_000n);
+
+    expect(result.sufficient).toBe(true);
+    expect(result.actual).toBe(2_000_000_000n);
+    expect(result.required).toBe(1_650_000_000n); // 1.5 GAS + 10%
+  });
+
+  it("returns sufficient=false when balance is below fee + buffer", async () => {
+    vi.mocked(mockGetTokenBalance).mockResolvedValue(500_000_000n); // 5 GAS
+
+    const result = await checkGasBalance("NwAddress", 1_500_000_000n);
+
+    expect(result.sufficient).toBe(false);
+    expect(result.actual).toBe(500_000_000n);
+    expect(result.required).toBe(1_650_000_000n);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pollForConfirmation
+// ---------------------------------------------------------------------------
+
+describe("pollForConfirmation", () => {
+  beforeEach(() => vi.resetAllMocks());
+  afterEach(() => vi.useRealTimers());
+
+  it("resolves with TokenCreatedEvent when found on the third poll", async () => {
+    // First two polls return null (pending), third returns the log
+    const hashBytes = new Uint8Array(20).fill(1); // 20 bytes of 0x01
+    const base64 = btoa(String.fromCharCode(...hashBytes));
+
+    vi.mocked(mockGetApplicationLog)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(buildTokenCreatedLog(base64));
+
+    vi.useFakeTimers();
+    const promise = pollForConfirmation("0xtx");
+
+    // Advance enough time for 3 polls (2 x 100ms intervals + initial)
+    await vi.advanceTimersByTimeAsync(300);
+
+    const event = await promise;
+    expect(event.symbol).toBe("HUSH");
+    expect(event.mode).toBe("community");
+    expect(event.supply).toBe(21_000_000n);
+    expect(vi.mocked(mockGetApplicationLog)).toHaveBeenCalledTimes(3);
+  });
+
+  it("throws TxTimeoutError after timeout (500ms with mocked config)", async () => {
+    vi.mocked(mockGetApplicationLog).mockResolvedValue(null);
+
+    vi.useFakeTimers();
+    const promise = pollForConfirmation("0xtx");
+    // Attach handler immediately to prevent unhandled-rejection warning
+    const caught = promise.catch((e: unknown) => e);
+
+    // Advance past the mocked 500ms timeout
+    await vi.advanceTimersByTimeAsync(700);
+
+    expect(await caught).toBeInstanceOf(TxTimeoutError);
+  });
+
+  it("throws TxFaultedError immediately on FAULT state", async () => {
+    vi.mocked(mockGetApplicationLog).mockResolvedValue(buildFaultLog());
+
+    vi.useFakeTimers();
+    const promise = pollForConfirmation("0xtx");
+    const caught = promise.catch((e: unknown) => e);
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(await caught).toBeInstanceOf(TxFaultedError);
+    // Should not have retried
+    expect(vi.mocked(mockGetApplicationLog)).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onProgress callback with confirming status while pending", async () => {
+    const onProgress = vi.fn();
+    const hashBytes = new Uint8Array(20).fill(2);
+    const base64 = btoa(String.fromCharCode(...hashBytes));
+
+    vi.mocked(mockGetApplicationLog)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(buildTokenCreatedLog(base64));
+
+    vi.useFakeTimers();
+    const promise = pollForConfirmation("0xtx", onProgress);
+
+    await vi.advanceTimersByTimeAsync(200);
+    await promise;
+
+    expect(onProgress).toHaveBeenCalledWith("confirming");
+    expect(onProgress).toHaveBeenCalledWith("confirmed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTokenCreatedEvent
+// ---------------------------------------------------------------------------
+
+describe("parseTokenCreatedEvent", () => {
+  it("extracts event fields from ApplicationLog", () => {
+    const hashBytes = new Uint8Array(20).fill(0xab);
+    const base64 = btoa(String.fromCharCode(...hashBytes));
+    const log = buildTokenCreatedLog(base64);
+
+    const event = parseTokenCreatedEvent(log);
+
+    expect(event.symbol).toBe("HUSH");
+    expect(event.mode).toBe("community");
+    expect(event.supply).toBe(21_000_000n);
+    expect(event.tier).toBe(0);
+    // contractHash is the decoded hash — verify it's a 0x-prefixed hex string
+    expect(event.contractHash).toMatch(/^0x[0-9a-f]{40}$/);
+  });
+
+  it("throws when no TokenCreated notification found", () => {
+    const log: ApplicationLog = {
+      txid: "0xtx",
+      executions: [
+        {
+          trigger: "Application",
+          vmstate: "HALT",
+          gasconsumed: "1000000",
+          stack: [],
+          notifications: [],
+        },
+      ],
+    };
+    expect(() => parseTokenCreatedEvent(log)).toThrow(
+      "TokenCreated event not found"
+    );
+  });
+});

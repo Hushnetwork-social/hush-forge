@@ -59,8 +59,7 @@ describe("WalletStore.connect", () => {
 
     await useWalletStore.getState().connect("NeoLine");
 
-    // localStorage is managed by the dAPI adapter (called in connect action)
-    expect(vi.mocked(mockConnect)).toHaveBeenCalledWith("NeoLine");
+    expect(localStorage.getItem("forge_wallet_type")).toBe("NeoLine");
   });
 
   it("sets error state on connection failure", async () => {
@@ -116,6 +115,12 @@ describe("WalletStore.disconnect", () => {
     expect(state.walletType).toBeNull();
     expect(state.balances).toEqual([]);
     expect(state.errorMessage).toBeNull();
+  });
+
+  it("removes wallet type from localStorage on disconnect", async () => {
+    localStorage.setItem("forge_wallet_type", "NeoLine");
+    useWalletStore.getState().disconnect();
+    expect(localStorage.getItem("forge_wallet_type")).toBeNull();
   });
 
   it("calls dAPI adapter disconnect", async () => {

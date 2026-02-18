@@ -53,6 +53,9 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
       const address = await dapiConnect(walletType);
       const balances = await dapiGetBalances(address);
       set({ walletType, address, balances, connectionStatus: "connected" });
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(WALLET_STORAGE_KEY, walletType);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       set({
@@ -67,6 +70,9 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
 
   disconnect() {
     dapiDisconnect();
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(WALLET_STORAGE_KEY);
+    }
     set({ ...WALLET_INITIAL_STATE });
   },
 

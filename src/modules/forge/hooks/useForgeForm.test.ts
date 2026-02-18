@@ -142,6 +142,44 @@ describe("useForgeForm", () => {
     expect(vi.mocked(mockSubmitForge)).not.toHaveBeenCalled();
   });
 
+  it("zero supply fails validation", async () => {
+    const { result } = await renderWithFeeLoaded();
+
+    await act(async () => {
+      result.current.setName("HushToken");
+      result.current.setSymbol("HUSH");
+      result.current.setSupply("0");
+      result.current.setDecimals("8");
+    });
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.errors.supply).toBe("Supply must be a positive integer");
+    expect(vi.mocked(mockSubmitForge)).not.toHaveBeenCalled();
+  });
+
+  it("decimals out of range fails validation", async () => {
+    const { result } = await renderWithFeeLoaded();
+
+    await act(async () => {
+      result.current.setName("HushToken");
+      result.current.setSymbol("HUSH");
+      result.current.setSupply("1000000");
+      result.current.setDecimals("19"); // > 18
+    });
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.errors.decimals).toBe(
+      "Decimals must be an integer between 0 and 18"
+    );
+    expect(vi.mocked(mockSubmitForge)).not.toHaveBeenCalled();
+  });
+
   it("empty name fails validation", async () => {
     const { result } = await renderWithFeeLoaded();
 

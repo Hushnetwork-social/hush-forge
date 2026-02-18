@@ -83,11 +83,19 @@ export function useForgeForm(
 
   // Fetch fee once on mount
   useEffect(() => {
-    fetchCreationFee().then((fee) => {
-      setCreationFeeDatoshi(fee.datoshi);
-      setCreationFeeDisplay(fee.displayGas);
-      setFeeLoading(false);
-    });
+    fetchCreationFee()
+      .then((fee) => {
+        setCreationFeeDatoshi(fee.datoshi);
+        setCreationFeeDisplay(fee.displayGas);
+      })
+      .catch(() => {
+        // fetchCreationFee already falls back to 15 GAS internally;
+        // this catch guards against unexpected rejections to prevent
+        // feeLoading from hanging forever.
+      })
+      .finally(() => {
+        setFeeLoading(false);
+      });
   }, []);
 
   // GAS sufficiency check — recomputed whenever fee or gasBalance changes

@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+/* ─── Forge Ember Design Tokens ─────────────────────────────────────── */
+
+:root {
+  --forge-bg-primary: #1a1a1a;
+  --forge-bg-card: #242424;
+  --forge-bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2a1810 100%);
+
+  --forge-color-primary: #ff6b35;
+  --forge-color-secondary: #d84315;
+  --forge-color-accent: #ffa726;
+
+  --forge-text-primary: #f5f5f5;
+  --forge-text-secondary: rgba(245, 245, 245, 0.8);
+  --forge-text-muted: rgba(245, 245, 245, 0.5);
+
+  --forge-border-subtle: rgba(255, 107, 53, 0.1);
+  --forge-border-medium: rgba(255, 107, 53, 0.2);
+  --forge-border-strong: rgba(255, 107, 53, 0.4);
+  --forge-border-own: rgba(255, 167, 38, 0.4);
+
+  --forge-shadow-primary: 0 10px 30px rgba(255, 107, 53, 0.4);
+  --forge-glow-text: 0 0 20px rgba(255, 107, 53, 0.5);
+
+  --forge-success: #4caf50;
+  --forge-error: #ff5252;
+}
+
+body {
+  background-color: var(--forge-bg-primary);
+  color: var(--forge-text-primary);
+}

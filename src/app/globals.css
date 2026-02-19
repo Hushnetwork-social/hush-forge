@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* ─── Tailwind v4 theme extension — Forge Ember palette ─────────────── */
+
+@theme {
+  --color-forge-bg: #1a1a1a;
+  --color-forge-card: #242424;
+  --color-forge-primary: #ff6b35;
+  --color-forge-secondary: #d84315;
+  --color-forge-accent: #ffa726;
+  --color-forge-success: #4caf50;
+  --color-forge-error: #ff5252;
+}
+
 /* ─── Forge Ember Design Tokens ─────────────────────────────────────── */
 
 :root {

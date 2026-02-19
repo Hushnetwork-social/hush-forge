@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTokenDetail } from "../hooks/useTokenDetail";
 import { addNEP17Token } from "../neo-dapi-adapter";
 import { NEOTUBE_BASE_URL } from "../forge-config";
@@ -39,13 +40,13 @@ export function TokenDetail({ contractHash, onUpdateClick }: Props) {
   return (
     <div className="max-w-2xl mx-auto p-6">
       {/* Back link */}
-      <a
+      <Link
         href="/tokens"
         className="text-sm mb-6 inline-block"
         style={{ color: "var(--forge-text-muted)" }}
       >
         ← All Tokens
-      </a>
+      </Link>
 
       {/* Contract hash — always visible */}
       <div

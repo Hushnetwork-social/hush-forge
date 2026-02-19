@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useTokenDetail } from "../hooks/useTokenDetail";
 import { addNEP17Token } from "../neo-dapi-adapter";
@@ -27,9 +28,16 @@ function formatDate(timestamp: number): string {
 export function TokenDetail({ contractHash, onUpdateClick }: Props) {
   const { token, loading, error, isOwnToken, isUpgradeable } =
     useTokenDetail(contractHash);
+  const [copied, setCopied] = useState(false);
 
   function copyHash() {
-    navigator.clipboard.writeText(contractHash).catch(() => {});
+    navigator.clipboard
+      .writeText(contractHash)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
   }
 
   async function handleAddToWallet() {
@@ -69,7 +77,7 @@ export function TokenDetail({ contractHash, onUpdateClick }: Props) {
             className="text-xs opacity-60 hover:opacity-100"
             style={{ color: "var(--forge-text-muted)" }}
           >
-            ⎘
+            {copied ? "✓ Copied!" : "⎘"}
           </button>
           <a
             href={`${NEOTUBE_BASE_URL}/contract/${contractHash}`}
@@ -187,6 +195,15 @@ export function TokenDetail({ contractHash, onUpdateClick }: Props) {
               </div>
             )}
           </dl>
+
+          {!token.creator && (
+            <p
+              className="text-xs mb-4"
+              style={{ color: "var(--forge-text-muted)" }}
+            >
+              ℹ Not registered via Forge
+            </p>
+          )}
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3">

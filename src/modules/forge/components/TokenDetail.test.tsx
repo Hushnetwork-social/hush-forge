@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { TokenDetail } from "./TokenDetail";
 import { useTokenDetail } from "../hooks/useTokenDetail";
 import type { TokenDetailResult } from "../hooks/useTokenDetail";
@@ -99,10 +99,28 @@ describe("TokenDetail", () => {
     );
   });
 
-  it("copy button copies contract hash to clipboard", () => {
+  it("copy button copies contract hash to clipboard", async () => {
     render(<TokenDetail contractHash="0xabc123" />);
-    fireEvent.click(screen.getByLabelText("Copy contract hash"));
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Copy contract hash"));
+    });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("0xabc123");
+  });
+
+  it("copy button shows Copied! confirmation after click", async () => {
+    render(<TokenDetail contractHash="0xabc123" />);
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Copy contract hash"));
+    });
+    expect(screen.getByText(/Copied!/)).toBeInTheDocument();
+  });
+
+  it("shows Not registered via Forge note when creator is null", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({ token: makeToken({ creator: null as unknown as string }) })
+    );
+    render(<TokenDetail contractHash="0xabc123" />);
+    expect(screen.getByText(/Not registered via Forge/)).toBeInTheDocument();
   });
 
   it("NeoTube link has correct href", () => {

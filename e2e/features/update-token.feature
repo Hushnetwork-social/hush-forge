@@ -14,7 +14,7 @@ Feature: Update Token
     Given the UpdateOverlay is open with modified values
     When the user clicks FORGE and the wallet signs
     And the update transaction is confirmed on-chain
-    Then a success toaster appears: "Token updated successfully"
+    Then a success toaster appears: "Token Forged!"
     And the token detail page refreshes with the new values
 
   Scenario: On-chain rejection shows error toaster

@@ -158,7 +158,7 @@ export const test = base.extend<Fixtures>({
     await page.addInitScript(
       ({ address }: { address: string }) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).neo = {
+        (window as any).neon = {
           NEO: { getAccount: async () => ({ address }) },
           GAS: {},
 

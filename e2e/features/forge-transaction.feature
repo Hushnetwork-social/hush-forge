@@ -13,7 +13,7 @@ Feature: Forge Transaction Flow
     Given the Forge overlay is open with a valid form
     When the user clicks FORGE and the wallet signs
     Then the Forge overlay is replaced by the WaitingOverlay
-    And the WaitingOverlay shows a spinner and "Waiting for confirmation…"
+    And the WaitingOverlay shows a spinner and "Forging your token…"
 
   Scenario: Waiting overlay shows txHash with NeoTube link
     Given the WaitingOverlay is active

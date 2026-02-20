@@ -109,7 +109,7 @@ export function TokenCard({ token, isOwn, onClick }: Props) {
       {/* Row 1: Avatar + Symbol (left)  |  TypeBadge + Yours (right) */}
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2 min-w-0">
-          <TokenIcon contractHash={token.contractHash} size={36} />
+          <TokenIcon contractHash={token.contractHash} size={36} imageUrl={token.imageUrl} />
           <span
             className="text-xl font-bold truncate"
             style={{ color: "var(--forge-text-primary)" }}

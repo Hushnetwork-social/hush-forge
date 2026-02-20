@@ -19,6 +19,7 @@ export interface TokenInfo {
   tier: number | null; // null for non-factory tokens
   createdAt: number | null; // null for non-factory tokens
   isNative?: boolean; // true for NEO / GAS native contracts
+  imageUrl?: string; // optional user-supplied icon URL (stored as metadataUri on TokenTemplate)
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */
@@ -74,6 +75,7 @@ export interface ForgeParams {
   supply: bigint; // stored as bigint — never number
   decimals: number;
   mode: "community";
+  imageUrl?: string; // optional icon URL — stored as metadataUri on the deployed TokenTemplate
 }
 
 /** User-entered parameters for updating an existing token. */

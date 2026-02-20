@@ -18,6 +18,8 @@ import type { ForgeParams } from "../types";
 // Public types
 // ---------------------------------------------------------------------------
 
+export type ImagePreviewState = "idle" | "loading" | "ok" | "error";
+
 export interface UseForgeFormResult {
   // Form fields
   name: string;
@@ -28,6 +30,9 @@ export interface UseForgeFormResult {
   setSupply: (v: string) => void;
   decimals: string;
   setDecimals: (v: string) => void;
+  imageUrl: string;
+  setImageUrl: (v: string) => void;
+  imagePreview: ImagePreviewState;
 
   // Validation
   errors: Record<string, string>;
@@ -64,6 +69,8 @@ export function useForgeForm(
   const [symbol, setSymbolRaw] = useState("");
   const [supply, setSupply] = useState("");
   const [decimals, setDecimals] = useState("8");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imagePreview, setImagePreview] = useState<ImagePreviewState>("idle");
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -97,6 +104,30 @@ export function useForgeForm(
         setFeeLoading(false);
       });
   }, []);
+
+  // Image URL probe — debounced 600ms, uses Image() constructor (not <img onError>)
+  // so browser negative-cache doesn't prevent re-probing on change.
+  useEffect(() => {
+    const trimmed = imageUrl.trim();
+    if (!trimmed) {
+      setImagePreview("idle");
+      return;
+    }
+    setImagePreview("loading");
+    const timer = setTimeout(() => {
+      const img = new Image();
+      img.onload = () => setImagePreview("ok");
+      img.onerror = () => {
+        // Retry once with cache-buster
+        const retry = new Image();
+        retry.onload = () => setImagePreview("ok");
+        retry.onerror = () => setImagePreview("error");
+        retry.src = `${trimmed}?_=1`;
+      };
+      img.src = trimmed;
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [imageUrl]);
 
   // GAS sufficiency check — recomputed whenever fee or gasBalance changes
   const gasCheckResult = useMemo<GasBalanceCheck | null>(() => {
@@ -145,6 +176,10 @@ export function useForgeForm(
       errs.decimals = "Decimals must be an integer between 0 and 18";
     }
 
+    if (imageUrl.trim() && !/^https?:\/\/.+/.test(imageUrl.trim())) {
+      errs.imageUrl = "Must be a valid http/https URL";
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -172,6 +207,7 @@ export function useForgeForm(
         supply: BigInt(supply) * (10n ** BigInt(decimalsNum)),
         decimals: decimalsNum,
         mode: "community",
+        imageUrl: imageUrl.trim() || undefined,
       };
       console.log("[forge] calling submitForge — params:", params, "fee datoshi:", creationFeeDatoshi.toString());
       const txHash = await submitForge(params, creationFeeDatoshi);
@@ -206,6 +242,9 @@ export function useForgeForm(
     setSupply,
     decimals,
     setDecimals,
+    imageUrl,
+    setImageUrl,
+    imagePreview,
     errors,
     creationFeeDatoshi,
     creationFeeDisplay,

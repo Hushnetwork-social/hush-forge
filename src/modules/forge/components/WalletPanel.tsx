@@ -58,9 +58,11 @@ function formatBalance(
 function BalanceSlide({
   balance,
   name,
+  imageUrl,
 }: {
   balance: WalletBalance;
   name: string | null;
+  imageUrl?: string;
 }) {
   const { integer, frac } = formatBalance(balance.amount, balance.decimals);
   const displayName = name && name !== balance.symbol ? name : null;
@@ -69,7 +71,7 @@ function BalanceSlide({
     <div className="flex items-center justify-between flex-1 min-w-0 px-2">
       {/* Left: icon + symbol + name */}
       <div className="flex items-center gap-2 min-w-0">
-        <TokenIcon contractHash={balance.contractHash} size={36} />
+        <TokenIcon contractHash={balance.contractHash} size={36} imageUrl={imageUrl} />
         <div className="min-w-0">
           <p
             className="text-2xl font-bold leading-none"
@@ -204,9 +206,10 @@ export function WalletPanel({
 }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Look up token names from the loaded token store
+  // Look up token metadata from the loaded token store
   const tokens = useTokenStore((s) => s.tokens);
   const nameByHash = new Map(tokens.map((t) => [t.contractHash, t.name]));
+  const imageUrlByHash = new Map(tokens.map((t) => [t.contractHash, t.imageUrl]));
 
   // Clamp index when balances array changes
   const safeIndex = Math.min(currentIndex, Math.max(0, balances.length - 1));
@@ -310,6 +313,7 @@ export function WalletPanel({
               <BalanceSlide
                 balance={current}
                 name={nameByHash.get(current.contractHash) ?? null}
+                imageUrl={imageUrlByHash.get(current.contractHash)}
               />
             )}
 

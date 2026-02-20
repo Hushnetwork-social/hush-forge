@@ -180,6 +180,68 @@ describe("useForgeForm", () => {
     expect(vi.mocked(mockSubmitForge)).not.toHaveBeenCalled();
   });
 
+  it("non-http imageUrl fails validation", async () => {
+    const { result } = await renderWithFeeLoaded();
+
+    await act(async () => {
+      result.current.setName("HushToken");
+      result.current.setSymbol("HUSH");
+      result.current.setSupply("1000000");
+      result.current.setDecimals("8");
+      result.current.setImageUrl("ftp://invalid-url.com/icon.png");
+    });
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.errors.imageUrl).toBe("Must be a valid http/https URL");
+    expect(vi.mocked(mockSubmitForge)).not.toHaveBeenCalled();
+  });
+
+  it("empty imageUrl passes validation (optional field)", async () => {
+    vi.mocked(mockSubmitForge).mockResolvedValue("0xtxhash");
+    const { result } = await renderWithFeeLoaded();
+
+    await act(async () => {
+      result.current.setName("HushToken");
+      result.current.setSymbol("HUSH");
+      result.current.setSupply("1000000");
+      result.current.setDecimals("8");
+      // imageUrl stays empty — default ""
+    });
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.errors.imageUrl).toBeUndefined();
+    expect(vi.mocked(mockSubmitForge)).toHaveBeenCalled();
+  });
+
+  it("valid https imageUrl passes validation", async () => {
+    vi.mocked(mockSubmitForge).mockResolvedValue("0xtxhash");
+    const { result } = await renderWithFeeLoaded();
+
+    await act(async () => {
+      result.current.setName("HushToken");
+      result.current.setSymbol("HUSH");
+      result.current.setSupply("1000000");
+      result.current.setDecimals("8");
+      result.current.setImageUrl("https://example.com/icon.png");
+    });
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.errors.imageUrl).toBeUndefined();
+    expect(vi.mocked(mockSubmitForge)).toHaveBeenCalledWith(
+      expect.objectContaining({ imageUrl: "https://example.com/icon.png" }),
+      expect.any(BigInt)
+    );
+  });
+
   it("empty name fails validation", async () => {
     const { result } = await renderWithFeeLoaded();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForgeForm } from "../hooks/useForgeForm";
 
 interface Props {
@@ -25,6 +25,9 @@ export function ForgeOverlay({
     setSupply,
     decimals,
     setDecimals,
+    imageUrl,
+    setImageUrl,
+    imagePreview,
     errors,
     creationFeeDisplay,
     feeLoading,
@@ -34,6 +37,8 @@ export function ForgeOverlay({
     submitError,
     submit,
   } = useForgeForm(address, gasBalance);
+
+  const [showHostingHints, setShowHostingHints] = useState(false);
 
   // Notify parent once TX hash is returned
   useEffect(() => {
@@ -255,6 +260,113 @@ export function ForgeOverlay({
                 <span className="text-xs">— coming soon</span>
               </label>
             </div>
+          </div>
+
+          {/* Image URL (optional) */}
+          <div>
+            <label
+              className="text-sm mb-1 block"
+              style={{ color: "var(--forge-text-muted)" }}
+            >
+              Token Image URL{" "}
+              <span className="text-xs">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              disabled={submitting}
+              placeholder="https://…"
+              className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+              style={{
+                background: "var(--forge-bg-primary)",
+                border: `1px solid ${errors.imageUrl ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+                color: "var(--forge-text-primary)",
+                outline: "none",
+              }}
+            />
+            <p className="text-xs mt-1" style={{ color: "var(--forge-text-muted)" }}>
+              Direct link to your token icon (PNG/SVG, square, 256×256+ recommended)
+            </p>
+            {errors.imageUrl && (
+              <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>
+                {errors.imageUrl}
+              </p>
+            )}
+
+            {/* Image preview panel */}
+            {imageUrl.trim() && (
+              <div
+                className="flex items-center gap-2 mt-2 p-2 rounded-lg text-xs"
+                style={{ background: "var(--forge-bg-primary)" }}
+              >
+                {imagePreview === "loading" && (
+                  <span style={{ color: "var(--forge-text-muted)" }}>
+                    Checking image…
+                  </span>
+                )}
+                {imagePreview === "ok" && (
+                  <>
+                    <img
+                      src={imageUrl.trim()}
+                      alt="Token icon preview"
+                      className="rounded-full flex-shrink-0"
+                      style={{ width: 48, height: 48, objectFit: "cover" }}
+                    />
+                    <span style={{ color: "var(--forge-success)" }}>
+                      ✓ Image loaded
+                    </span>
+                  </>
+                )}
+                {imagePreview === "error" && (
+                  <span style={{ color: "var(--forge-error)" }}>
+                    ⚠ Could not load image — check the URL
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Collapsible hosting hints */}
+            <button
+              type="button"
+              onClick={() => setShowHostingHints((v) => !v)}
+              className="text-xs mt-2 transition-opacity hover:opacity-80"
+              style={{ color: "var(--forge-color-primary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              Where to host your image? {showHostingHints ? "▲" : "▼"}
+            </button>
+            {showHostingHints && (
+              <div
+                className="mt-2 p-3 rounded-lg text-xs leading-relaxed"
+                style={{
+                  background: "var(--forge-bg-primary)",
+                  border: "1px solid var(--forge-border-subtle)",
+                  color: "var(--forge-text-muted)",
+                }}
+              >
+                <p className="font-semibold mb-2" style={{ color: "var(--forge-text-secondary)" }}>
+                  Free options
+                </p>
+                <ul className="space-y-1 mb-3">
+                  <li><strong>NFT.Storage</strong> (nft.storage) — IPFS, free, permanent — best for decentralized tokens</li>
+                  <li><strong>Pinata</strong> (pinata.cloud) — IPFS pinning, free tier 1 GB</li>
+                  <li><strong>ImgBB</strong> (imgbb.com) — Simple free image hosting, direct links</li>
+                  <li><strong>GitHub raw</strong> — Public repo image at raw.githubusercontent.com/…</li>
+                  <li><strong>Imgur</strong> — Free, widely accessible</li>
+                </ul>
+                <p className="font-semibold mb-2" style={{ color: "var(--forge-text-secondary)" }}>
+                  Paid / professional
+                </p>
+                <ul className="space-y-1 mb-2">
+                  <li><strong>Cloudflare R2</strong> — S3-compatible, no egress fees, reliable CDN</li>
+                  <li><strong>AWS S3 + CloudFront</strong> — Industry standard, low cost</li>
+                  <li><strong>Pinata Pro</strong> — Dedicated IPFS pinning SLA</li>
+                </ul>
+                <p style={{ color: "var(--forge-color-primary)" }}>
+                  Tip: For permanent token identity, IPFS (NFT.Storage or Pinata) is recommended.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Fee info box */}

@@ -46,7 +46,7 @@ function haltResult(stack: { type: string; value: unknown }[]): HaltResult {
 
 /**
  * Builds a factory getToken() result matching the actual contract return format:
- *   [symbol, creator, supply, mode, tier, createdAt]
+ *   [symbol, creator, supply, mode, tier, createdAt, imageUrl]
  * Note: name and decimals are NOT stored by the factory.
  */
 function factoryArrayResult(
@@ -55,7 +55,8 @@ function factoryArrayResult(
   supply: string,
   mode: string,
   tier: string,
-  createdAt: string
+  createdAt: string,
+  imageUrl = ""
 ): HaltResult {
   return haltResult([
     {
@@ -67,6 +68,7 @@ function factoryArrayResult(
         { type: "ByteString", value: b64(mode) },
         { type: "ByteString", value: b64(tier) },
         { type: "Integer", value: createdAt },
+        { type: "ByteString", value: b64(imageUrl) },
       ],
     },
   ]);
@@ -101,6 +103,34 @@ describe("resolveTokenMetadata", () => {
     expect(result.mode).toBe("community");
     expect(result.tier).toBeNull(); // "standard" string → not a number → null
     expect(result.createdAt).toBe(1_234_567_890);
+  });
+
+  it("parses imageUrl from factory registry at index 6", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("ICN", 0xab, "1000", "community", "standard", "1234567890", "https://example.com/icon.png")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ICN") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+
+    const result = await resolveTokenMetadata("0xabc");
+
+    expect(result.imageUrl).toBe("https://example.com/icon.png");
+  });
+
+  it("imageUrl is undefined when factory stores empty string", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("NIC", 0xab, "1000", "community", "standard", "1234567890", "")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("NIC") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+
+    const result = await resolveTokenMetadata("0xabc");
+
+    expect(result.imageUrl).toBeUndefined();
   });
 
   it("falls back to contract when factory does not have the token", async () => {

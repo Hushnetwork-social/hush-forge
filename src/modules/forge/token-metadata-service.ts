@@ -109,7 +109,7 @@ function peek(stack: RpcStackItem[]): RpcStackItem | undefined {
 /**
  * Parses the factory getToken() result.
  * Actual Array format returned by the contract:
- *   [symbol, creator, supply, mode, tier, createdAt]
+ *   [symbol, creator, supply, mode, tier, createdAt, imageUrl]
  * Note: name and decimals are NOT stored by the factory — fetch from the token
  * contract directly via symbol() and decimals().
  * Returns null if the token is not registered (stack[0] is Null/Any).
@@ -134,6 +134,7 @@ function parseFactoryToken(
       mode: decodeStr(v[3].value as string) as "community" | "premium",
       tier: v[4] !== undefined ? Number(v[4].value) || null : null,
       createdAt: v[5] !== undefined ? Number(v[5].value) || null : null,
+      imageUrl: v[6] !== undefined ? decodeStr(v[6].value as string) || undefined : undefined,
     };
   } catch {
     return null;
@@ -250,5 +251,6 @@ export async function resolveTokenMetadata(
     mode: factoryData?.mode ?? null,
     tier: factoryData?.tier ?? null,
     createdAt: factoryData?.createdAt ?? null,
+    imageUrl: factoryData?.imageUrl,
   };
 }

@@ -268,7 +268,7 @@ export function TokenDetail({ contractHash, onUpdateClick }: Props) {
           >
             {/* Avatar + identity row */}
             <div className="flex items-center gap-4 mb-5">
-              <TokenIcon contractHash={token.contractHash} size={60} />
+              <TokenIcon contractHash={token.contractHash} size={60} imageUrl={token.imageUrl} />
 
               <div className="flex-1 min-w-0">
                 {/* Symbol + Yours badge */}

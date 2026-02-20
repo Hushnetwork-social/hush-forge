@@ -145,6 +145,44 @@ describe("TokenCard", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("shows NEW badge for tokens created within the last 24 hours", () => {
+    const recentCreatedAt = Math.floor(Date.now() / 1000) - 3_600; // 1 hour ago
+    render(
+      <TokenCard
+        token={makeToken({ createdAt: recentCreatedAt, isNative: false })}
+        isOwn={false}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText("New token")).toBeInTheDocument();
+    expect(screen.getByText("NEW")).toBeInTheDocument();
+  });
+
+  it("does not show NEW badge for tokens older than 24 hours", () => {
+    const oldCreatedAt = Math.floor(Date.now() / 1000) - 90_000; // 25 hours ago
+    render(
+      <TokenCard
+        token={makeToken({ createdAt: oldCreatedAt, isNative: false })}
+        isOwn={false}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.queryByLabelText("New token")).not.toBeInTheDocument();
+    expect(screen.queryByText("NEW")).not.toBeInTheDocument();
+  });
+
+  it("does not show NEW badge for native tokens", () => {
+    const recentCreatedAt = Math.floor(Date.now() / 1000) - 3_600;
+    render(
+      <TokenCard
+        token={makeToken({ createdAt: recentCreatedAt, isNative: true })}
+        isOwn={false}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.queryByText("NEW")).not.toBeInTheDocument();
+  });
+
   it("shows Community mode badge in address row", () => {
     render(
       <TokenCard

@@ -28,6 +28,13 @@ function formatSupply(supply: bigint, decimals: number): string {
 }
 
 
+const NEW_THRESHOLD_SECS = 86_400; // 24 hours
+
+function isNewToken(createdAt: number | null, isNative: boolean): boolean {
+  if (isNative || createdAt === null) return false;
+  return Date.now() / 1000 - createdAt < NEW_THRESHOLD_SECS;
+}
+
 function TypeBadge({ isNative }: { isNative: boolean }) {
   return (
     <span
@@ -83,6 +90,7 @@ function ModeBadge({ mode }: { mode: string }) {
 
 export function TokenCard({ token, isOwn, onClick }: Props) {
   const [copied, setCopied] = useState(false);
+  const isNew = isNewToken(token.createdAt ?? null, token.isNative ?? false);
 
   function handleCopy(e: React.MouseEvent) {
     e.stopPropagation();
@@ -119,6 +127,21 @@ export function TokenCard({ token, isOwn, onClick }: Props) {
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           <TypeBadge isNative={token.isNative ?? false} />
+          {isNew && (
+            <span
+              aria-label="New token"
+              className="text-xs px-1.5 py-0.5 rounded animate-pulse"
+              style={{
+                background: "rgba(0,200,120,0.18)",
+                color: "#00c878",
+                fontSize: "10px",
+                fontWeight: 700,
+                letterSpacing: "0.05em",
+              }}
+            >
+              NEW
+            </span>
+          )}
           {isOwn && (
             <span
               aria-label="Your token"

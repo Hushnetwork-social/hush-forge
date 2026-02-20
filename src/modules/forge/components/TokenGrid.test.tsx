@@ -83,18 +83,23 @@ describe("TokenGrid", () => {
     expect(screen.queryByText("BETA")).not.toBeInTheDocument();
   });
 
-  it("own tokens appear before non-own tokens on non-new tabs", () => {
-    const tokens = [makeToken("BETA", false), makeToken("ALPHA", true)];
+  it("tokens are sorted alphabetically with non-native before native", () => {
+    const tokens = [
+      makeToken("ZEBRA", false),
+      { ...makeToken("APPLE", false), isNative: true as const },
+      makeToken("MANGO", false),
+    ];
     useTokenStore.setState({
       tokens,
-      ownTokenHashes: new Set(["0xalpha"]),
+      ownTokenHashes: new Set(),
       loadingStatus: "loaded",
-      activeTab: "community",
+      activeTab: "all",
     });
     render(<TokenGrid walletAddress="NwMe" onTokenClick={vi.fn()} />);
     const cards = screen.getAllByRole("article");
-    expect(cards[0]).toHaveTextContent("ALPHA");
-    expect(cards[1]).toHaveTextContent("BETA");
+    expect(cards[0]).toHaveTextContent("MANGO");
+    expect(cards[1]).toHaveTextContent("ZEBRA");
+    expect(cards[2]).toHaveTextContent("APPLE");
   });
 
   it("search input filters visible tokens", () => {

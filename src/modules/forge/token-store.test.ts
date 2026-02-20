@@ -64,19 +64,20 @@ function resetStore() {
 // ---------------------------------------------------------------------------
 
 describe("selectDisplayTokens", () => {
-  it("places own tokens before non-own tokens on community tab", () => {
-    const ALPHA = makeToken("0xalpha", "ALPHA");
+  it("sorts non-native tokens A-Z before native tokens A-Z", () => {
+    const NEO = { ...makeToken("0xneo", "NEO"), isNative: true };
+    const GAS = { ...makeToken("0xgas", "GAS"), isNative: true };
     const BETA = makeToken("0xbeta", "BETA");
-    const GAMMA = makeToken("0xgamma", "GAMMA");
+    const ALPHA = makeToken("0xalpha", "ALPHA");
 
     const result = selectDisplayTokens({
-      tokens: [ALPHA, BETA, GAMMA],
-      ownTokenHashes: new Set(["0xalpha", "0xgamma"]),
-      activeTab: "community",
+      tokens: [NEO, BETA, GAS, ALPHA],
+      ownTokenHashes: new Set(),
+      activeTab: "all",
       searchQuery: "",
     });
 
-    expect(result.map((t) => t.symbol)).toEqual(["ALPHA", "GAMMA", "BETA"]);
+    expect(result.map((t) => t.symbol)).toEqual(["ALPHA", "BETA", "GAS", "NEO"]);
   });
 
   it("returns only own tokens on mine tab", () => {
@@ -188,7 +189,7 @@ describe("TokenStore.addToken", () => {
     expect(state.ownTokenHashes.has("0xbeta")).toBe(true);
   });
 
-  it("newly forged own token appears first in displayTokens on community tab", () => {
+  it("newly forged token appears in alphabetical order on community tab", () => {
     const ALPHA = makeToken("0xalpha", "ALPHA");
     const OTHER = makeToken("0xother", "OTHER");
     useTokenStore.setState({
@@ -201,9 +202,7 @@ describe("TokenStore.addToken", () => {
     useTokenStore.getState().addToken(GAMMA);
 
     const displayTokens = selectDisplayTokens(useTokenStore.getState());
-    expect(displayTokens[0].symbol).toBe("GAMMA");
-    expect(displayTokens[1].symbol).toBe("ALPHA");
-    expect(displayTokens[2].symbol).toBe("OTHER");
+    expect(displayTokens.map((t) => t.symbol)).toEqual(["ALPHA", "GAMMA", "OTHER"]);
   });
 });
 

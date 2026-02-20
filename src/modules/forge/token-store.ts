@@ -94,10 +94,13 @@ export function selectDisplayTokens(state: {
     return [...filtered].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   }
 
-  // All other tabs: own tokens first
-  const own = filtered.filter((t) => state.ownTokenHashes.has(t.contractHash));
-  const others = filtered.filter((t) => !state.ownTokenHashes.has(t.contractHash));
-  return [...own, ...others];
+  // All other tabs: NEP-17 (non-native) A-Z first, then native tokens A-Z
+  return [...filtered].sort((a, b) => {
+    const aNative = a.isNative ?? false;
+    const bNative = b.isNative ?? false;
+    if (aNative !== bNative) return aNative ? 1 : -1;
+    return a.symbol.localeCompare(b.symbol);
+  });
 }
 
 // ---------------------------------------------------------------------------

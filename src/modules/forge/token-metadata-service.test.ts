@@ -87,16 +87,17 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(
         factoryArrayResult("HUSH", 0xab, "10000000", "community", "standard", "1234567890")
       )
-      // Direct contract calls: symbol, decimals, totalSupply (no name() in TokenTemplate)
+      // Direct contract calls: symbol, getName, decimals, totalSupply
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("HUSH") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("HushToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "10000000" }]));
 
     const result = await resolveTokenMetadata("0xabc");
 
     expect(result.symbol).toBe("HUSH");
-    // name = symbol (TokenTemplate has no name() method; factory doesn't store it either)
-    expect(result.name).toBe("HUSH");
+    // name comes from getName() — factory doesn't store it
+    expect(result.name).toBe("HushToken");
     expect(result.creator).toBe(expectedHash(0xab));
     expect(result.supply).toBe(10_000_000n); // from factory (authoritative)
     expect(result.decimals).toBe(8); // from direct decimals() call
@@ -111,6 +112,7 @@ describe("resolveTokenMetadata", () => {
         factoryArrayResult("ICN", 0xab, "1000", "community", "standard", "1234567890", "https://example.com/icon.png")
       )
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ICN") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("IconToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
 
@@ -125,6 +127,7 @@ describe("resolveTokenMetadata", () => {
         factoryArrayResult("NIC", 0xab, "1000", "community", "standard", "1234567890", "")
       )
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("NIC") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("NicToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
 
@@ -137,16 +140,17 @@ describe("resolveTokenMetadata", () => {
     vi.mocked(mockInvokeFunction)
       // getToken returns null/empty stack (not in registry)
       .mockResolvedValueOnce(haltResult([{ type: "Any", value: null }]))
-      // Direct contract calls: symbol, decimals, totalSupply
+      // Direct contract calls: symbol, getName, decimals, totalSupply
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("OTHER") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("OtherToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "999" }]));
 
     const result = await resolveTokenMetadata("0xabc");
 
     expect(result.symbol).toBe("OTHER");
-    // name = symbol (no name() call; use symbol as fallback)
-    expect(result.name).toBe("OTHER");
+    // name comes from getName()
+    expect(result.name).toBe("OtherToken");
     expect(result.creator).toBeNull();
     expect(result.mode).toBeNull();
     expect(result.supply).toBe(999n);
@@ -221,8 +225,9 @@ describe("resolveTokenMetadata", () => {
     // Factory returns Array with too few elements
     vi.mocked(mockInvokeFunction)
       .mockResolvedValueOnce(haltResult([{ type: "Array", value: [] }]))
-      // Direct calls: symbol, decimals, totalSupply
+      // Direct calls: symbol, getName, decimals, totalSupply
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("SYM") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("SymToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "4" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000000" }]));
 
@@ -230,7 +235,7 @@ describe("resolveTokenMetadata", () => {
 
     // Factory data is null (bad format), falls back to contract
     expect(result.symbol).toBe("SYM");
-    expect(result.name).toBe("SYM"); // symbol used as name
+    expect(result.name).toBe("SymToken"); // getName() result used
     expect(result.creator).toBeNull();
   });
 
@@ -242,8 +247,9 @@ describe("resolveTokenMetadata", () => {
 
     vi.mocked(mockInvokeFunction)
       .mockResolvedValueOnce(haltResult([{ type: "Any", value: null }])) // not in factory
-      // Direct calls: symbol, decimals, totalSupply-as-ByteString
+      // Direct calls: symbol, getName, decimals, totalSupply-as-ByteString
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("TOK") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("TokToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: supplyByteString }]));
 

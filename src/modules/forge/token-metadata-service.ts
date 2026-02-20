@@ -183,12 +183,13 @@ export async function resolveTokenMetadata(
 
   // Step 2: Token contract direct calls.
   // Use allSettled so one FAULT or network failure doesn't prevent the other
-  // two from loading. Decimals must survive even if totalSupply() fails.
-  // Note: TokenTemplate does NOT expose name() — symbol() is used as name fallback.
+  // calls from loading. Decimals must survive even if totalSupply() fails.
+  // TokenTemplate exposes getName() (camelCase) — NOT the standard name() method.
   let contractData: Partial<TokenInfo> | null = null;
   try {
-    const [symSettled, decSettled, supSettled] = await Promise.allSettled([
+    const [symSettled, nameSettled, decSettled, supSettled] = await Promise.allSettled([
       invokeFunction(contractHash, "symbol", []),
+      invokeFunction(contractHash, "getName", []),
       invokeFunction(contractHash, "decimals", []),
       invokeFunction(contractHash, "totalSupply", []),
     ]);
@@ -201,6 +202,10 @@ export async function resolveTokenMetadata(
       symSettled.status === "fulfilled"
         ? decodeStr(peek(symSettled.value.stack)?.value as string ?? "")
         : "";
+    const name =
+      nameSettled.status === "fulfilled"
+        ? decodeStr(peek(nameSettled.value.stack)?.value as string ?? "")
+        : symbol; // fallback to symbol if getName() not available
     const decimals =
       decSettled.status === "fulfilled"
         ? Number(peek(decSettled.value.stack)?.value ?? 0)
@@ -210,11 +215,11 @@ export async function resolveTokenMetadata(
         ? parseStackItemAsBigInt(peek(supSettled.value.stack))
         : 0n;
 
-    console.log("[metadata] direct calls for", contractHash, "— sym:", symbol, "dec:", decimals);
+    console.log("[metadata] direct calls for", contractHash, "— sym:", symbol, "name:", name, "dec:", decimals);
     contractData = {
       contractHash,
       symbol,
-      name: symbol, // TokenTemplate has no name() method — use symbol as display name
+      name: name || symbol,
       decimals,
       supply,
     };
@@ -241,7 +246,7 @@ export async function resolveTokenMetadata(
   return {
     contractHash,
     symbol,
-    // Factory does not store name — use symbol from direct call or factory as fallback
+    // Factory does not store name — use getName() result from direct call, fallback to symbol
     name: contractData?.name ?? symbol,
     creator: factoryData?.creator ?? null,
     // Factory supply is authoritative (stored at creation time)

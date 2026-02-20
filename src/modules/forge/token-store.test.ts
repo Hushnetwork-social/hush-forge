@@ -50,7 +50,8 @@ function resetStore() {
     {
       tokens: [],
       ownTokenHashes: new Set(),
-      filterMyTokens: false,
+      activeTab: "new",
+      searchQuery: "",
       loadingStatus: "idle",
       errorMessage: null,
     },
@@ -63,7 +64,7 @@ function resetStore() {
 // ---------------------------------------------------------------------------
 
 describe("selectDisplayTokens", () => {
-  it("places own tokens before non-own tokens", () => {
+  it("places own tokens before non-own tokens on community tab", () => {
     const ALPHA = makeToken("0xalpha", "ALPHA");
     const BETA = makeToken("0xbeta", "BETA");
     const GAMMA = makeToken("0xgamma", "GAMMA");
@@ -71,44 +72,93 @@ describe("selectDisplayTokens", () => {
     const result = selectDisplayTokens({
       tokens: [ALPHA, BETA, GAMMA],
       ownTokenHashes: new Set(["0xalpha", "0xgamma"]),
-      filterMyTokens: false,
+      activeTab: "community",
+      searchQuery: "",
     });
 
     expect(result.map((t) => t.symbol)).toEqual(["ALPHA", "GAMMA", "BETA"]);
   });
 
-  it("returns only own tokens when filterMyTokens is true", () => {
+  it("returns only own tokens on mine tab", () => {
     const ALPHA = makeToken("0xalpha", "ALPHA");
     const BETA = makeToken("0xbeta", "BETA");
 
     const result = selectDisplayTokens({
       tokens: [ALPHA, BETA],
       ownTokenHashes: new Set(["0xalpha"]),
-      filterMyTokens: true,
+      activeTab: "mine",
+      searchQuery: "",
     });
 
     expect(result).toHaveLength(1);
     expect(result[0].symbol).toBe("ALPHA");
   });
 
-  it("returns all tokens when filterMyTokens is false", () => {
+  it("returns all tokens on new tab", () => {
     const ALPHA = makeToken("0xalpha", "ALPHA");
     const BETA = makeToken("0xbeta", "BETA");
 
     const result = selectDisplayTokens({
       tokens: [ALPHA, BETA],
       ownTokenHashes: new Set(["0xalpha"]),
-      filterMyTokens: false,
+      activeTab: "new",
+      searchQuery: "",
     });
 
     expect(result).toHaveLength(2);
+  });
+
+  it("sorts new tab by createdAt descending", () => {
+    const OLD = { ...makeToken("0xold", "OLD"), createdAt: 1_000 };
+    const NEW = { ...makeToken("0xnew", "NEW"), createdAt: 9_000 };
+    const MID = { ...makeToken("0xmid", "MID"), createdAt: 5_000 };
+
+    const result = selectDisplayTokens({
+      tokens: [OLD, NEW, MID],
+      ownTokenHashes: new Set(),
+      activeTab: "new",
+      searchQuery: "",
+    });
+
+    expect(result.map((t) => t.symbol)).toEqual(["NEW", "MID", "OLD"]);
+  });
+
+  it("filters by mode on community tab", () => {
+    const COMM = makeToken("0xcomm", "COMM");
+    const SPEC = { ...makeToken("0xspec", "SPEC"), mode: "speculative" as const };
+
+    const result = selectDisplayTokens({
+      tokens: [COMM, SPEC],
+      ownTokenHashes: new Set(),
+      activeTab: "community",
+      searchQuery: "",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].symbol).toBe("COMM");
+  });
+
+  it("applies search filter across symbol, name, hash, mode", () => {
+    const ALPHA = makeToken("0xalpha", "ALPHA");
+    const BETA = makeToken("0xbeta", "BETA");
+
+    const result = selectDisplayTokens({
+      tokens: [ALPHA, BETA],
+      ownTokenHashes: new Set(),
+      activeTab: "new",
+      searchQuery: "alp",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].symbol).toBe("ALPHA");
   });
 
   it("returns empty array when no tokens", () => {
     const result = selectDisplayTokens({
       tokens: [],
       ownTokenHashes: new Set(),
-      filterMyTokens: false,
+      activeTab: "new",
+      searchQuery: "",
     });
     expect(result).toEqual([]);
   });
@@ -138,12 +188,13 @@ describe("TokenStore.addToken", () => {
     expect(state.ownTokenHashes.has("0xbeta")).toBe(true);
   });
 
-  it("newly forged own token appears first in displayTokens", () => {
+  it("newly forged own token appears first in displayTokens on community tab", () => {
     const ALPHA = makeToken("0xalpha", "ALPHA");
     const OTHER = makeToken("0xother", "OTHER");
     useTokenStore.setState({
       tokens: [ALPHA, OTHER],
       ownTokenHashes: new Set(["0xalpha"]),
+      activeTab: "community",
     });
 
     const GAMMA = makeToken("0xgamma", "GAMMA");
@@ -157,20 +208,34 @@ describe("TokenStore.addToken", () => {
 });
 
 // ---------------------------------------------------------------------------
-// setFilterMyTokens
+// setActiveTab / setSearchQuery
 // ---------------------------------------------------------------------------
 
-describe("TokenStore.setFilterMyTokens", () => {
+describe("TokenStore.setActiveTab", () => {
   beforeEach(() => {
     resetStore();
   });
 
-  it("toggles filter state", () => {
-    expect(useTokenStore.getState().filterMyTokens).toBe(false);
-    useTokenStore.getState().setFilterMyTokens(true);
-    expect(useTokenStore.getState().filterMyTokens).toBe(true);
-    useTokenStore.getState().setFilterMyTokens(false);
-    expect(useTokenStore.getState().filterMyTokens).toBe(false);
+  it("switches active tab", () => {
+    expect(useTokenStore.getState().activeTab).toBe("new");
+    useTokenStore.getState().setActiveTab("mine");
+    expect(useTokenStore.getState().activeTab).toBe("mine");
+    useTokenStore.getState().setActiveTab("community");
+    expect(useTokenStore.getState().activeTab).toBe("community");
+  });
+});
+
+describe("TokenStore.setSearchQuery", () => {
+  beforeEach(() => {
+    resetStore();
+  });
+
+  it("updates search query", () => {
+    expect(useTokenStore.getState().searchQuery).toBe("");
+    useTokenStore.getState().setSearchQuery("HUSH");
+    expect(useTokenStore.getState().searchQuery).toBe("HUSH");
+    useTokenStore.getState().setSearchQuery("");
+    expect(useTokenStore.getState().searchQuery).toBe("");
   });
 });
 
@@ -187,7 +252,8 @@ describe("TokenStore.reset", () => {
     useTokenStore.setState({
       tokens: [makeToken("0xabc", "ABC")],
       ownTokenHashes: new Set(["0xabc"]),
-      filterMyTokens: true,
+      activeTab: "mine",
+      searchQuery: "test",
       loadingStatus: "loaded",
     });
 
@@ -196,7 +262,8 @@ describe("TokenStore.reset", () => {
     const state = useTokenStore.getState();
     expect(state.tokens).toEqual([]);
     expect(state.ownTokenHashes.size).toBe(0);
-    expect(state.filterMyTokens).toBe(false);
+    expect(state.activeTab).toBe("new");
+    expect(state.searchQuery).toBe("");
     expect(state.loadingStatus).toBe("idle");
   });
 });

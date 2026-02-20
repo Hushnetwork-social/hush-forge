@@ -15,7 +15,7 @@ export interface TokenInfo {
   creator: string | null; // null for non-factory tokens
   supply: bigint; // raw integer (never number — precision loss risk)
   decimals: number;
-  mode: "community" | "premium" | null; // null for non-factory tokens
+  mode: "community" | "speculative" | "crowdfund" | "premium" | null; // null for non-factory tokens
   tier: number | null; // null for non-factory tokens
   createdAt: number | null; // null for non-factory tokens
   isNative?: boolean; // true for NEO / GAS native contracts

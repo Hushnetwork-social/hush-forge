@@ -19,11 +19,13 @@ import type { RpcStackItem, TokenInfo, WalletBalance } from "./types";
 // ---------------------------------------------------------------------------
 
 export type LoadingStatus = "idle" | "loading" | "loaded" | "error";
+export type TabType = "mine" | "new" | "community" | "speculative" | "crowdfund";
 
 interface TokenState {
   tokens: TokenInfo[];
   ownTokenHashes: Set<string>;
-  filterMyTokens: boolean;
+  activeTab: TabType;
+  searchQuery: string;
   loadingStatus: LoadingStatus;
   errorMessage: string | null;
 }
@@ -32,7 +34,8 @@ interface TokenActions {
   loadTokensForAddress(address: string): Promise<void>;
   loadWalletHeldTokens(balances: WalletBalance[]): Promise<void>;
   addToken(token: TokenInfo): void;
-  setFilterMyTokens(value: boolean): void;
+  setActiveTab(tab: TabType): void;
+  setSearchQuery(query: string): void;
   reset(): void;
 }
 
@@ -45,15 +48,57 @@ export type TokenStore = TokenState & TokenActions;
 export function selectDisplayTokens(state: {
   tokens: TokenInfo[];
   ownTokenHashes: Set<string>;
-  filterMyTokens: boolean;
+  activeTab: TabType;
+  searchQuery: string;
 }): TokenInfo[] {
-  const own = state.tokens.filter((t) =>
-    state.ownTokenHashes.has(t.contractHash)
-  );
-  const others = state.tokens.filter(
-    (t) => !state.ownTokenHashes.has(t.contractHash)
-  );
-  return state.filterMyTokens ? own : [...own, ...others];
+  let filtered = state.tokens;
+
+  // 1. Tab filter
+  switch (state.activeTab) {
+    case "mine":
+      filtered = filtered.filter((t) => state.ownTokenHashes.has(t.contractHash));
+      break;
+    case "new":
+      // All tokens — will be sorted chronologically below
+      break;
+    case "community":
+      filtered = filtered.filter((t) => t.mode === "community");
+      break;
+    case "speculative":
+      filtered = filtered.filter((t) => t.mode === "speculative");
+      break;
+    case "crowdfund":
+      filtered = filtered.filter((t) => t.mode === "crowdfund");
+      break;
+  }
+
+  // 2. Search filter (contractHash, symbol, name, mode)
+  const q = state.searchQuery.trim().toLowerCase();
+  if (q) {
+    filtered = filtered.filter(
+      (t) =>
+        t.contractHash.toLowerCase().includes(q) ||
+        t.symbol.toLowerCase().includes(q) ||
+        (t.name && t.name.toLowerCase().includes(q)) ||
+        (t.mode && t.mode.toLowerCase().includes(q))
+    );
+  }
+
+  // 3. Sort/order
+  if (state.activeTab === "new") {
+    // Newest first; tokens without createdAt (native) sink to end
+    return [...filtered].sort((a, b) => {
+      if (a.createdAt && b.createdAt) return b.createdAt - a.createdAt;
+      if (a.createdAt) return -1;
+      if (b.createdAt) return 1;
+      return 0;
+    });
+  }
+
+  // All other tabs: own tokens first
+  const own = filtered.filter((t) => state.ownTokenHashes.has(t.contractHash));
+  const others = filtered.filter((t) => !state.ownTokenHashes.has(t.contractHash));
+  return [...own, ...others];
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +132,8 @@ function parseHashList(result: { stack: RpcStackItem[] }): string[] {
 const INITIAL_STATE: TokenState = {
   tokens: [],
   ownTokenHashes: new Set(),
-  filterMyTokens: false,
+  activeTab: "new",
+  searchQuery: "",
   loadingStatus: "idle",
   errorMessage: null,
 };
@@ -198,8 +244,12 @@ export const useTokenStore = create<TokenStore>()((set, get) => ({
     }));
   },
 
-  setFilterMyTokens(value: boolean) {
-    set({ filterMyTokens: value });
+  setActiveTab(tab: TabType) {
+    set({ activeTab: tab });
+  },
+
+  setSearchQuery(query: string) {
+    set({ searchQuery: query });
   },
 
   reset() {

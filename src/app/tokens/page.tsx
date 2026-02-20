@@ -10,8 +10,10 @@ import { WaitingOverlay } from "@/modules/forge/components/WaitingOverlay";
 import { ForgeErrorToast } from "@/modules/forge/components/ForgeToaster";
 import { WalletConnectModal } from "@/modules/forge/components/WalletConnectModal";
 import { useWallet } from "@/modules/forge/hooks/useWallet";
+import { useFactoryDeployment } from "@/modules/forge/hooks/useFactoryDeployment";
 import { useTokenPolling } from "@/modules/forge/hooks/useTokenPolling";
 import { useTokenStore } from "@/modules/forge/token-store";
+import { FactoryDeployBanner } from "@/modules/forge/components/FactoryDeployBanner";
 
 type PageView =
   | "dashboard"
@@ -31,6 +33,8 @@ export default function TokensPage() {
     connect,
     disconnect,
   } = useWallet();
+
+  const factory = useFactoryDeployment(address);
 
   const loadTokensForAddress = useTokenStore((s) => s.loadTokensForAddress);
   const loadWalletHeldTokens = useTokenStore((s) => s.loadWalletHeldTokens);
@@ -96,6 +100,15 @@ export default function TokensPage() {
             errorMessage={errorMessage}
             onConnectClick={() => setShowConnectModal(true)}
             onDisconnect={disconnect}
+          />
+
+          <FactoryDeployBanner
+            status={factory.status}
+            factoryHash={factory.factoryHash}
+            deployError={factory.deployError}
+            onDeploy={() => void factory.deploy()}
+            onInitialize={() => void factory.initialize()}
+            onRecheck={factory.recheck}
           />
 
           {connectionStatus === "connected" && (

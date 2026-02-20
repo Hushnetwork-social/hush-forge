@@ -26,10 +26,32 @@ export function useWallet() {
     []
   );
 
-  // Detect installed wallets and attempt auto-reconnect once on first mount
+  // Detect installed wallets and attempt auto-reconnect once on first mount.
+  // NeoLine injects window.NEOLineN3 asynchronously. The "NEOLine:DomReady" event
+  // may fire before React hydrates (missed) or on document instead of window.
+  // We cover all cases: event listeners on both targets + timeout fallbacks.
   useEffect(() => {
-    setInstalledWallets(detectInstalledWallets());
+    function detectAndSet() {
+      setInstalledWallets(detectInstalledWallets());
+    }
+
+    detectAndSet();
     void tryAutoReconnect();
+
+    function onNeoLineReady() { detectAndSet(); }
+    window.addEventListener("NEOLine:DomReady", onNeoLineReady);
+    document.addEventListener("NEOLine:DomReady", onNeoLineReady);
+
+    // Fallback polls in case the event fired before our listeners attached
+    const t1 = setTimeout(() => detectAndSet(), 100);
+    const t2 = setTimeout(() => detectAndSet(), 500);
+    const t3 = setTimeout(() => detectAndSet(), 1500);
+
+    return () => {
+      window.removeEventListener("NEOLine:DomReady", onNeoLineReady);
+      document.removeEventListener("NEOLine:DomReady", onNeoLineReady);
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

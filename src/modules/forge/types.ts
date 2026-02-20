@@ -18,6 +18,7 @@ export interface TokenInfo {
   mode: "community" | "premium" | null; // null for non-factory tokens
   tier: number | null; // null for non-factory tokens
   createdAt: number | null; // null for non-factory tokens
+  isNative?: boolean; // true for NEO / GAS native contracts
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */

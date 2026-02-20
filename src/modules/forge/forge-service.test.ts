@@ -15,6 +15,8 @@ vi.mock("./forge-config", () => ({
   GAS_CONTRACT_HASH: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
   TX_POLLING_TIMEOUT_MS: 500, // Short timeout for fast tests
   TX_POLLING_INTERVAL_MS: 100,
+  getRuntimeFactoryHash: vi.fn().mockReturnValue("0xfactory"),
+  saveFactoryHash: vi.fn(),
 }));
 
 vi.mock("./neo-rpc-client", () => ({

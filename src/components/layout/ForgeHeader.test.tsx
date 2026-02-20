@@ -10,11 +10,16 @@ vi.mock("@/modules/forge/wallet-store", () => ({
 
 function mockWallet(
   address: string | null,
-  connectionStatus: ConnectionStatus = "disconnected"
+  connectionStatus: ConnectionStatus = "disconnected",
+  disconnect = vi.fn()
 ) {
   vi.mocked(useWalletStore).mockImplementation(
-    (selector: (s: { address: string | null; connectionStatus: ConnectionStatus }) => unknown) =>
-      selector({ address, connectionStatus })
+    (selector: (s: {
+      address: string | null;
+      connectionStatus: ConnectionStatus;
+      disconnect: () => void;
+    }) => unknown) =>
+      selector({ address, connectionStatus, disconnect })
   );
 }
 
@@ -45,6 +50,20 @@ describe("ForgeHeader", () => {
     mockWallet("NXV7ZhHiyM1aHXwvUNBLNbCcFZdTLi1p5f", "connected");
     render(<ForgeHeader onConnectClick={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Connect Wallet" })).not.toBeInTheDocument();
+  });
+
+  it("shows disconnect button when connected", () => {
+    mockWallet("NXV7ZhHiyM1aHXwvUNBLNbCcFZdTLi1p5f", "connected");
+    render(<ForgeHeader onConnectClick={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Disconnect wallet" })).toBeInTheDocument();
+  });
+
+  it("calls disconnect when disconnect button is clicked", () => {
+    const disconnect = vi.fn();
+    mockWallet("NXV7ZhHiyM1aHXwvUNBLNbCcFZdTLi1p5f", "connected", disconnect);
+    render(<ForgeHeader onConnectClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect wallet" }));
+    expect(disconnect).toHaveBeenCalled();
   });
 
   it("shows Connecting… label and disables button while connecting", () => {

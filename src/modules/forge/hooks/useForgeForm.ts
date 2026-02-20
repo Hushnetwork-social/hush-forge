@@ -154,26 +154,43 @@ export function useForgeForm(
   // ---------------------------------------------------------------------------
 
   async function submit() {
-    if (!validate()) return;
+    console.log("[forge] submit() — name:", name, "symbol:", symbol, "supply:", supply, "decimals:", decimals);
+    if (!validate()) {
+      console.warn("[forge] validation failed — aborting");
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError(null);
 
     try {
+      const decimalsNum = Number(decimals);
       const params: ForgeParams = {
         name: name.trim(),
         symbol,
-        supply: BigInt(supply),
-        decimals: Number(decimals),
+        // supply field is in display units — convert to raw (smallest) units
+        supply: BigInt(supply) * (10n ** BigInt(decimalsNum)),
+        decimals: decimalsNum,
         mode: "community",
       };
+      console.log("[forge] calling submitForge — params:", params, "fee datoshi:", creationFeeDatoshi.toString());
       const txHash = await submitForge(params, creationFeeDatoshi);
+      console.log("[forge] TX submitted — txHash:", txHash);
       setSubmittedTxHash(txHash);
     } catch (err) {
+      console.error("[forge] submit error:", err);
       if (err instanceof WalletRejectedError) {
         setSubmitError("Transaction cancelled. Please try again.");
       } else {
-        setSubmitError(err instanceof Error ? err.message : String(err));
+        // Serialize non-Error objects so the user sees something useful
+        const msg =
+          err instanceof Error
+            ? err.message
+            : typeof err === "object" && err !== null
+              ? JSON.stringify(err)
+              : String(err);
+        console.error("[forge] error message to display:", msg);
+        setSubmitError(msg);
       }
     } finally {
       setSubmitting(false);

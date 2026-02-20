@@ -7,6 +7,7 @@ import { useWalletStore, WALLET_INITIAL_STATE } from "../wallet-store";
 vi.mock("../forge-config", () => ({
   GAS_CONTRACT_HASH: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
   WALLET_STORAGE_KEY: "forge_wallet_type",
+  WALLET_ADDRESS_STORAGE_KEY: "forge_wallet_address",
 }));
 
 vi.mock("../neo-dapi-adapter", () => ({
@@ -50,6 +51,10 @@ describe("useWallet", () => {
     await act(async () => {
       renderHook(() => useWallet());
     });
+
+    // tryAutoReconnect() is fire-and-forget (void) inside useEffect.
+    // Flush one more round of microtasks so the async reconnect completes.
+    await act(async () => {});
 
     expect(useWalletStore.getState().connectionStatus).toBe("connected");
     expect(useWalletStore.getState().address).toBe("NwAutoAddress");

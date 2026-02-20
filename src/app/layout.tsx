@@ -24,6 +24,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Pre-warm connection to NeoLine CDN for token icons */}
+        <link rel="preconnect" href="https://cdn.neoline.io" />
+        <link rel="dns-prefetch" href="https://cdn.neoline.io" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-forge-bg text-white`}
       >

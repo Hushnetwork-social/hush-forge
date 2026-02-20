@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { WalletBalance } from "../types";
+import { useTokenStore } from "../token-store";
+import { TokenIcon } from "./TokenIcon";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -14,34 +16,209 @@ interface Props {
   errorMessage?: string | null;
 }
 
-const MAX_VISIBLE = 5;
+/** Max decimal digits shown before appending "…" */
+const MAX_FRAC_DIGITS = 5;
 
-function truncateAddress(addr: string): string {
-  if (addr.length <= 10) return addr;
-  return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+// ---------------------------------------------------------------------------
+// Balance formatting (unchanged)
+// ---------------------------------------------------------------------------
+
+function formatBalance(
+  amount: bigint,
+  decimals: number
+): { integer: string; frac: string | null } {
+  if (decimals === 0) {
+    return { integer: amount.toLocaleString(), frac: null };
+  }
+
+  const factor = 10n ** BigInt(decimals);
+  const intPart = amount / factor;
+  const fracPart = amount % factor;
+  const fracFull = fracPart.toString().padStart(decimals, "0");
+
+  if (fracFull.split("").every((c) => c === "0")) {
+    return { integer: intPart.toLocaleString(), frac: null };
+  }
+
+  if (decimals > MAX_FRAC_DIGITS) {
+    return {
+      integer: intPart.toLocaleString(),
+      frac: `.${fracFull.slice(0, MAX_FRAC_DIGITS)}…`,
+    };
+  }
+
+  const trimmed = fracFull.replace(/0+$/, "");
+  return { integer: intPart.toLocaleString(), frac: `.${trimmed}` };
 }
+
+// ---------------------------------------------------------------------------
+// Carousel slide
+// ---------------------------------------------------------------------------
+
+function BalanceSlide({
+  balance,
+  name,
+}: {
+  balance: WalletBalance;
+  name: string | null;
+}) {
+  const { integer, frac } = formatBalance(balance.amount, balance.decimals);
+  const displayName = name && name !== balance.symbol ? name : null;
+
+  return (
+    <div className="flex items-center justify-between flex-1 min-w-0 px-2">
+      {/* Left: icon + symbol + name */}
+      <div className="flex items-center gap-2 min-w-0">
+        <TokenIcon contractHash={balance.contractHash} size={36} />
+        <div className="min-w-0">
+          <p
+            className="text-2xl font-bold leading-none"
+            style={{ color: "var(--forge-text-primary)" }}
+          >
+            {balance.symbol}
+          </p>
+          {/* Always rendered — keeps height identical whether or not there's a name */}
+          <p
+            className="text-xs mt-1 truncate"
+            style={{ color: "var(--forge-text-muted)", minHeight: "1rem" }}
+          >
+            {displayName ?? ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Right: balance + price placeholder (always two lines for fixed height) */}
+      <div className="text-right flex-shrink-0 ml-4">
+        <div>
+          <span
+            className="text-2xl font-bold"
+            style={{ color: "var(--forge-text-primary)" }}
+          >
+            {integer}
+          </span>
+          {frac && (
+            <span
+              className="text-sm"
+              style={{ color: "var(--forge-text-muted)" }}
+            >
+              {frac}
+            </span>
+          )}
+        </div>
+        {/* Price placeholder — always rendered, same height as name row */}
+        <p
+          className="text-xs mt-1"
+          style={{ color: "var(--forge-text-muted)", minHeight: "1rem" }}
+          aria-label="Price in USD"
+        >
+          $ —
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Arrow button
+// ---------------------------------------------------------------------------
+
+function ArrowButton({
+  direction,
+  disabled,
+  onClick,
+}: {
+  direction: "left" | "right";
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label={direction === "left" ? "Previous token" : "Next token"}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full transition-opacity"
+      style={{
+        background: disabled ? "transparent" : "rgba(255,255,255,0.06)",
+        color: disabled
+          ? "var(--forge-border-subtle)"
+          : "var(--forge-text-muted)",
+        cursor: disabled ? "default" : "pointer",
+        fontSize: 18,
+        lineHeight: 1,
+      }}
+    >
+      {direction === "left" ? "‹" : "›"}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dot indicators
+// ---------------------------------------------------------------------------
+
+function DotIndicators({
+  count,
+  current,
+  onDotClick,
+}: {
+  count: number;
+  current: number;
+  onDotClick: (i: number) => void;
+}) {
+  if (count <= 1) return null;
+  return (
+    <div className="flex justify-center gap-1.5 mt-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <button
+          key={i}
+          aria-label={`Go to token ${i + 1}`}
+          onClick={() => onDotClick(i)}
+          className="rounded-full transition-all"
+          style={{
+            width: i === current ? 16 : 6,
+            height: 6,
+            background:
+              i === current
+                ? "var(--forge-color-primary)"
+                : "var(--forge-border-subtle)",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export function WalletPanel({
   connectionStatus,
   address,
   balances,
   onConnectClick,
-  onDisconnect,
   errorMessage,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  const visibleBalances = expanded ? balances : balances.slice(0, MAX_VISIBLE);
-  const hiddenCount = Math.max(0, balances.length - MAX_VISIBLE);
+  // Look up token names from the loaded token store
+  const tokens = useTokenStore((s) => s.tokens);
+  const nameByHash = new Map(tokens.map((t) => [t.contractHash, t.name]));
 
-  async function handleCopyAddress() {
-    if (!address) return;
-    await navigator.clipboard.writeText(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // Clamp index when balances array changes
+  const safeIndex = Math.min(currentIndex, Math.max(0, balances.length - 1));
+
+  function prev() {
+    setCurrentIndex((i) => Math.max(0, i - 1));
+  }
+  function next() {
+    setCurrentIndex((i) => Math.min(balances.length - 1, i + 1));
   }
 
+  // Disconnected / error state
   if (connectionStatus === "disconnected" || connectionStatus === "error") {
     return (
       <div
@@ -76,6 +253,7 @@ export function WalletPanel({
     );
   }
 
+  // Connecting
   if (connectionStatus === "connecting") {
     return (
       <div
@@ -91,57 +269,65 @@ export function WalletPanel({
   }
 
   // Connected
+  const current = balances[safeIndex] ?? null;
+
   return (
     <div
-      className="rounded-xl p-5"
+      className="rounded-xl px-4 pt-3 pb-4"
       style={{
         background: "var(--forge-bg-card)",
         border: "1px solid var(--forge-border-medium)",
       }}
     >
-      {/* Address chip + disconnect */}
-      <div className="flex items-center justify-between mb-4">
-        <button
-          aria-label={`Copy address ${address}`}
-          onClick={handleCopyAddress}
-          className="text-sm font-mono px-2 py-1 rounded"
-          style={{
-            color: "var(--forge-color-accent)",
-            background: "rgba(255,167,38,0.1)",
-          }}
-          title={address ?? ""}
-        >
-          {copied ? "Copied!" : truncateAddress(address ?? "")}
-        </button>
-        <button
-          onClick={onDisconnect}
-          className="text-xs opacity-60 hover:opacity-100"
+      {/* Wallet label */}
+      <p
+        className="text-xs mb-3"
+        style={{ color: "var(--forge-text-muted)" }}
+      >
+        {address
+          ? `${address.slice(0, 6)}…${address.slice(-4)}`
+          : "Wallet"}
+      </p>
+
+      {balances.length === 0 ? (
+        <p
+          className="text-sm text-center py-2"
           style={{ color: "var(--forge-text-muted)" }}
         >
-          Disconnect
-        </button>
-      </div>
+          No tokens found
+        </p>
+      ) : (
+        <>
+          {/* Carousel row */}
+          <div className="flex items-center gap-1">
+            <ArrowButton
+              direction="left"
+              disabled={safeIndex === 0}
+              onClick={prev}
+            />
 
-      {/* Balances */}
-      <div className="flex flex-col gap-2">
-        {visibleBalances.map((b) => (
-          <div key={b.contractHash} className="flex justify-between text-sm">
-            <span style={{ color: "var(--forge-text-muted)" }}>{b.symbol}</span>
-            <span style={{ color: "var(--forge-text-primary)" }}>
-              {b.displayAmount}
-            </span>
+            {current && (
+              <BalanceSlide
+                balance={current}
+                name={nameByHash.get(current.contractHash) ?? null}
+              />
+            )}
+
+            <ArrowButton
+              direction="right"
+              disabled={safeIndex === balances.length - 1}
+              onClick={next}
+            />
           </div>
-        ))}
-        {hiddenCount > 0 && !expanded && (
-          <button
-            onClick={() => setExpanded(true)}
-            className="text-xs text-left mt-1"
-            style={{ color: "var(--forge-color-primary)" }}
-          >
-            +{hiddenCount} more…
-          </button>
-        )}
-      </div>
+
+          {/* Dot indicators */}
+          <DotIndicators
+            count={balances.length}
+            current={safeIndex}
+            onDotClick={setCurrentIndex}
+          />
+        </>
+      )}
     </div>
   );
 }

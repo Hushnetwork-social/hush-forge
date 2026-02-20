@@ -4,18 +4,23 @@ import type { TokenInfo } from "./types";
 
 // Mock dependencies
 vi.mock("./forge-config", () => ({
-  FACTORY_CONTRACT_HASH: "0xfactory",
+  getRuntimeFactoryHash: vi.fn().mockReturnValue("0xfactory"),
 }));
 
 vi.mock("./neo-rpc-client", () => ({
   invokeFunction: vi.fn(),
+  addressToHash160: vi.fn((a: string) => a),
+  getAllFactoryTokenHashes: vi.fn(),
 }));
 
 vi.mock("./token-metadata-service", () => ({
   resolveTokenMetadata: vi.fn(),
 }));
 
-import { invokeFunction as mockInvokeFunction } from "./neo-rpc-client";
+import {
+  invokeFunction as mockInvokeFunction,
+  getAllFactoryTokenHashes as mockGetAllFactoryTokenHashes,
+} from "./neo-rpc-client";
 import { resolveTokenMetadata as mockResolveMetadata } from "./token-metadata-service";
 
 // ---------------------------------------------------------------------------
@@ -206,9 +211,12 @@ describe("TokenStore.loadWalletHeldTokens", () => {
     vi.resetAllMocks();
   });
 
-  it("skips tokens already in the list (duplicate prevention)", async () => {
+  it("does not duplicate tokens already in the list", async () => {
     const existing = makeToken("0xabc", "EXISTING");
     useTokenStore.setState({ tokens: [existing] });
+    // Resolve always runs now (deduplication happens at write time in the setter,
+    // not before the async work, to prevent races with loadTokensForAddress).
+    vi.mocked(mockResolveMetadata).mockResolvedValue(existing);
 
     await useTokenStore.getState().loadWalletHeldTokens([
       {
@@ -220,7 +228,8 @@ describe("TokenStore.loadWalletHeldTokens", () => {
       },
     ]);
 
-    expect(vi.mocked(mockResolveMetadata)).not.toHaveBeenCalled();
+    // resolveTokenMetadata was called, but the duplicate was discarded at write time
+    expect(vi.mocked(mockResolveMetadata)).toHaveBeenCalledWith("0xabc");
     expect(useTokenStore.getState().tokens).toHaveLength(1);
   });
 
@@ -271,7 +280,7 @@ describe("TokenStore.loadTokensForAddress", () => {
   });
 
   it("sets loading status to error on RPC failure", async () => {
-    vi.mocked(mockInvokeFunction).mockRejectedValue(
+    vi.mocked(mockGetAllFactoryTokenHashes).mockRejectedValue(
       new Error("RPC unreachable")
     );
 
@@ -281,29 +290,33 @@ describe("TokenStore.loadTokensForAddress", () => {
     expect(useTokenStore.getState().errorMessage).toBe("RPC unreachable");
   });
 
-  it("loads tokens and marks them as own", async () => {
+  it("loads all factory tokens visible to every account regardless of creator", async () => {
     const TOKEN_A = makeToken("0xaaaa", "AAAA", "NwCreator");
-    // Simulate factory returning one hash
+    const TOKEN_B = makeToken("0xbbbb", "BBBB", "NwOther");
+
+    vi.mocked(mockGetAllFactoryTokenHashes).mockResolvedValue([
+      "0xaaaa",
+      "0xbbbb",
+    ]);
+
+    vi.mocked(mockResolveMetadata)
+      .mockResolvedValueOnce(TOKEN_A)
+      .mockResolvedValueOnce(TOKEN_B);
+
+    // getTokensByCreator returns empty (this account created nothing)
     vi.mocked(mockInvokeFunction).mockResolvedValue({
       state: "HALT" as const,
       gasconsumed: "100000",
       script: "",
-      // Array of one ByteString item (base64 of reversed hash bytes)
-      stack: [
-        {
-          type: "Array",
-          value: [] as { type: string; value: unknown }[], // empty for simplicity
-        },
-      ],
+      stack: [{ type: "Array", value: [] }],
     });
-    // But resolved metadata returns our token
-    vi.mocked(mockResolveMetadata).mockResolvedValue(TOKEN_A);
 
-    await useTokenStore.getState().loadTokensForAddress("NwCreator");
+    await useTokenStore.getState().loadTokensForAddress("NwOther");
 
-    // Empty hash list → resolveMetadata not called, tokens empty
     const state = useTokenStore.getState();
     expect(state.loadingStatus).toBe("loaded");
-    expect(state.tokens).toHaveLength(0);
+    expect(state.tokens).toHaveLength(2);
+    expect(state.tokens.map((t) => t.symbol)).toContain("AAAA");
+    expect(state.tokens.map((t) => t.symbol)).toContain("BBBB");
   });
 });

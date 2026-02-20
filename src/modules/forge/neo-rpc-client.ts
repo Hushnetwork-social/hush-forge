@@ -1,14 +1,47 @@
 /**
  * Neo N3 JSON-RPC client for the Forge module.
  * All blockchain reads go through this single module.
- * Uses fetch() with the absolute NEXT_PUBLIC_NEO_RPC_URL — no buildApiUrl() needed.
+ * RPC URL is resolved dynamically from the connected wallet's network via getActiveRpcUrl().
  */
 
-import { NEO_RPC_URL } from "./forge-config";
+import { getActiveRpcUrl } from "./neo-dapi-adapter";
 import type { ApplicationLog, InvokeResult, RpcStackItem } from "./types";
 import { NeoRpcError } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+
+// ---------------------------------------------------------------------------
+// Address utilities
+// ---------------------------------------------------------------------------
+
+const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/**
+ * Converts a Neo N3 address (e.g. "NRyRNU...") to the little-endian hex script
+ * hash format required by the JSON-RPC `invokefunction` args (e.g. "0xabcd...").
+ * If the input already looks like a hex hash it is returned as-is.
+ */
+export function addressToHash160(addressOrHash: string): string {
+  // Already a hex script hash (0x + 40 hex chars)
+  if (/^0x[0-9a-fA-F]{40}$/.test(addressOrHash)) return addressOrHash;
+
+  // Base58Check decode
+  let n = 0n;
+  for (const ch of addressOrHash) {
+    const idx = BASE58_ALPHABET.indexOf(ch);
+    if (idx < 0) throw new Error(`Invalid Base58 character: ${ch}`);
+    n = n * 58n + BigInt(idx);
+  }
+  // Pad to 25 bytes: 1 version + 20 hash + 4 checksum
+  const bytes: number[] = [];
+  for (let i = 0; i < 25; i++) {
+    bytes.unshift(Number(n & 0xffn));
+    n >>= 8n;
+  }
+  // bytes[1..20] = script hash big-endian → reverse to little-endian for RPC
+  const hashBytes = bytes.slice(1, 21).reverse();
+  return "0x" + hashBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -29,8 +62,12 @@ async function rpcCall<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  const rpcUrl = getActiveRpcUrl();
+  if (!rpcUrl) {
+    throw new NeoRpcError("No wallet connected — connect your wallet first to establish the network RPC endpoint");
+  }
   try {
-    const resp = await fetch(NEO_RPC_URL, {
+    const resp = await fetch(rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
@@ -39,7 +76,7 @@ async function rpcCall<T>(
 
     if (!resp.ok) {
       throw new NeoRpcError(
-        `Neo RPC unreachable: HTTP ${resp.status} from ${NEO_RPC_URL}`
+        `Neo RPC unreachable: HTTP ${resp.status} from ${rpcUrl}`
       );
     }
 
@@ -56,9 +93,9 @@ async function rpcCall<T>(
   } catch (err) {
     if (err instanceof NeoRpcError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
-      throw new NeoRpcError(`Neo RPC unreachable: timeout after ${timeoutMs}ms`);
+      throw new NeoRpcError(`Neo RPC unreachable: timeout after ${timeoutMs}ms (${rpcUrl})`);
     }
-    throw new NeoRpcError(`Neo RPC unreachable: ${String(err)}`);
+    throw new NeoRpcError(`Neo RPC unreachable: ${String(err)} (${rpcUrl})`);
   } finally {
     clearTimeout(timer);
   }
@@ -71,6 +108,20 @@ async function rpcCall<T>(
 /** Returns current block count (blockchain height). */
 export async function getBlockCount(): Promise<number> {
   return rpcCall<number>("getblockcount", []);
+}
+
+/**
+ * Returns true if a contract with the given hash is deployed on the current network.
+ * Uses getcontractstate — returns false on any RPC error (including "unknown contract").
+ */
+export async function isContractDeployed(contractHash: string): Promise<boolean> {
+  if (!contractHash || contractHash === "0x") return false;
+  try {
+    await rpcCall<unknown>("getcontractstate", [contractHash]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -119,6 +170,108 @@ export async function getApplicationLog(
   }
 }
 
+// ---------------------------------------------------------------------------
+// NEP-17 transfer history
+// ---------------------------------------------------------------------------
+
+export interface Nep17Transfer {
+  timestamp: number;
+  asset_hash: string;
+  transfer_address: string | null;
+  amount: string;
+  block_index: number;
+  transfer_notify_index: number;
+  tx_hash: string;
+}
+
+export interface Nep17TransferResult {
+  sent: Nep17Transfer[];
+  received: Nep17Transfer[];
+  address: string;
+}
+
+/**
+ * Fetches the full NEP-17 transfer history for a wallet address.
+ * Requires the RpcNep17Tracker (or equivalent) plugin on the Neo node.
+ * Throws NeoRpcError if the method is not available on this network.
+ */
+export async function getNep17Transfers(
+  address: string
+): Promise<Nep17TransferResult> {
+  return rpcCall<Nep17TransferResult>("getnep17transfers", [address]);
+}
+
+// ---------------------------------------------------------------------------
+// Chain-wide token enumeration via findstorage
+// ---------------------------------------------------------------------------
+
+interface FindStorageResult {
+  id: number;
+  next: number;
+  truncated: boolean;
+  results: Array<{ key: string; value: string }>;
+}
+
+/** Decodes a base64-encoded 20-byte UInt160 (LE) into a 0x-prefixed hash string. */
+function decodeUInt160Value(base64: string): string | null {
+  try {
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    if (bytes.length !== 20) return null;
+    const hex = [...bytes]
+      .reverse()
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return `0x${hex}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns all token contract hashes registered in the factory's global token
+ * list. Uses Neo N3's `findstorage` RPC on the factory's Prefix_GlobalTokenList
+ * (byte 0x02) — no indexer or contract change required.
+ *
+ * Storage format: key=[0x02][index_le_bytes] → value=UInt160(20 bytes, LE)
+ */
+export async function getAllFactoryTokenHashes(
+  factoryHash: string
+): Promise<string[]> {
+  if (!factoryHash) return [];
+
+  // base64([0x02]) — factory's Prefix_GlobalTokenList constant
+  const GLOBAL_LIST_PREFIX = "Ag==";
+  const hashes: string[] = [];
+  let start = 0;
+
+  try {
+    while (true) {
+      const page = await rpcCall<FindStorageResult>("findstorage", [
+        factoryHash,
+        GLOBAL_LIST_PREFIX,
+        start,
+      ]);
+
+      for (const item of page.results) {
+        const hash = decodeUInt160Value(item.value);
+        if (hash) hashes.push(hash);
+      }
+
+      if (!page.truncated) break;
+      start = page.next;
+    }
+  } catch (err) {
+    console.warn("[rpc] getAllFactoryTokenHashes (findstorage) failed:", String(err));
+  }
+
+  return hashes;
+}
+
+
+// ---------------------------------------------------------------------------
+// Token balance
+// ---------------------------------------------------------------------------
+
 /**
  * Reads the NEP-17 balance of an address for a specific token contract.
  * Returns 0n if the address holds no balance for that token.
@@ -128,8 +281,9 @@ export async function getTokenBalance(
   address: string
 ): Promise<bigint> {
   try {
+    const hash = addressToHash160(address);
     const result = await invokeFunction(contractHash, "balanceOf", [
-      { type: "Hash160", value: address },
+      { type: "Hash160", value: hash },
     ]);
     const item = result.stack[0];
     if (!item) return 0n;

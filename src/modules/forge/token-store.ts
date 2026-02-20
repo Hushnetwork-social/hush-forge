@@ -5,8 +5,12 @@
  */
 
 import { create } from "zustand";
-import { FACTORY_CONTRACT_HASH } from "./forge-config";
-import { invokeFunction } from "./neo-rpc-client";
+import { getRuntimeFactoryHash } from "./forge-config";
+import {
+  addressToHash160,
+  getAllFactoryTokenHashes,
+  invokeFunction,
+} from "./neo-rpc-client";
 import { resolveTokenMetadata } from "./token-metadata-service";
 import type { RpcStackItem, TokenInfo, WalletBalance } from "./types";
 
@@ -94,17 +98,43 @@ export const useTokenStore = create<TokenStore>()((set, get) => ({
   async loadTokensForAddress(address: string) {
     set({ loadingStatus: "loading", errorMessage: null });
     try {
-      const result = await invokeFunction(
-        FACTORY_CONTRACT_HASH,
-        "GetTokensByCreator",
-        [{ type: "Hash160", value: address }]
-      );
+      const factoryHash = getRuntimeFactoryHash();
 
-      const hashes = parseHashList(result);
-      const tokens = await Promise.all(hashes.map(resolveTokenMetadata));
-      const ownTokenHashes = new Set(tokens.map((t) => t.contractHash));
+      // 1. Load ALL tokens registered in the Forge factory (global list).
+      //    Uses findstorage on Prefix_GlobalTokenList (0x02) — no indexer needed.
+      const allHashes = await getAllFactoryTokenHashes(factoryHash);
+      const allTokens = await Promise.all(allHashes.map(resolveTokenMetadata));
 
-      set({ tokens, ownTokenHashes, loadingStatus: "loaded" });
+      // 2. Separately determine which tokens were CREATED by this address so we
+      //    can show the "Yours" badge without limiting the global list.
+      let ownTokenHashes = new Set<string>();
+      try {
+        const creatorResult = await invokeFunction(
+          factoryHash,
+          "getTokensByCreator",
+          [
+            { type: "Hash160", value: addressToHash160(address) },
+            { type: "Integer", value: "0" },
+            { type: "Integer", value: "100" },
+          ]
+        );
+        ownTokenHashes = new Set(parseHashList(creatorResult));
+      } catch {
+        // Non-critical — own-token detection failed, badges just won't show
+      }
+
+      // 3. Merge: keep native tokens (NEO/GAS) already added by loadWalletHeldTokens.
+      const factoryHashSet = new Set(allTokens.map((t) => t.contractHash));
+      set((state) => {
+        const retained = state.tokens.filter(
+          (t) => !factoryHashSet.has(t.contractHash)
+        );
+        return {
+          tokens: [...allTokens, ...retained],
+          ownTokenHashes,
+          loadingStatus: "loaded",
+        };
+      });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       set({ loadingStatus: "error", errorMessage });
@@ -112,18 +142,50 @@ export const useTokenStore = create<TokenStore>()((set, get) => ({
   },
 
   async loadWalletHeldTokens(balances: WalletBalance[]) {
-    const { tokens } = get();
-    const existingHashes = new Set(tokens.map((t) => t.contractHash));
+    // The wallet (NeoLine) reports authoritative decimals for each token.
+    // Keep a map so we can patch store tokens that landed with decimals=0
+    // (which happens when the decimals() RPC call failed concurrently).
+    const walletDecimals = new Map(balances.map((b) => [b.contractHash, b.decimals]));
 
-    const newHashes = balances
-      .map((b) => b.contractHash)
-      .filter((h) => !existingHashes.has(h));
-
-    if (newHashes.length === 0) return;
-
+    // Resolve metadata for all balances. Deduplication happens at write time
+    // (inside the setter) to avoid a race with loadTokensForAddress.
     try {
-      const newTokens = await Promise.all(newHashes.map(resolveTokenMetadata));
-      set((state) => ({ tokens: [...state.tokens, ...newTokens] }));
+      const resolved = await Promise.all(
+        balances.map(async (b) => {
+          const meta = await resolveTokenMetadata(b.contractHash);
+          // Prefer RPC decimals; fall back to wallet-reported when RPC returned 0.
+          // Native tokens (NEO/GAS) have authoritative decimals from our static spec
+          // even when they are 0. Non-native: prefer RPC-resolved; fall back to
+          // wallet-reported when RPC returned 0 (decimals() call failed).
+          const decimals =
+            meta.isNative || meta.decimals > 0 ? meta.decimals : b.decimals;
+          // When RPC metadata resolution fails the stub has an empty symbol.
+          // Fall back to the wallet balance data so the card always shows something.
+          const symbol = meta.symbol || b.symbol;
+          return { ...meta, symbol, decimals };
+        })
+      );
+
+      set((state) => {
+        // 1. Patch existing tokens whose decimals landed as 0 (RPC race failure).
+        //    The wallet's reported decimals are authoritative.
+        const patched = state.tokens.map((t) => {
+          const walletDec = walletDecimals.get(t.contractHash);
+          if (t.decimals === 0 && walletDec && walletDec > 0) {
+            return { ...t, decimals: walletDec };
+          }
+          return t;
+        });
+
+        // 2. Add tokens not yet in the store.
+        const existingHashes = new Set(patched.map((t) => t.contractHash));
+        const newTokens = resolved.filter((t) => !existingHashes.has(t.contractHash));
+
+        if (newTokens.length === 0 && patched.every((t, i) => t === state.tokens[i])) {
+          return state; // nothing changed — skip re-render
+        }
+        return { tokens: [...patched, ...newTokens] };
+      });
     } catch {
       // Non-critical — wallet balance enrichment failure is silent
     }

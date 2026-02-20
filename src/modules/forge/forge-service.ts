@@ -7,7 +7,7 @@
  */
 
 import {
-  FACTORY_CONTRACT_HASH,
+  getRuntimeFactoryHash,
   GAS_CONTRACT_HASH,
   TX_POLLING_INTERVAL_MS,
   TX_POLLING_TIMEOUT_MS,
@@ -60,16 +60,20 @@ export interface CreationFee {
  */
 export async function fetchCreationFee(): Promise<CreationFee> {
   try {
-    const result = await invokeFunction(
-      FACTORY_CONTRACT_HASH,
-      "GetMinFee",
-      []
-    );
+    const factoryHash = getRuntimeFactoryHash();
+    console.log("[forge] fetchCreationFee — factory hash:", factoryHash || "(empty — not configured!)");
+    const result = await invokeFunction(factoryHash, "getMinFee", []);
+    console.log("[forge] GetMinFee raw result:", result);
     const item = result.stack[0];
-    if (!item) return formatFee(DEFAULT_FEE_DATOSHI);
+    if (!item) {
+      console.warn("[forge] GetMinFee returned empty stack — using fallback fee");
+      return formatFee(DEFAULT_FEE_DATOSHI);
+    }
     const datoshi = BigInt(item.value as string | number);
+    console.log("[forge] creation fee:", datoshi.toString(), "datoshi");
     return formatFee(datoshi);
-  } catch {
+  } catch (err) {
+    console.warn("[forge] fetchCreationFee failed — using fallback 15 GAS:", err);
     return formatFee(DEFAULT_FEE_DATOSHI);
   }
 }
@@ -115,7 +119,12 @@ export async function submitForge(
   params: ForgeParams,
   feeAmount: bigint
 ): Promise<string> {
-  return dapiInvokeForge(FACTORY_CONTRACT_HASH, feeAmount, params);
+  const factoryHash = getRuntimeFactoryHash();
+  console.log("[forge] submitForge — factory:", factoryHash || "(empty — not configured!)", "fee:", feeAmount.toString(), "params:", params);
+  if (!factoryHash) {
+    throw new Error("Factory contract hash is not configured. Deploy the factory first or set NEXT_PUBLIC_FACTORY_CONTRACT_HASH.");
+  }
+  return dapiInvokeForge(factoryHash, feeAmount, params);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,17 +142,21 @@ export function pollForConfirmation(
   txHash: string,
   onProgress?: (status: TxStatus) => void
 ): Promise<TokenCreatedEvent> {
+  console.log("[forge] pollForConfirmation started — txHash:", txHash, "timeout:", TX_POLLING_TIMEOUT_MS, "ms");
   const deadline = Date.now() + TX_POLLING_TIMEOUT_MS;
 
   return new Promise<TokenCreatedEvent>((resolve, reject) => {
     async function check() {
+      console.log("[forge] polling getApplicationLog for:", txHash);
       try {
         const log = await getApplicationLog(txHash);
 
         if (log === null) {
           // TX not yet indexed — still pending
+          console.log("[forge] TX not yet indexed — retrying in", TX_POLLING_INTERVAL_MS, "ms");
           onProgress?.("confirming");
           if (Date.now() >= deadline) {
+            console.error("[forge] polling timeout for:", txHash);
             reject(new TxTimeoutError(txHash));
             return;
           }
@@ -151,16 +164,20 @@ export function pollForConfirmation(
           return;
         }
 
+        console.log("[forge] getApplicationLog result:", JSON.stringify(log, null, 2));
         const exec = log.executions.find((e) => e.trigger === "Application");
         if (exec?.vmstate === "FAULT") {
+          console.error("[forge] TX faulted — exception:", exec.exception);
           reject(new TxFaultedError(txHash));
           return;
         }
 
+        console.log("[forge] TX confirmed! Parsing TokenCreated event...");
         onProgress?.("confirmed");
         resolve(parseTokenCreatedEvent(log));
-      } catch {
+      } catch (err) {
         // RPC error during polling — treat as still pending unless timed out
+        console.warn("[forge] polling RPC error:", err);
         if (Date.now() >= deadline) {
           reject(new TxTimeoutError(txHash));
           return;

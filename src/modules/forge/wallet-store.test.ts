@@ -4,6 +4,7 @@ import { useWalletStore, WALLET_INITIAL_STATE } from "./wallet-store";
 // Mock forge-config
 vi.mock("./forge-config", () => ({
   WALLET_STORAGE_KEY: "forge_wallet_type",
+  WALLET_ADDRESS_STORAGE_KEY: "forge_wallet_address",
 }));
 
 // Mock the dAPI adapter
@@ -53,13 +54,14 @@ describe("WalletStore.connect", () => {
     expect(state.errorMessage).toBeNull();
   });
 
-  it("saves wallet type to localStorage on success", async () => {
+  it("saves wallet type and address to localStorage on success", async () => {
     vi.mocked(mockConnect).mockResolvedValue("NwTestAddress");
     vi.mocked(mockGetBalances).mockResolvedValue([]);
 
     await useWalletStore.getState().connect("NeoLine");
 
     expect(localStorage.getItem("forge_wallet_type")).toBe("NeoLine");
+    expect(localStorage.getItem("forge_wallet_address")).toBe("NwTestAddress");
   });
 
   it("sets error state on connection failure", async () => {
@@ -117,10 +119,12 @@ describe("WalletStore.disconnect", () => {
     expect(state.errorMessage).toBeNull();
   });
 
-  it("removes wallet type from localStorage on disconnect", async () => {
+  it("removes wallet type and address from localStorage on disconnect", async () => {
     localStorage.setItem("forge_wallet_type", "NeoLine");
+    localStorage.setItem("forge_wallet_address", "NwTestAddress");
     useWalletStore.getState().disconnect();
     expect(localStorage.getItem("forge_wallet_type")).toBeNull();
+    expect(localStorage.getItem("forge_wallet_address")).toBeNull();
   });
 
   it("calls dAPI adapter disconnect", async () => {
@@ -231,11 +235,40 @@ describe("WalletStore.tryAutoReconnect", () => {
 
   it("clears localStorage on silent failure", async () => {
     localStorage.setItem("forge_wallet_type", "NeoLine");
+    localStorage.setItem("forge_wallet_address", "NwTestAddress");
     vi.mocked(mockConnect).mockRejectedValue(new Error("Not available"));
 
     await useWalletStore.getState().tryAutoReconnect();
 
     expect(localStorage.getItem("forge_wallet_type")).toBeNull();
+    expect(localStorage.getItem("forge_wallet_address")).toBeNull();
+  });
+
+  it("stays disconnected when wallet returns a different account than saved", async () => {
+    localStorage.setItem("forge_wallet_type", "NeoLine");
+    localStorage.setItem("forge_wallet_address", "NwOriginalAddress");
+    vi.mocked(mockConnect).mockResolvedValue("NwDifferentAddress");
+
+    await useWalletStore.getState().tryAutoReconnect();
+
+    const state = useWalletStore.getState();
+    expect(state.connectionStatus).toBe("disconnected");
+    expect(state.address).toBeNull();
+    expect(localStorage.getItem("forge_wallet_type")).toBeNull();
+    expect(localStorage.getItem("forge_wallet_address")).toBeNull();
+  });
+
+  it("reconnects normally when wallet returns the same account as saved", async () => {
+    localStorage.setItem("forge_wallet_type", "NeoLine");
+    localStorage.setItem("forge_wallet_address", "NwTestAddress");
+    vi.mocked(mockConnect).mockResolvedValue("NwTestAddress");
+    vi.mocked(mockGetBalances).mockResolvedValue([]);
+
+    await useWalletStore.getState().tryAutoReconnect();
+
+    const state = useWalletStore.getState();
+    expect(state.connectionStatus).toBe("connected");
+    expect(state.address).toBe("NwTestAddress");
   });
 
   it("no-ops when localStorage has no saved type", async () => {

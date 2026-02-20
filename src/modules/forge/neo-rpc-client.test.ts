@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NeoRpcError } from "./types";
 
-// Mock forge-config so tests don't need env vars
-vi.mock("./forge-config", () => ({
-  NEO_RPC_URL: "http://localhost:10332",
+// Mock the dAPI adapter to provide a stable RPC URL for tests.
+// neo-rpc-client calls getActiveRpcUrl() to resolve which node to hit.
+vi.mock("./neo-dapi-adapter", () => ({
+  getActiveRpcUrl: vi.fn().mockReturnValue("http://localhost:10332"),
 }));
 
 // Import after mocking
-const { invokeFunction, getApplicationLog, getBlockCount, getTokenBalance } =
+const { invokeFunction, getApplicationLog, getBlockCount, getTokenBalance, getNep17Transfers } =
   await import("./neo-rpc-client");
 
 // ---------------------------------------------------------------------------
@@ -228,5 +229,53 @@ describe("getTokenBalance", () => {
     });
     const balance = await getTokenBalance("0xtoken", "NwAddress");
     expect(balance).toBe(0n);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getNep17Transfers
+// ---------------------------------------------------------------------------
+
+describe("getNep17Transfers", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("returns sent and received arrays on success", async () => {
+    mockFetch({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        address: "NwAddress",
+        sent: [
+          {
+            timestamp: 1000,
+            asset_hash: "0xgashash",
+            transfer_address: null,
+            amount: "10000000",
+            block_index: 5,
+            transfer_notify_index: 0,
+            tx_hash: "0xtx1",
+          },
+        ],
+        received: [],
+      },
+    });
+    const result = await getNep17Transfers("NwAddress");
+    expect(result.sent).toHaveLength(1);
+    expect(result.sent[0].tx_hash).toBe("0xtx1");
+    expect(result.received).toHaveLength(0);
+  });
+
+  it("throws NeoRpcError when plugin is not installed (Method not found)", async () => {
+    mockFetch({
+      jsonrpc: "2.0",
+      id: 1,
+      error: { code: -32601, message: "Method not found" },
+    });
+    await expect(getNep17Transfers("NwAddress")).rejects.toThrow(/Method not found/i);
+  });
+
+  it("throws NeoRpcError on network error", async () => {
+    mockFetchNetworkError();
+    await expect(getNep17Transfers("NwAddress")).rejects.toThrow(/unreachable/i);
   });
 });

@@ -132,12 +132,24 @@ describe("TokenDetail", () => {
     );
   });
 
-  it("own token shows star badge", () => {
+  it("own token shows Yours badge", () => {
     vi.mocked(useTokenDetail).mockReturnValue(
       makeDetailResult({ isOwnToken: true })
     );
     render(<TokenDetail contractHash="0xabc123" />);
     expect(screen.getByLabelText("Your token")).toBeInTheDocument();
+    expect(screen.getByText("Yours")).toBeInTheDocument();
+  });
+
+  it("non-own token shows no Yours badge", () => {
+    render(<TokenDetail contractHash="0xabc123" />);
+    expect(screen.queryByLabelText("Your token")).not.toBeInTheDocument();
+    expect(screen.queryByText("Yours")).not.toBeInTheDocument();
+  });
+
+  it("shows Community mode badge", () => {
+    render(<TokenDetail contractHash="0xabc123" />);
+    expect(screen.getByText(/Community/)).toBeInTheDocument();
   });
 
   it("shows error message when error occurs", () => {

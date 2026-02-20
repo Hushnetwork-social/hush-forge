@@ -97,7 +97,6 @@ export function TokenGrid({ walletAddress, onTokenClick }: Props) {
             key={token.contractHash}
             token={token}
             isOwn={ownTokenHashes.has(token.contractHash)}
-            isUpgradeable={false}
             onClick={onTokenClick}
           />
         ))}

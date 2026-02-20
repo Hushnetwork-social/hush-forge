@@ -3,31 +3,50 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { WalletPanel } from "./WalletPanel";
 import type { WalletBalance } from "../types";
 
-function makeBalance(symbol: string, amount: bigint): WalletBalance {
+vi.mock("../forge-config", () => ({
+  FACTORY_CONTRACT_HASH: "0xfactory",
+  WALLET_STORAGE_KEY: "forge_wallet_type",
+}));
+
+vi.mock("../neo-rpc-client", () => ({
+  invokeFunction: vi.fn(),
+}));
+
+vi.mock("../token-metadata-service", () => ({
+  resolveTokenMetadata: vi.fn(),
+}));
+
+function makeBalance(
+  symbol: string,
+  amount: bigint,
+  decimals = 8
+): WalletBalance {
   return {
     contractHash: `0x${symbol.toLowerCase()}`,
     symbol,
     amount,
-    decimals: 8,
-    displayAmount: (Number(amount) / 1e8).toFixed(8),
+    decimals,
+    displayAmount: (Number(amount) / 10 ** decimals).toFixed(decimals),
   };
 }
 
+const baseProps = {
+  onConnectClick: vi.fn(),
+  onDisconnect: vi.fn(),
+};
+
 describe("WalletPanel", () => {
   beforeEach(() => {
-    Object.assign(navigator, {
-      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
+    vi.clearAllMocks();
   });
 
   it("shows connect button when disconnected", () => {
     render(
       <WalletPanel
+        {...baseProps}
         connectionStatus="disconnected"
         address={null}
         balances={[]}
-        onConnectClick={vi.fn()}
-        onDisconnect={vi.fn()}
       />
     );
     expect(screen.getByText("Connect Wallet")).toBeInTheDocument();
@@ -37,73 +56,177 @@ describe("WalletPanel", () => {
     const onConnectClick = vi.fn();
     render(
       <WalletPanel
+        {...baseProps}
         connectionStatus="disconnected"
         address={null}
         balances={[]}
         onConnectClick={onConnectClick}
-        onDisconnect={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByText("Connect Wallet"));
+    screen.getByText("Connect Wallet").click();
     expect(onConnectClick).toHaveBeenCalled();
   });
 
-  it("shows truncated address when connected", () => {
+  it("does not show address chip in the panel (address is in ForgeHeader)", () => {
     render(
       <WalletPanel
+        {...baseProps}
         connectionStatus="connected"
         address="NwXxxxxxxxxxxxxxxxxxxxxxxxxzzzz"
         balances={[]}
-        onConnectClick={vi.fn()}
-        onDisconnect={vi.fn()}
       />
     );
-    expect(screen.getByText("NwXx...zzzz")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /NwXx/ })).not.toBeInTheDocument();
   });
 
-  it("shows NEP-17 balances when connected", () => {
+  it("shows first token in carousel when connected", () => {
     render(
       <WalletPanel
+        {...baseProps}
         connectionStatus="connected"
         address="NwAddr"
         balances={[
           makeBalance("NEO", 100_00000000n),
           makeBalance("GAS", 47_38000000n),
         ]}
-        onConnectClick={vi.fn()}
-        onDisconnect={vi.fn()}
       />
     );
     expect(screen.getByText("NEO")).toBeInTheDocument();
-    expect(screen.getByText("GAS")).toBeInTheDocument();
+    // GAS is not visible yet (carousel shows one at a time)
+    expect(screen.queryByText("GAS")).not.toBeInTheDocument();
   });
 
-  it("shows '+N more' when more than 5 balances", () => {
-    const manyBalances = Array.from({ length: 8 }, (_, i) =>
-      makeBalance(`TK${i}`, 100n)
-    );
+  it("navigates to next token with right arrow", () => {
     render(
       <WalletPanel
+        {...baseProps}
         connectionStatus="connected"
         address="NwAddr"
-        balances={manyBalances}
-        onConnectClick={vi.fn()}
-        onDisconnect={vi.fn()}
+        balances={[
+          makeBalance("NEO", 100_00000000n),
+          makeBalance("GAS", 47_38000000n),
+        ]}
       />
     );
-    expect(screen.getByText("+3 more…")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Next token"));
+    expect(screen.getByText("GAS")).toBeInTheDocument();
+    expect(screen.queryByText("NEO")).not.toBeInTheDocument();
+  });
+
+  it("navigates back with left arrow", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[
+          makeBalance("NEO", 100_00000000n),
+          makeBalance("GAS", 47_38000000n),
+        ]}
+      />
+    );
+    fireEvent.click(screen.getByLabelText("Next token"));
+    fireEvent.click(screen.getByLabelText("Previous token"));
+    expect(screen.getByText("NEO")).toBeInTheDocument();
+  });
+
+  it("left arrow is disabled on first token", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[makeBalance("NEO", 100n), makeBalance("GAS", 100n)]}
+      />
+    );
+    expect(screen.getByLabelText("Previous token")).toBeDisabled();
+  });
+
+  it("right arrow is disabled on last token", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[makeBalance("NEO", 100n)]}
+      />
+    );
+    expect(screen.getByLabelText("Next token")).toBeDisabled();
+  });
+
+  it("dot indicators appear when there are multiple tokens", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[makeBalance("NEO", 100n), makeBalance("GAS", 100n)]}
+      />
+    );
+    expect(screen.getByLabelText("Go to token 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Go to token 2")).toBeInTheDocument();
+  });
+
+  it("formats integer and decimal parts separately", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[makeBalance("GAS", 9_999_989_86121030n, 8)]}
+      />
+    );
+    expect(screen.getByText("9,999,989")).toBeInTheDocument();
+    expect(screen.getByText(".86121…")).toBeInTheDocument();
+  });
+
+  it("hides decimal part when balance is a whole number", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[makeBalance("NEO", 1000_00000000n, 8)]}
+      />
+    );
+    expect(screen.getByText("1,000")).toBeInTheDocument();
+    expect(screen.queryByText(/\./)).not.toBeInTheDocument();
+  });
+
+  it("shows USD price placeholder for every token", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[makeBalance("NEO", 100_00000000n)]}
+      />
+    );
+    expect(screen.getByLabelText("Price in USD")).toBeInTheDocument();
+    expect(screen.getByText("$ —")).toBeInTheDocument();
   });
 
   it("shows connecting spinner while connecting", () => {
     render(
       <WalletPanel
+        {...baseProps}
         connectionStatus="connecting"
         address={null}
         balances={[]}
-        onConnectClick={vi.fn()}
-        onDisconnect={vi.fn()}
       />
     );
     expect(screen.getByText("Connecting…")).toBeInTheDocument();
+  });
+
+  it("shows no tokens message when connected with empty balances", () => {
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[]}
+      />
+    );
+    expect(screen.getByText("No tokens found")).toBeInTheDocument();
   });
 });

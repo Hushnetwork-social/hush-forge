@@ -5,7 +5,7 @@
  */
 
 import { create } from "zustand";
-import { WALLET_STORAGE_KEY } from "./forge-config";
+import { WALLET_ADDRESS_STORAGE_KEY, WALLET_STORAGE_KEY } from "./forge-config";
 import {
   connect as dapiConnect,
   disconnect as dapiDisconnect,
@@ -55,9 +55,11 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
       set({ walletType, address, balances, connectionStatus: "connected" });
       if (typeof localStorage !== "undefined") {
         localStorage.setItem(WALLET_STORAGE_KEY, walletType);
+        localStorage.setItem(WALLET_ADDRESS_STORAGE_KEY, address);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("[wallet-store] connect failed:", err);
       set({
         connectionStatus: "error",
         errorMessage,
@@ -72,6 +74,7 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
     dapiDisconnect();
     if (typeof localStorage !== "undefined") {
       localStorage.removeItem(WALLET_STORAGE_KEY);
+      localStorage.removeItem(WALLET_ADDRESS_STORAGE_KEY);
     }
     set({ ...WALLET_INITIAL_STATE });
   },
@@ -92,9 +95,28 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
     const saved = localStorage.getItem(WALLET_STORAGE_KEY) as WalletType | null;
     if (!saved || saved === "disconnected") return;
 
+    const savedAddress = localStorage.getItem(WALLET_ADDRESS_STORAGE_KEY);
+
     set({ connectionStatus: "connecting" });
     try {
       const address = await dapiConnect(saved);
+
+      // If the wallet's active account has changed since the last explicit
+      // connect, do NOT silently reconnect as a different account. Clear the
+      // saved state and stay disconnected so the user can connect manually.
+      if (savedAddress && address !== savedAddress) {
+        console.warn(
+          "[wallet-store] auto-reconnect: wallet account changed",
+          savedAddress, "→", address,
+          "— staying disconnected"
+        );
+        dapiDisconnect();
+        localStorage.removeItem(WALLET_STORAGE_KEY);
+        localStorage.removeItem(WALLET_ADDRESS_STORAGE_KEY);
+        set({ connectionStatus: "disconnected" });
+        return;
+      }
+
       const balances = await dapiGetBalances(address);
       set({
         walletType: saved,
@@ -106,6 +128,7 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
     } catch {
       // Silent failure — clear stale storage and stay disconnected
       localStorage.removeItem(WALLET_STORAGE_KEY);
+      localStorage.removeItem(WALLET_ADDRESS_STORAGE_KEY);
       set({ connectionStatus: "disconnected" });
     }
   },

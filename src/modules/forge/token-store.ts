@@ -19,7 +19,7 @@ import type { RpcStackItem, TokenInfo, WalletBalance } from "./types";
 // ---------------------------------------------------------------------------
 
 export type LoadingStatus = "idle" | "loading" | "loaded" | "error";
-export type TabType = "mine" | "new" | "community" | "speculative" | "crowdfund";
+export type TabType = "all" | "mine" | "new" | "community" | "speculative" | "crowdfund";
 
 interface TokenState {
   tokens: TokenInfo[];
@@ -55,11 +55,15 @@ export function selectDisplayTokens(state: {
 
   // 1. Tab filter
   switch (state.activeTab) {
+    case "all":
+      // No filter — show everything
+      break;
     case "mine":
       filtered = filtered.filter((t) => state.ownTokenHashes.has(t.contractHash));
       break;
     case "new":
-      // All tokens — will be sorted chronologically below
+      // Forge-created tokens only (exclude native NEO/GAS)
+      filtered = filtered.filter((t) => !t.isNative && t.createdAt !== null);
       break;
     case "community":
       filtered = filtered.filter((t) => t.mode === "community");
@@ -86,13 +90,8 @@ export function selectDisplayTokens(state: {
 
   // 3. Sort/order
   if (state.activeTab === "new") {
-    // Newest first; tokens without createdAt (native) sink to end
-    return [...filtered].sort((a, b) => {
-      if (a.createdAt && b.createdAt) return b.createdAt - a.createdAt;
-      if (a.createdAt) return -1;
-      if (b.createdAt) return 1;
-      return 0;
-    });
+    // Newest first (all results have createdAt — native excluded above)
+    return [...filtered].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   }
 
   // All other tabs: own tokens first
@@ -132,7 +131,7 @@ function parseHashList(result: { stack: RpcStackItem[] }): string[] {
 const INITIAL_STATE: TokenState = {
   tokens: [],
   ownTokenHashes: new Set(),
-  activeTab: "new",
+  activeTab: "all",
   searchQuery: "",
   loadingStatus: "idle",
   errorMessage: null,

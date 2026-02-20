@@ -50,7 +50,7 @@ function resetStore() {
     {
       tokens: [],
       ownTokenHashes: new Set(),
-      activeTab: "new",
+      activeTab: "all",
       searchQuery: "",
       loadingStatus: "idle",
       errorMessage: null,
@@ -217,7 +217,7 @@ describe("TokenStore.setActiveTab", () => {
   });
 
   it("switches active tab", () => {
-    expect(useTokenStore.getState().activeTab).toBe("new");
+    expect(useTokenStore.getState().activeTab).toBe("all");
     useTokenStore.getState().setActiveTab("mine");
     expect(useTokenStore.getState().activeTab).toBe("mine");
     useTokenStore.getState().setActiveTab("community");
@@ -262,7 +262,7 @@ describe("TokenStore.reset", () => {
     const state = useTokenStore.getState();
     expect(state.tokens).toEqual([]);
     expect(state.ownTokenHashes.size).toBe(0);
-    expect(state.activeTab).toBe("new");
+    expect(state.activeTab).toBe("all");
     expect(state.searchQuery).toBe("");
     expect(state.loadingStatus).toBe("idle");
   });

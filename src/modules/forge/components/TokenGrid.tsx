@@ -34,6 +34,7 @@ function SkeletonCard() {
 // ---------------------------------------------------------------------------
 
 const TABS: { id: TabType; label: string }[] = [
+  { id: "all",        label: "All"         },
   { id: "mine",       label: "My Tokens"   },
   { id: "new",        label: "New"         },
   { id: "community",  label: "Community"   },
@@ -163,9 +164,13 @@ export function TokenGrid({ walletAddress, onTokenClick }: Props) {
       ? walletAddress
         ? "You haven't forged any tokens yet. Click 🔥 Forge Token to start."
         : "Connect your wallet to see your tokens."
+      : activeTab === "new"
+      ? searchQuery.trim()
+        ? "No new tokens match your search."
+        : "No Forge tokens yet — be the first to launch one!"
       : searchQuery.trim()
       ? "No tokens match your search."
-      : `No ${activeTab === "new" ? "" : activeTab + " "}tokens found.`;
+      : `No ${activeTab === "all" ? "" : activeTab + " "}tokens found.`;
 
   return (
     <div>

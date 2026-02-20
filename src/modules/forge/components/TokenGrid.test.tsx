@@ -36,7 +36,7 @@ function resetStore() {
     {
       tokens: [],
       ownTokenHashes: new Set<string>(),
-      activeTab: "new",
+      activeTab: "all",
       searchQuery: "",
       loadingStatus: "idle",
       errorMessage: null,

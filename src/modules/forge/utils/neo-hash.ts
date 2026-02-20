@@ -138,8 +138,62 @@ function emitPushUint32(out: number[], value: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Base58 (no-check) decoder
+// ---------------------------------------------------------------------------
+
+const BASE58_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function base58Decode(s: string): Uint8Array {
+  let num = BigInt(0);
+  for (const c of s) {
+    const idx = BASE58_CHARS.indexOf(c);
+    if (idx === -1) throw new Error(`Invalid base58 char: ${c}`);
+    num = num * 58n + BigInt(idx);
+  }
+  let leadingZeros = 0;
+  for (const c of s) {
+    if (c !== "1") break;
+    leadingZeros++;
+  }
+  const bytes: number[] = [];
+  while (num > 0n) {
+    bytes.unshift(Number(num & 0xffn));
+    num >>= 8n;
+  }
+  const result = new Uint8Array(leadingZeros + bytes.length);
+  result.set(bytes, leadingZeros);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/**
+ * Converts a Neo N3 address (Base58Check) to a "0x" + LE-hex script hash.
+ *
+ * Neo N3 addresses are encoded as:
+ *   Base58Check( 0x35 || scriptHash_LE_20bytes )
+ * The decoded LE bytes are already in the format expected by computeContractHash.
+ */
+export async function addressToScriptHash(address: string): Promise<string> {
+  const decoded = base58Decode(address); // 25 bytes: [version(1)] [hashLE(20)] [checksum(4)]
+  if (decoded.length !== 25) throw new Error(`Invalid Neo N3 address length: ${decoded.length}`);
+  if (decoded[0] !== 0x35) throw new Error(`Invalid address version byte: 0x${decoded[0].toString(16)}`);
+
+  // Verify checksum: SHA256(SHA256(first 21 bytes)) → first 4 bytes must match last 4
+  const payload = decoded.slice(0, 21);
+  const sha1 = new Uint8Array(await crypto.subtle.digest("SHA-256", payload));
+  const sha2 = new Uint8Array(await crypto.subtle.digest("SHA-256", sha1));
+  for (let i = 0; i < 4; i++) {
+    if (decoded[21 + i] !== sha2[i]) throw new Error("Invalid address checksum");
+  }
+
+  // The base58 BigInt decode builds bytes big-endian (via unshift), so
+  // decoded[1:21] is the hash in big-endian order — reverse to get LE.
+  const scriptHashLE = Array.from(decoded.slice(1, 21)).reverse();
+  return "0x" + scriptHashLE.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 /**
  * Reads the NEF checksum from the last 4 bytes of the NEF file (LE uint32).

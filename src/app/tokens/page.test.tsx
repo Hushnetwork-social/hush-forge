@@ -12,6 +12,10 @@ vi.mock("@/modules/forge/hooks/useWallet", () => ({
   useWallet: vi.fn(),
 }));
 
+vi.mock("@/modules/forge/hooks/useFactoryDeployment", () => ({
+  useFactoryDeployment: vi.fn(),
+}));
+
 vi.mock("@/modules/forge/hooks/useTokenPolling", () => ({
   useTokenPolling: vi.fn(),
 }));
@@ -96,6 +100,8 @@ vi.mock("@/modules/forge/components/WalletConnectModal", () => ({
 // ── Test fixtures ──────────────────────────────────────────────────────────
 
 import { useWallet } from "@/modules/forge/hooks/useWallet";
+import { useFactoryDeployment } from "@/modules/forge/hooks/useFactoryDeployment";
+import type { FactoryDeployStatus } from "@/modules/forge/hooks/useFactoryDeployment";
 import { useTokenPolling } from "@/modules/forge/hooks/useTokenPolling";
 import { useTokenStore } from "@/modules/forge/token-store";
 import type { TokenStore } from "@/modules/forge/token-store";
@@ -109,6 +115,7 @@ function setupMocks({
     | "connecting"
     | "connected"
     | "error",
+  factoryStatus = "deployed" as FactoryDeployStatus,
 } = {}) {
   vi.mocked(useWallet).mockReturnValue({
     walletType: null,
@@ -121,6 +128,15 @@ function setupMocks({
     connect: vi.fn(),
     disconnect: vi.fn(),
     refreshBalances: vi.fn(),
+  });
+
+  vi.mocked(useFactoryDeployment).mockReturnValue({
+    status: factoryStatus,
+    factoryHash: factoryStatus === "deployed" ? "0xfactory" : "",
+    deployError: null,
+    deploy: vi.fn(),
+    initialize: vi.fn(),
+    recheck: vi.fn(),
   });
 
   vi.mocked(useTokenPolling).mockReturnValue({
@@ -170,6 +186,24 @@ describe("TokensPage", () => {
   it("Forge Token button is not shown when wallet is disconnected", () => {
     render(<TokensPage />);
     expect(screen.queryByText("🔥 Forge Token")).not.toBeInTheDocument();
+  });
+
+  it("Forge Token button is disabled when factory is not deployed", () => {
+    setupMocks({ address: "NwMe", connectionStatus: "connected", factoryStatus: "not-deployed" });
+    render(<TokensPage />);
+    expect(screen.getByText("🔥 Forge Token")).toBeDisabled();
+  });
+
+  it("Forge Token button is disabled while factory is checking", () => {
+    setupMocks({ address: "NwMe", connectionStatus: "connected", factoryStatus: "checking" });
+    render(<TokensPage />);
+    expect(screen.getByText("🔥 Forge Token")).toBeDisabled();
+  });
+
+  it("Forge Token button is enabled when factory is deployed", () => {
+    setupMocks({ address: "NwMe", connectionStatus: "connected", factoryStatus: "deployed" });
+    render(<TokensPage />);
+    expect(screen.getByText("🔥 Forge Token")).not.toBeDisabled();
   });
 
   it("clicking Forge Token shows the ForgeOverlay", () => {

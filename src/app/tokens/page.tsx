@@ -115,7 +115,13 @@ export default function TokensPage() {
             <div className="flex justify-end">
               <button
                 onClick={() => setView("forge-overlay")}
-                className="px-6 py-3 rounded-lg font-bold text-sm"
+                disabled={factory.status !== "deployed"}
+                title={
+                  factory.status !== "deployed"
+                    ? "Deploy and initialize TokenFactory first"
+                    : undefined
+                }
+                className="px-6 py-3 rounded-lg font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{
                   background:
                     "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",

@@ -19,8 +19,14 @@ import {
   TX_POLLING_INTERVAL_MS,
   TX_POLLING_TIMEOUT_MS,
 } from "../forge-config";
-import { getApplicationLog, invokeFunction, isContractDeployed } from "../neo-rpc-client";
+import {
+  getApplicationLog,
+  invokeFunction,
+  isContractDeployed,
+  addressToHash160,
+} from "../neo-rpc-client";
 import { computeContractHash } from "../utils/neo-hash";
+import type { ApplicationLog } from "../types";
 
 export type FactoryDeployStatus =
   | "idle"
@@ -59,9 +65,15 @@ export function useFactoryDeployment(
     }
 
     let cancelled = false;
-    setStatus("checking");
 
     const hash = getRuntimeFactoryHash();
+    if (!hash) {
+      // No hash configured and nothing in localStorage — factory has never been deployed.
+      setStatus("not-deployed");
+      return;
+    }
+
+    setStatus("checking");
 
     (async () => {
       const deployed = await isContractDeployed(hash);
@@ -96,33 +108,111 @@ export function useFactoryDeployment(
     setDeployError(null);
 
     try {
-      // Compute the hash we expect BEFORE submitting (deterministic)
-      const [nefRes] = await Promise.all([fetch("/contracts/TokenFactory.nef")]);
-      const nefBytes = new Uint8Array(await nefRes.arrayBuffer());
-      const expectedHash = await computeContractHash(address, nefBytes, "TokenFactory");
+      let deployedHash: string | null = null;
 
-      // Step 1: Submit deployment transaction via NeoLine
-      const txid = await dapiDeployFactory();
-      console.log("[factory] deploy tx submitted:", txid, "expected hash:", expectedHash);
+      // ---- Step 1: Deploy ----
+      try {
+        const txid = await dapiDeployFactory();
+        console.log("[factory] deploy tx submitted:", txid);
+        await pollDeploymentConfirmed(txid);
 
-      // Poll for deployment confirmation
-      await pollDeploymentConfirmed(txid);
-      console.log("[factory] deployed at:", expectedHash);
+        // Primary: read the actual contract hash from ContractManagement's Deploy notification.
+        // This is the only reliable source — pre-computing is fragile (byte-order of sender hash).
+        const log = await getApplicationLog(txid);
+        if (log) {
+          const extracted = extractDeployedHashFromLog(log);
+          if (extracted) {
+            // Verify the hash is actually visible on-chain (handles byte-order & timing).
+            // Try both the extracted hash and its byte-reversed form.
+            const isDeployed = await isContractDeployed(extracted);
+            if (isDeployed) {
+              deployedHash = extracted;
+            } else {
+              const reversed = reverseHashBytes(extracted);
+              const isReversedDeployed = await isContractDeployed(reversed);
+              if (isReversedDeployed) {
+                console.log("[factory] using byte-reversed hash:", reversed);
+                deployedHash = reversed;
+              }
+            }
+          }
+        }
 
-      // Step 2: Initialize factory with TokenTemplate NEF+manifest
+        if (!deployedHash) {
+          // Fallback: compute deterministically (may be wrong if sender bytes are mis-ordered)
+          const nefRes = await fetch("/contracts/TokenFactory.nef");
+          const nefBytes = new Uint8Array(await nefRes.arrayBuffer());
+          deployedHash = await computeContractHash(
+            addressToHash160(address),
+            nefBytes,
+            "TokenFactory"
+          );
+          console.warn("[factory] could not read hash from log, using computed:", deployedHash);
+        }
+
+        // Wait for the contract to be visible to NeoLine's RPC (timing safety).
+        // NeoLine does an invokefunction dry-run before submitting — the state must be ready.
+        await waitUntilContractDeployed(deployedHash, 30_000);
+
+        console.log("[factory] deployed at:", deployedHash);
+      } catch (deployErr) {
+        if (isContractAlreadyExistsError(deployErr)) {
+          // Contract already at this address+NEF combination (e.g. after app restart on an
+          // existing chain). The error message from NeoLine contains the actual hash.
+          deployedHash = extractHashFromAlreadyExistsError(deployErr);
+          console.log(
+            "[factory] contract already exists at:",
+            deployedHash ?? "(unknown hash)",
+            "— recovering"
+          );
+
+          if (deployedHash) {
+            saveFactoryHash(deployedHash);
+            setFactoryHash(deployedHash);
+
+            // Check if already initialized — return early if so
+            try {
+              const result = await invokeFunction(deployedHash, "isInitialized", []);
+              const initialized =
+                result.stack[0]?.value === true || result.stack[0]?.value === "1";
+              if (initialized) {
+                setStatus("deployed");
+                return;
+              }
+            } catch { /* not initialized — fall through to initialize */ }
+          } else {
+            throw new Error(
+              "Contract already deployed but its hash could not be determined. " +
+              "Check the browser console for the actual hash and set it manually."
+            );
+          }
+        } else {
+          throw deployErr;
+        }
+      }
+
+      if (!deployedHash) throw new Error("Could not determine deployed contract hash");
+
+      saveFactoryHash(deployedHash);
+      setFactoryHash(deployedHash);
+
+      // ---- Step 2: Initialize ----
       setStatus("initializing");
-      const initTxid = await dapiInitializeFactory(expectedHash);
-      console.log("[factory] setNefAndManifest tx submitted:", initTxid);
-
-      await pollDeploymentConfirmed(initTxid);
-      console.log("[factory] initialized — ready to forge tokens");
-
-      // Save and expose the hash
-      saveFactoryHash(expectedHash);
-      setFactoryHash(expectedHash);
-      setStatus("deployed");
+      try {
+        const initTxid = await dapiInitializeFactory(deployedHash);
+        console.log("[factory] setNefAndManifest tx submitted:", initTxid);
+        await pollDeploymentConfirmed(initTxid);
+        console.log("[factory] initialized — ready to forge tokens");
+        setStatus("deployed");
+      } catch (initErr) {
+        // Factory is deployed but initialization failed (e.g. NeoLine state lag, user cancel).
+        // Show "Initialize Factory" button so the user can retry without redeploying.
+        console.error("[factory] init failed:", initErr);
+        setDeployError(formatDeployError(initErr));
+        setStatus("not-initialized");
+      }
     } catch (err) {
-      console.error("[factory] deploy/init failed:", err);
+      console.error("[factory] deploy failed:", err);
       setDeployError(formatDeployError(err));
       setStatus("deploy-error");
     }
@@ -153,8 +243,110 @@ export function useFactoryDeployment(
 }
 
 // ---------------------------------------------------------------------------
-// Error formatting
+// Hash / timing helpers
 // ---------------------------------------------------------------------------
+
+/** Returns the hash with all 20 bytes in reversed order (LE ↔ BE swap). */
+function reverseHashBytes(hash: string): string {
+  const hex = hash.startsWith("0x") ? hash.slice(2) : hash;
+  return "0x" + hex.match(/.{2}/g)!.reverse().join("");
+}
+
+/**
+ * Polls isContractDeployed until the contract is visible on-chain.
+ * NeoLine does an `invokefunction` dry-run before submitting the init TX;
+ * the contract state must be fully committed before that call is made.
+ * Throws if the contract is still not visible after timeoutMs.
+ */
+async function waitUntilContractDeployed(hash: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const deployed = await isContractDeployed(hash);
+    if (deployed) return;
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  throw new Error(
+    `Timed out waiting for contract ${hash} to appear on-chain after ${timeoutMs / 1000}s`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ApplicationLog helpers
+// ---------------------------------------------------------------------------
+
+/** ContractManagement hash — same on every Neo N3 network. */
+const CONTRACT_MGMT_HASH = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd";
+
+/**
+ * Scans an ApplicationLog for ContractManagement's "Deploy" notification and
+ * extracts the actual deployed contract hash (LE hex, 0x-prefixed).
+ *
+ * ContractManagement emits: Deploy(ByteString contractHash)
+ * The ByteString is the 20 LE bytes of the UInt160 contract hash.
+ */
+function extractDeployedHashFromLog(log: ApplicationLog): string | null {
+  for (const exec of log.executions) {
+    console.log("[factory] applog exec — trigger:", exec.trigger, "vmstate:", exec.vmstate,
+      "notifications:", exec.notifications?.length ?? 0);
+    if (exec.trigger !== "Application") continue;
+    for (const notif of exec.notifications ?? []) {
+      console.log("[factory] notification — contract:", notif.contract,
+        "event:", notif.eventname, "state[0]:", JSON.stringify(notif.state.value[0]));
+      if (
+        notif.contract.toLowerCase() === CONTRACT_MGMT_HASH &&
+        notif.eventname === "Deploy"
+      ) {
+        const item = notif.state.value[0];
+        if (item?.type === "ByteString" && typeof item.value === "string") {
+          try {
+            const bytes = Uint8Array.from(atob(item.value), (c) => c.charCodeAt(0));
+            console.log("[factory] Deploy notification bytes length:", bytes.length,
+              "raw hex:", Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join(""));
+            if (bytes.length === 20) {
+              return "0x" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+            }
+          } catch { /* invalid base64 or wrong length — skip */ }
+        } else {
+          console.log("[factory] Deploy notification item type:", item?.type, "value:", item?.value);
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extracts the "0x..."-prefixed contract hash from a "Contract Already Exists: 0x..."
+ * error message emitted by NeoLine / the RPC node.
+ */
+function extractHashFromAlreadyExistsError(err: unknown): string | null {
+  if (typeof err !== "object" || err === null) return null;
+  const obj = err as Record<string, unknown>;
+  const desc =
+    typeof obj.description === "string"
+      ? obj.description
+      : typeof (obj.description as Record<string, unknown> | null)?.message === "string"
+      ? ((obj.description as Record<string, unknown>).message as string)
+      : "";
+  const match = /0x[0-9a-fA-F]{40}/i.exec(desc);
+  return match ? match[0].toLowerCase() : null;
+}
+
+// ---------------------------------------------------------------------------
+// Error helpers
+// ---------------------------------------------------------------------------
+
+function isContractAlreadyExistsError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const obj = err as Record<string, unknown>;
+  const desc =
+    typeof obj.description === "string"
+      ? obj.description
+      : typeof (obj.description as Record<string, unknown> | null)?.message === "string"
+      ? ((obj.description as Record<string, unknown>).message as string)
+      : "";
+  return desc.toLowerCase().includes("contract already exists");
+}
 
 function formatDeployError(err: unknown): string {
   if (err instanceof Error) return err.message;

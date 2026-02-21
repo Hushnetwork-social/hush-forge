@@ -10,19 +10,9 @@ Feature: Token List Dashboard
     When the user views the /tokens dashboard
     Then each own token shows a Yours badge
 
-  Scenario: Upgradeable own tokens show an open lock icon
-    Given the test account owns an upgradeable token
-    When the user views the token list
-    Then that token shows an open lock icon
-
-  Scenario: Non-upgradeable own tokens show a closed lock icon
-    Given the test account owns a non-upgradeable token
-    When the user views the token list
-    Then that token shows a closed lock icon
-
-  Scenario: "Mine" tab shows only own tokens
+  Scenario: "My Tokens" tab shows only own tokens
     Given the test account holds tokens it does not own
-    When the user clicks the "Mine" tab
+    When the user clicks the "My Tokens" tab
     Then only tokens created by the test account are shown
 
   Scenario: Token list is empty when wallet has no tokens

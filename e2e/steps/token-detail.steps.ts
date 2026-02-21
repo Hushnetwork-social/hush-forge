@@ -38,8 +38,10 @@ Given("the user is on the token detail page", async ({ page, mockDapi }) => {
   // Navigate to the first own token from the dashboard, or use a known hash
   await page.goto("/tokens");
   await connectWallet(page, mockDapi.address);
-  // Click the first token card to navigate to its detail page
-  await page.locator(".grid > div").first().click();
+  // Wait for token cards to load (articles), then click the first one
+  const firstCard = page.locator("article").first();
+  await expect(firstCard).toBeVisible({ timeout: 10_000 });
+  await firstCard.click();
   await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
 });
 
@@ -48,10 +50,33 @@ Given(
   async ({ page, mockDapi }) => {
     await page.goto("/tokens");
     await connectWallet(page, mockDapi.address);
-    // Click the first card with a "Yours" badge (own token)
-    const ownCard = page.locator("article").filter({ has: page.getByLabel("Your token") }).first();
-    await ownCard.click();
-    await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
+
+    // Wait for own token cards to appear (token list loads asynchronously),
+    // then iterate until we find one with the "Update Token" button
+    // (only upgradeable / community-mode tokens expose this button).
+    const ownCards = page.locator("article").filter({ has: page.getByLabel("Your token") });
+    await expect(ownCards.first()).toBeVisible({ timeout: 10_000 });
+    const count = await ownCards.count();
+    for (let i = 0; i < count; i++) {
+      await ownCards.nth(i).click();
+      await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
+      // waitFor() is needed — isVisible() snapshots immediately and misses async metadata load
+      const hasUpdateBtn = await page
+        .getByRole("button", { name: "Update Token" })
+        .waitFor({ state: "visible", timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (hasUpdateBtn) return;
+      // Not upgradeable — go back and try the next card
+      await page.goto("/tokens");
+      await connectWallet(page, mockDapi.address);
+      await page.waitForTimeout(1_000);
+    }
+    // Fallback: click first own card regardless (test will surface the issue)
+    if (count > 0) {
+      await ownCards.first().click();
+      await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
+    }
   }
 );
 
@@ -60,8 +85,10 @@ Given(
   async ({ page, mockDapi }) => {
     await page.goto("/tokens");
     await connectWallet(page, mockDapi.address);
-    // Find a card WITHOUT the star marker (not own)
-    const cards = page.locator(".grid > div");
+    // Wait for token cards (articles) to load, then find one WITHOUT "Yours" badge
+    const firstCard = page.locator("article").first();
+    await expect(firstCard).toBeVisible({ timeout: 10_000 });
+    const cards = page.locator("article");
     const count = await cards.count();
     for (let i = 0; i < count; i++) {
       const card = cards.nth(i);
@@ -86,8 +113,9 @@ Given(
     // independently.  We navigate to /tokens and look for a non-own token.
     await page.goto("/tokens");
     await connectWallet(page, mockDapi.address);
-    // Navigate to a known non-factory token hash from the env var, or use
-    // the first non-own token
+    // Wait for token cards (articles) to load, then find the first non-own card.
+    // Native tokens (GAS/NEO) are non-factory and appear without "Yours" badge.
+    await expect(page.locator("article").first()).toBeVisible({ timeout: 10_000 });
     const nonOwnCard = page.locator("article").filter({
       hasNot: page.getByLabel("Your token"),
     }).first();
@@ -131,12 +159,11 @@ When(
 Then(
   "the contract hash {string} is displayed on the page",
   async ({ page }, contractHash: string) => {
-    // TokenDetail shows truncated hash: first 8 + "..." + last 6
-    const truncated =
-      contractHash.length > 12
-        ? `${contractHash.slice(0, 8)}...${contractHash.slice(-6)}`
-        : contractHash;
-    await expect(page.getByText(truncated)).toBeVisible({ timeout: 10_000 });
+    // TokenDetail renders the full contract hash inside a <code> element.
+    // The Tailwind "truncate" class clips it visually but the DOM text is the full hash.
+    await expect(
+      page.locator("code", { hasText: contractHash }).first()
+    ).toBeVisible({ timeout: 10_000 });
   }
 );
 

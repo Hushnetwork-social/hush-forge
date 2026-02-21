@@ -183,7 +183,31 @@ async function globalSetup(_config: FullConfig): Promise<void> {
     }
   }
 
-  // ── 4. Verify test account credentials ──────────────────────────────────
+  // ── 4. Seed devnet with test tokens ─────────────────────────────────────────
+  // Creates 1 upgradeable + 1 non-upgradeable token so that token-list,
+  // token-detail, and update-token tests have data to work with.
+  // Non-fatal: if this fails the tests that need tokens will report clearly.
+  try {
+    const seedScript = path.resolve(__dirname, "../../scripts/create-test-tokens.cjs");
+    console.log("🪙  Seeding devnet with E2E test tokens...");
+    const seedResult = spawnSync("node", [seedScript], {
+      cwd: path.resolve(__dirname, "../.."),
+      encoding: "utf8",
+      timeout: 180_000,
+      env: { ...process.env }, // includes NEXT_PUBLIC_FACTORY_CONTRACT_HASH
+    });
+    const seedOutput = (seedResult.stdout ?? "") + (seedResult.stderr ?? "");
+    console.log(seedOutput);
+    if (seedResult.status !== 0) {
+      console.warn("⚠  create-test-tokens.cjs exited with non-zero status — tests that require tokens may fail");
+    } else {
+      console.log("✓  E2E test tokens seeded");
+    }
+  } catch (err) {
+    console.warn("⚠  Failed to seed test tokens:", err);
+  }
+
+  // ── 5. Verify test account credentials ──────────────────────────────────
   // Default to the neo3-privatenet-docker pre-funded account (see CLAUDE.md).
   const testAddress =
     process.env.E2E_TEST_ACCOUNT_ADDRESS ?? "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c";

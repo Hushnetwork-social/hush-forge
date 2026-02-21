@@ -51,7 +51,9 @@ Then(
   async ({ page, mockDapi }) => {
     await page.getByRole("button", { name: "Neon Wallet" }).click();
     const prefix = mockDapi.address.slice(0, 6);
-    await expect(page.getByText(new RegExp(prefix))).toBeVisible({
+    // The address appears in both ForgeHeader and WalletPanel — use .first() to
+    // avoid strict-mode errors when multiple elements match the prefix regex.
+    await expect(page.getByText(new RegExp(prefix)).first()).toBeVisible({
       timeout: 10_000,
     });
   }
@@ -61,7 +63,8 @@ Then(
   "the wallet remains connected without prompting again",
   async ({ page, mockDapi }) => {
     const prefix = mockDapi.address.slice(0, 6);
-    await expect(page.getByText(new RegExp(prefix))).toBeVisible();
+    // Use .first() — address appears in both ForgeHeader and WalletPanel
+    await expect(page.getByText(new RegExp(prefix)).first()).toBeVisible();
     await expect(
       page.getByRole("dialog", { name: "Connect Wallet" })
     ).not.toBeVisible();
@@ -69,7 +72,8 @@ Then(
 );
 
 Then("the header shows {string} again", async ({ page }, text: string) => {
-  await expect(page.getByRole("button", { name: text })).toBeVisible();
+  // "Connect Wallet" appears in both ForgeHeader and WalletPanel after disconnect
+  await expect(page.getByRole("button", { name: text }).first()).toBeVisible();
 });
 
 Then("the token list is cleared", async ({ page }) => {

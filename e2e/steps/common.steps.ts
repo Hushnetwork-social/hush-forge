@@ -42,6 +42,9 @@ export async function connectWallet(page: Page, address: string): Promise<void> 
 /**
  * Navigates to /tokens, connects wallet, clicks "Forge Token" and waits for
  * the Forge overlay to appear.
+ *
+ * Does NOT wait for the FORGE submit button to be enabled — call
+ * waitForForgeReady() afterwards when the scenario needs to submit the form.
  */
 export async function openForgeOverlay(page: Page, address: string): Promise<void> {
   if (!page.url().includes("/tokens")) {
@@ -54,7 +57,16 @@ export async function openForgeOverlay(page: Page, address: string): Promise<voi
   await expect(forgeBtn).not.toBeDisabled({ timeout: 20_000 });
   await forgeBtn.click();
   await expect(page.getByRole("dialog", { name: "Forge a Token" })).toBeVisible();
-  // Wait for the creation fee to load (fee loading keeps the FORGE button disabled)
+}
+
+/**
+ * Waits for the FORGE submit button inside the overlay to become enabled.
+ * Call this after openForgeOverlay() only when the scenario intends to submit
+ * (i.e. the GAS balance is sufficient and the form fee has loaded).
+ * Do NOT call this in scenarios that intentionally test the disabled state
+ * (e.g. insufficient GAS balance).
+ */
+export async function waitForForgeReady(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: /FORGE/ })).not.toBeDisabled({ timeout: 15_000 });
 }
 
@@ -88,21 +100,34 @@ Given("the Forge overlay is open", async ({ page, mockDapi }) => {
 
 Given("the Forge overlay is open with valid token details", async ({ page, mockDapi }) => {
   await openForgeOverlay(page, mockDapi.address);
+  await waitForForgeReady(page);
   await fillValidForgeForm(page);
 });
 
 Given("the Forge overlay is open with a valid form", async ({ page, mockDapi }) => {
   await openForgeOverlay(page, mockDapi.address);
+  await waitForForgeReady(page);
   await fillValidForgeForm(page);
 });
 
 Given("the WaitingOverlay is active", async ({ page, mockDapi }) => {
   await openForgeOverlay(page, mockDapi.address);
+  await waitForForgeReady(page);
   await fillValidForgeForm(page);
+  // Override invoke() to return a fake txid instantly — the WaitingOverlay only
+  // needs the txHash to be set, not an actual confirmed on-chain TX.
+  // This avoids waiting 30 s for a real TX, which is unnecessary for accessibility tests.
+  await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).neon.invoke = async () => ({
+      txid: "0x" + "a".repeat(64),
+      nodeURL: "http://localhost:10332",
+    });
+  });
   await page.getByRole("button", { name: /FORGE/ }).click();
   await expect(
     page.getByRole("status", { name: "Waiting for transaction" })
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible({ timeout: 10_000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -110,7 +135,9 @@ Given("the WaitingOverlay is active", async ({ page, mockDapi }) => {
 // ---------------------------------------------------------------------------
 
 When("the user clicks {string}", async ({ page }, buttonText: string) => {
-  await page.getByRole("button", { name: buttonText }).click();
+  // Use .first() because some buttons (e.g. "Connect Wallet") appear in both
+  // the header and the main content area when the wallet is not connected.
+  await page.getByRole("button", { name: buttonText }).first().click();
 });
 
 /**
@@ -120,11 +147,12 @@ When("the user clicks {string}", async ({ page }, buttonText: string) => {
  */
 When("the user clicks FORGE and the wallet signs", async ({ page }) => {
   const forgeBtn = page.getByRole("button", { name: /FORGE/ });
-  const updateBtn = page.getByRole("button", { name: /Update Token/ });
   if (await forgeBtn.isVisible()) {
     await forgeBtn.click();
   } else {
-    await updateBtn.click();
+    // Scope to the Update Token dialog to avoid matching the detail-page button behind it.
+    const dialog = page.getByRole("dialog", { name: "Update Token" });
+    await dialog.getByRole("button", { name: /Update Token/ }).click();
   }
 });
 

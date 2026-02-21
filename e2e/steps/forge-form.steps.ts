@@ -7,7 +7,7 @@
 
 import { createBdd } from "playwright-bdd";
 import { test, expect } from "../fixtures/mock-dapi";
-import { openForgeOverlay, connectWallet } from "./common.steps";
+import { connectWallet } from "./common.steps";
 
 const { Given, When, Then } = createBdd(test);
 
@@ -94,7 +94,11 @@ When(
 );
 
 When("the user clears the token name field", async ({ page }) => {
-  await page.getByLabel("Token Name").fill("");
+  const input = page.getByLabel("Token Name");
+  // Type a character first to ensure onChange fires when we clear the field,
+  // even if the field was already empty (avoids no-op fill issue).
+  await input.fill("x");
+  await input.fill("");
   await page.keyboard.press("Tab");
 });
 
@@ -132,8 +136,11 @@ Then("a validation error appears on the symbol field", async ({ page }) => {
 });
 
 Then("a validation error appears on the name field", async ({ page }) => {
-  const nameSection = page.locator("div").filter({ hasText: /^Token Name/ }).first();
-  await expect(nameSection.locator("p")).toBeVisible({ timeout: 3_000 });
+  // Error paragraph is rendered as a DOM sibling of the #token-name input.
+  // Using CSS sibling selector is more reliable than .filter({ hasText }) because
+  // the outer form container also starts with "Token Name" (it's the first field),
+  // causing false matches with a broad div filter.
+  await expect(page.locator("#token-name ~ p")).toBeVisible({ timeout: 3_000 });
 });
 
 Then("a validation error appears on the supply field", async ({ page }) => {

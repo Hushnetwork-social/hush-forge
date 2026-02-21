@@ -1,9 +1,9 @@
 Feature: Token Detail Page
 
   Scenario: Token detail shows contract hash and NeoTube link
-    Given a token with contract hash "0xabc" exists on the devnet
-    When the user navigates to /tokens/0xabc
-    Then the contract hash "0xabc" is displayed on the page
+    Given a token with contract hash "0xd2a4cff31913016155e38e474a2c06d08be276cf" exists on the devnet
+    When the user navigates to /tokens/0xd2a4cff31913016155e38e474a2c06d08be276cf
+    Then the contract hash "0xd2a4cff31913016155e38e474a2c06d08be276cf" is displayed on the page
     And a link to the NeoTube explorer for that contract is shown
 
   Scenario: Contract hash can be copied to clipboard

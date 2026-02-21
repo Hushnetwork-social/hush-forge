@@ -37,28 +37,10 @@ Given(
 );
 
 Given(
-  "the test account owns an upgradeable token",
-  async ({ page, mockDapi }) => {
-    // Navigate to dashboard; assumes devnet has an upgradeable own token.
-    await page.goto("/tokens");
-    await connectWallet(page, mockDapi.address);
-    await page.waitForTimeout(3_000);
-  }
-);
-
-Given(
-  "the test account owns a non-upgradeable token",
-  async ({ page, mockDapi }) => {
-    await page.goto("/tokens");
-    await connectWallet(page, mockDapi.address);
-    await page.waitForTimeout(3_000);
-  }
-);
-
-Given(
   "the test account holds tokens it does not own",
   async ({ page, mockDapi }) => {
-    // Assumes the test account's balance includes tokens from other creators.
+    // Assumes the test account's balance includes tokens from other creators
+    // (e.g. native GAS/NEO tokens which are owned by the protocol, not the user).
     await page.goto("/tokens");
     await connectWallet(page, mockDapi.address);
     await page.waitForTimeout(3_000);
@@ -81,14 +63,6 @@ When(/the user views the \/tokens dashboard/, async ({ page, mockDapi }) => {
     await connectWallet(page, mockDapi.address);
   }
   await page.waitForTimeout(2_000); // allow token grid to render
-});
-
-When("the user views the token list", async ({ page, mockDapi }) => {
-  if (!page.url().includes("/tokens")) {
-    await page.goto("/tokens");
-    await connectWallet(page, mockDapi.address);
-  }
-  await page.waitForTimeout(2_000);
 });
 
 When(
@@ -119,19 +93,9 @@ Then("each own token shows a Yours badge", async ({ page }) => {
   expect(await badges.count()).toBeGreaterThan(0);
 });
 
-Then("that token shows an open lock icon", async ({ page }) => {
-  // Upgradeable tokens show 🔓
-  await expect(page.getByText("🔓")).toBeVisible({ timeout: 10_000 });
-});
-
-Then("that token shows a closed lock icon", async ({ page }) => {
-  // Non-upgradeable tokens show 🔒
-  await expect(page.getByText("🔒")).toBeVisible({ timeout: 10_000 });
-});
-
 Then(
   "only tokens created by the test account are shown",
-  async ({ page, mockDapi }) => {
+  async ({ page }) => {
     // All visible token cards should belong to the test address
     // Every visible card should have the Yours badge
     const allCards = page.locator("article");

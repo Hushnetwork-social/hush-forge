@@ -4,7 +4,6 @@ import type { FactoryDeployStatus } from "../hooks/useFactoryDeployment";
 
 interface Props {
   status: FactoryDeployStatus;
-  factoryHash: string;
   deployError: string | null;
   onDeploy: () => void;
   onInitialize: () => void;
@@ -13,18 +12,18 @@ interface Props {
 
 export function FactoryDeployBanner({
   status,
-  factoryHash,
   deployError,
   onDeploy,
   onInitialize,
   onRecheck,
 }: Props) {
-  if (status === "idle" || status === "checking") {
-    return null;
-  }
-
-  // Already deployed and hash was set before this component mounted — nothing to show
-  if (status === "deployed" && !factoryHash) {
+  // Only show the banner when there is a problem to fix.
+  // "deployed" (fully ready) and idle/checking states are silent.
+  if (
+    status === "idle" ||
+    status === "checking" ||
+    status === "deployed"
+  ) {
     return null;
   }
 
@@ -90,41 +89,6 @@ export function FactoryDeployBanner({
             Recheck
           </button>
         </div>
-      </div>
-    );
-  }
-
-  if (status === "deployed" && factoryHash) {
-    return (
-      <div
-        className="rounded-xl p-4"
-        style={{
-          background: "rgba(76,175,80,0.08)",
-          border: "1px solid #4caf50",
-        }}
-      >
-        <p className="text-sm font-semibold mb-1" style={{ color: "#4caf50" }}>
-          TokenFactory deployed
-        </p>
-        <p className="text-xs font-mono mb-2" style={{ color: "var(--forge-text-muted)" }}>
-          {factoryHash}
-        </p>
-        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-          To persist across dev-server restarts, add to{" "}
-          <code
-            className="px-1 rounded"
-            style={{ background: "rgba(255,255,255,0.06)" }}
-          >
-            .env.local
-          </code>
-          :
-        </p>
-        <pre
-          className="mt-1 text-xs p-2 rounded overflow-x-auto"
-          style={{ background: "rgba(0,0,0,0.3)", color: "var(--forge-color-accent)" }}
-        >
-          {`NEXT_PUBLIC_FACTORY_CONTRACT_HASH=${factoryHash}`}
-        </pre>
       </div>
     );
   }

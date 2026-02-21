@@ -104,7 +104,6 @@ export default function TokensPage() {
 
           <FactoryDeployBanner
             status={factory.status}
-            factoryHash={factory.factoryHash}
             deployError={factory.deployError}
             onDeploy={() => void factory.deploy()}
             onInitialize={() => void factory.initialize()}

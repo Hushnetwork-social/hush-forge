@@ -33,6 +33,7 @@ if (fs.existsSync(envFile)) {
 export default defineConfig({
   testDir: path.resolve(__dirname),
   testMatch: "**/*.spec.ts",
+  globalTeardown: path.resolve(__dirname, "global-teardown.ts"),
 
   // Integration tests are slow — chain reset (2min) + deploy + TX confirm + init + forge
   timeout: 600_000,        // 10 min per test

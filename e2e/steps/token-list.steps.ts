@@ -75,7 +75,7 @@ Given("a fresh wallet with no token holdings", async ({ page }) => {
 // When
 // ---------------------------------------------------------------------------
 
-When("the user views the /tokens dashboard", async ({ page, mockDapi }) => {
+When(/the user views the \/tokens dashboard/, async ({ page, mockDapi }) => {
   if (!page.url().includes("/tokens")) {
     await page.goto("/tokens");
     await connectWallet(page, mockDapi.address);

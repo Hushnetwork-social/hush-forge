@@ -67,7 +67,7 @@ export async function fillValidForgeForm(page: Page): Promise<void> {
 // Shared Given steps
 // ---------------------------------------------------------------------------
 
-Given("the user navigates to /tokens", async ({ page }) => {
+Given(/the user navigates to \/tokens$/, async ({ page }) => {
   await page.goto("/tokens");
 });
 
@@ -134,13 +134,13 @@ Then("the FORGE button is disabled", async ({ page }) => {
   await expect(page.getByRole("button", { name: /FORGE/ })).toBeDisabled();
 });
 
-Then("the user is back on the /tokens dashboard", async ({ page }) => {
+Then(/the user is back on the \/tokens dashboard/, async ({ page }) => {
   await expect(page).toHaveURL("/tokens");
   await expect(
     page.getByRole("dialog", { name: "Forge a Token" })
   ).not.toBeVisible();
 });
 
-Then("the user remains on the /tokens dashboard", async ({ page }) => {
+Then(/the user remains on the \/tokens dashboard/, async ({ page }) => {
   await expect(page).toHaveURL("/tokens");
 });

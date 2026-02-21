@@ -103,12 +103,17 @@ Given(
 // ---------------------------------------------------------------------------
 
 When(
-  "the user navigates to /tokens/{word}",
+  /the user navigates to \/tokens\/([^\s]+)/,
   async ({ page }, contractHash: string) => {
     _contractHash = contractHash;
     await page.goto(`/tokens/${contractHash}`);
   }
 );
+
+When("the user navigates to its detail page", async ({ page }) => {
+  // The Given step already navigated to the detail page; wait to confirm the URL.
+  await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
+});
 
 When(
   "the user clicks the copy icon next to the contract hash",
@@ -177,7 +182,7 @@ Then(
 );
 
 Then(
-  "the basic token info (name, symbol, total supply) is still shown",
+  /the basic token info \(name, symbol, total supply\) is still shown/,
   async ({ page }) => {
     // TokenDetail always shows symbol (h1) and supply/decimals in the dl grid
     await expect(page.locator("h1")).toBeVisible({ timeout: 10_000 });

@@ -83,7 +83,7 @@ When(
   }
 );
 
-When("the user navigates back to /tokens", async ({ page, mockDapi }) => {
+When(/the user navigates back to \/tokens/, async ({ page, mockDapi }) => {
   await page.goto("/tokens");
   await connectWallet(page, mockDapi.address);
 });
@@ -143,7 +143,7 @@ Then(
 );
 
 Then(
-  "the user is redirected to /tokens/{word}",
+  /the user is redirected to \/tokens\/([^\s]+)/,
   async ({ page }, contractHash: string) => {
     await expect(page).toHaveURL(`/tokens/${contractHash}`);
   }

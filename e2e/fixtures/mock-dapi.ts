@@ -16,7 +16,7 @@
  *   NEXT_PUBLIC_NEO_RPC_URL   — private devnet RPC endpoint (default: http://localhost:10332)
  */
 
-import { test as base } from "@playwright/test";
+import { test as base } from "playwright-bdd";
 import * as Neon from "@cityofzion/neon-js";
 
 const NEO_RPC_URL =

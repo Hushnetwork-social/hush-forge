@@ -4,7 +4,7 @@ import { defineBddConfig } from "playwright-bdd";
 // defineBddConfig() returns the generated testDir path
 const testDir = defineBddConfig({
   features: "e2e/features/**/*.feature",
-  steps: "e2e/steps/**/*.ts",
+  steps: ["e2e/steps/**/*.ts", "e2e/fixtures/mock-dapi.ts"],
 });
 
 export default defineConfig({

@@ -22,3 +22,10 @@ Feature: Forge Error Handling
     Then the WaitingOverlay closes
     And an error toaster appears: "Transaction confirmation timed out"
     And the user remains on the /tokens dashboard
+
+  Scenario: Banner warns when factory is deployed but not initialized
+    Given the factory is deployed but its initialization is incomplete
+    And the wallet is connected
+    Then a warning banner explains the factory needs initialization
+    And an "Initialize Factory" action button is shown
+    And the Forge Token button is disabled

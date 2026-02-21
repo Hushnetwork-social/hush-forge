@@ -608,57 +608,82 @@ test.describe("Forge Full Integration Flow", () => {
       // the worst-case path: hang → 15s timeout → 20s retry → ~21s connected.
       console.log("[setup] NeoLine SW recovery handled by wallet-store timeout + t4 retry.");
 
-      // ── Step 2: Connect Wallet via NeoLine ───────────────────────────────
-      // The app shows a "Connect Wallet" button when no wallet is detected.
-      // Use the header button (first match); /tokens page also has a CTA in main.
-      const connectBtn = page
-        .getByRole("button", { name: /Connect Wallet/i })
-        .first();
-      await expect(connectBtn).toBeVisible({ timeout: 15_000 });
+      // ── Step 2: Connect Wallet ───────────────────────────────────────────
+      // The wallet auto-connects via tryAutoReconnect() if localStorage has
+      // forge_wallet_type (written when the profile was originally set up).
+      //
+      // MV3 SW restart race (common after warmup-page OOM crash):
+      //   • tryAutoReconnect(0ms) → getAccount() hangs (SW restarting) →
+      //     wallet-store 15s timeout fires → "error" state →
+      //     useWallet t4 timer (20s) retries → SW now stable → wallet connects.
+      //   • While "connecting", the header button shows "Connecting…" — it will
+      //     NOT match /Connect Wallet/i.  Attempting to click a non-existent
+      //     button would start a second hanging connect() that blocks t4.
+      //   • Solution: check button visibility with a SHORT timeout (3s).
+      //     If visible (fast path / SW not restarting) → click it (normal flow).
+      //     If not visible (wallet already "connecting") → skip click and wait.
+      const addressPrefix = "NV1Q1d";
 
-      // NeoLine may open a permission popup when getAccount() is called.
-      // signInNeoLine handles the popup; if NeoLine trusts the origin already
-      // and returns silently, the Promise.all resolves without a popup.
-      try {
-        await signInNeoLine(
-          context,
-          async () => {
-            await connectBtn.click();
-            // Wallet picker modal: choose NeoLine
-            const neoLineBtn = page
-              .getByRole("button", { name: /NeoLine/i })
-              .first();
-            if (await neoLineBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-              await neoLineBtn.click();
+      const alreadyConnected = await page.evaluate(
+        (prefix: string) => document.body.textContent?.includes(prefix) ?? false,
+        addressPrefix
+      );
+      if (!alreadyConnected) {
+        // "Connect Wallet" is only shown when connectionStatus ≠ "connecting".
+        // Use a 3s probe; if wallet is "connecting" the button won't appear.
+        const connectBtn = page
+          .getByRole("button", { name: /Connect Wallet/i })
+          .first();
+        const btnVisible = await connectBtn
+          .isVisible({ timeout: 3_000 })
+          .catch(() => false);
+
+        if (btnVisible) {
+          console.log("[connect] Manual connect — clicking Connect Wallet.");
+          try {
+            await signInNeoLine(
+              context,
+              async () => {
+                await connectBtn.click();
+                const neoLineBtn = page
+                  .getByRole("button", { name: /NeoLine/i })
+                  .first();
+                if (await neoLineBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+                  await neoLineBtn.click();
+                }
+              },
+              15_000
+            );
+          } catch (connectErr) {
+            console.log("[connect] signInNeoLine threw:", String(connectErr));
+            // Handle a NeoLine popup that opened after the signInNeoLine timeout.
+            const lateExtPage = context.pages().find(
+              (p) => !p.isClosed() && p.url().includes(NEOLINE_ID)
+            );
+            if (lateExtPage) {
+              console.log(`[connect] Late popup found: ${lateExtPage.url()} — handling…`);
+              await signExistingNeoLinePopup(lateExtPage);
+            } else {
+              console.log("[connect] No NeoLine popup — connected silently.");
             }
-          },
-          15_000 // short timeout — popup may not appear if origin is trusted
-        );
-      } catch (connectErr) {
-        // signInNeoLine threw. Two possible reasons:
-        //   A) getAccount() returned silently (no popup → timeout after 15s) ← expected
-        //   B) Popup appeared late (after 15s) and is still open, unhandled
-        console.log("[connect] signInNeoLine threw:", String(connectErr));
-        // Check for any NeoLine popup that may have opened late
-        const lateExtPage = context.pages().find(
-          (p) => !p.isClosed() && p.url().includes(NEOLINE_ID)
-        );
-        if (lateExtPage) {
-          console.log(`[connect] Late NeoLine popup found: ${lateExtPage.url()} — handling...`);
-          await signExistingNeoLinePopup(lateExtPage);
+          }
         } else {
-          console.log("[connect] No NeoLine popup — connected silently.");
+          console.log(
+            "[connect] Wallet is already connecting — waiting for auto-reconnect + t4 retry."
+          );
         }
+      } else {
+        console.log("[connect] Wallet already auto-connected.");
       }
 
-      // Wallet address appears in header (first 6 chars of containerAccount)
+      // Wait for address in header.
+      // Worst-case timing: SW restart → 15s timeout → t4 fires at 20s → ~21s.
       // NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c → "NV1Q1d"
-      const addressPrefix = "NV1Q1d";
       await page.waitForFunction(
         (prefix: string) =>
           document.body.textContent?.includes(prefix) ?? false,
         addressPrefix,
-        { timeout: 30_000 } // 30s: allows extra time after late-popup handling
+        { timeout: 35_000 }
       );
       console.log("[connect] Wallet connected — address visible in header.");
 

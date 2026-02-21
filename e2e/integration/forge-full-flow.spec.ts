@@ -616,8 +616,9 @@ test.describe("Forge Full Integration Flow", () => {
       // NeoLine's background service worker may not be ready for invoke() dry-runs
       // immediately after connect. Give it time to fully initialize — without this,
       // the first invoke() can return RPC_ERROR when the chain was connected silently
-      // (no auth popup → no ~30s of organic warmup time before the deploy attempt).
-      await page.waitForTimeout(5000);
+      // (no auth popup → no organic warmup time before the deploy attempt).
+      // 20s observed to be reliable across fresh browser profiles and cold starts.
+      await page.waitForTimeout(20_000);
 
       // ── Step 3: FactoryDeployBanner visible, Forge Token disabled ─────────
       const forgeTokenBtn = page.getByRole("button", { name: "Forge Token" });
@@ -654,8 +655,8 @@ test.describe("Forge Full Integration Flow", () => {
       let deployAndInitDone = false;
       for (let attempt = 1; attempt <= 3 && !deployAndInitDone; attempt++) {
         if (attempt > 1) {
-          console.log(`[factory] Deploy retry (attempt ${attempt}/3) — waiting 6s for NeoLine warmup...`);
-          await page.waitForTimeout(6000);
+          console.log(`[factory] Deploy retry (attempt ${attempt}/3) — waiting 15s for NeoLine warmup...`);
+          await page.waitForTimeout(15_000);
           // After RPC_ERROR deploy() sets status="deploy-error" and the
           // "Deploy TokenFactory" button remains visible — just click it again.
           await expect(deployBtn).toBeVisible({ timeout: 15_000 });
@@ -710,7 +711,7 @@ test.describe("Forge Full Integration Flow", () => {
 
         await deployPopup
           .locator(".loading-box")
-          .waitFor({ state: "hidden", timeout: 60_000 })
+          .waitFor({ state: "hidden", timeout: 20_000 })
           .catch(() => {});
 
         // Screenshot after loading-box hides (or times out)
@@ -736,12 +737,14 @@ test.describe("Forge Full Integration Flow", () => {
         }).catch((e) => ({ error: String(e) }));
         console.log("[popup:dom]", JSON.stringify(popupState));
 
-        // Wait for action confirm button to become enabled (:not(.pop-ups) skips toast)
+        // Wait for action confirm button to become enabled (:not(.pop-ups) skips toast).
+        // 15s is enough for normal fee calculation; if RPC_ERROR the popup is already
+        // closed or the button stays disabled indefinitely — exit fast either way.
         const btnReady = await deployPopup
           .waitForFunction(() => {
             const btn = document.querySelector("button.confirm:not(.pop-ups)");
             return btn !== null && !btn.classList.contains("disabled");
-          }, { timeout: 30_000 })
+          }, { timeout: 15_000 })
           .then(() => true)
           .catch(() => false);
 

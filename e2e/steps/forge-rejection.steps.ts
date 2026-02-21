@@ -29,9 +29,10 @@ Given("the mock wallet is set to reject mode", async ({ mockDapi }) => {
 Given(
   "the factory is deployed but its initialization is incomplete",
   async ({ page }) => {
-    // Intercept any POST to the Neo RPC node: return false for isInitialized,
-    // pass everything else through to the real chain.
-    await page.route(/localhost:10332/, async (route) => {
+    // Intercept the Next.js RPC proxy (browser sends to /api/rpc which is proxied
+    // server-side to localhost:10332). Intercept POST here and return false for
+    // isInitialized; pass everything else through to the real chain.
+    await page.route(/\/api\/rpc/, async (route) => {
       const req = route.request();
       if (req.method() === "POST") {
         let body: Record<string, unknown> = {};

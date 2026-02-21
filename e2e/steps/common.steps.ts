@@ -48,7 +48,11 @@ export async function openForgeOverlay(page: Page, address: string): Promise<voi
     await page.goto("/tokens");
   }
   await connectWallet(page, address);
-  await page.getByRole("button", { name: "Forge Token" }).click();
+  // Wait for the factory deployment check to complete — the button stays disabled
+  // while useFactoryDeployment is in "checking" state (async RPC call).
+  const forgeBtn = page.getByRole("button", { name: "Forge Token" });
+  await expect(forgeBtn).not.toBeDisabled({ timeout: 20_000 });
+  await forgeBtn.click();
   await expect(page.getByRole("dialog", { name: "Forge a Token" })).toBeVisible();
 }
 

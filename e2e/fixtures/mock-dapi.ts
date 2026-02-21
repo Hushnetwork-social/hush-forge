@@ -164,6 +164,11 @@ export const test = base.extend<Fixtures>({
 
           getAccount: async (): Promise<{ address: string }> => ({ address }),
 
+          getNetworks: async (): Promise<{ defaultNetwork: string; networks: string[] }> => ({
+            defaultNetwork: "PrivateNet",
+            networks: ["PrivateNet"],
+          }),
+
           getBalance: async (): Promise<unknown> => {
             // Real balance check via RPC is handled in the app's RpcClient
             return { balance: [] };

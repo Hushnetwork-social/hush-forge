@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForgeForm } from "../hooks/useForgeForm";
 
 interface Props {
@@ -39,6 +39,7 @@ export function ForgeOverlay({
   } = useForgeForm(address, gasBalance);
 
   const [showHostingHints, setShowHostingHints] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   // Notify parent once TX hash is returned
   useEffect(() => {
@@ -47,10 +48,44 @@ export function ForgeOverlay({
     }
   }, [submittedTxHash, onTxSubmitted]);
 
-  // Escape closes (blocked while submitting)
+  // Move focus into the dialog on open
+  useEffect(() => {
+    const first = cardRef.current?.querySelector<HTMLElement>(
+      'button:not([disabled]), input:not([disabled])'
+    );
+    first?.focus();
+  }, []);
+
+  // Escape + Tab focus trap
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !submitting) onClose();
+      if (e.key === "Escape") {
+        if (!submitting) onClose();
+        return;
+      }
+      if (e.key === "Tab") {
+        const card = cardRef.current;
+        if (!card) return;
+        const focusable = Array.from(
+          card.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -71,6 +106,7 @@ export function ForgeOverlay({
       }}
     >
       <div
+        ref={cardRef}
         className="w-full max-w-lg rounded-2xl p-6 mx-4"
         style={{
           background: "var(--forge-bg-card)",
@@ -117,12 +153,14 @@ export function ForgeOverlay({
           {/* Token Name */}
           <div>
             <label
+              htmlFor="token-name"
               className="text-sm mb-1 block"
               style={{ color: "var(--forge-text-muted)" }}
             >
               Token Name
             </label>
             <input
+              id="token-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -145,12 +183,14 @@ export function ForgeOverlay({
           {/* Symbol */}
           <div>
             <label
+              htmlFor="token-symbol"
               className="text-sm mb-1 block"
               style={{ color: "var(--forge-text-muted)" }}
             >
               Symbol <span className="text-xs">(A-Z only, 2-10)</span>
             </label>
             <input
+              id="token-symbol"
               type="text"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
@@ -174,12 +214,14 @@ export function ForgeOverlay({
           {/* Supply */}
           <div>
             <label
+              htmlFor="token-supply"
               className="text-sm mb-1 block"
               style={{ color: "var(--forge-text-muted)" }}
             >
               Total Supply
             </label>
             <input
+              id="token-supply"
               type="text"
               value={supply}
               onChange={(e) => setSupply(e.target.value)}
@@ -202,12 +244,14 @@ export function ForgeOverlay({
           {/* Decimals */}
           <div>
             <label
+              htmlFor="token-decimals"
               className="text-sm mb-1 block"
               style={{ color: "var(--forge-text-muted)" }}
             >
               Decimals <span className="text-xs">(0 – 18)</span>
             </label>
             <input
+              id="token-decimals"
               type="text"
               value={decimals}
               onChange={(e) => setDecimals(e.target.value)}
@@ -265,6 +309,7 @@ export function ForgeOverlay({
           {/* Image URL (optional) */}
           <div>
             <label
+              htmlFor="token-image-url"
               className="text-sm mb-1 block"
               style={{ color: "var(--forge-text-muted)" }}
             >
@@ -272,6 +317,7 @@ export function ForgeOverlay({
               <span className="text-xs">(optional)</span>
             </label>
             <input
+              id="token-image-url"
               type="text"
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}

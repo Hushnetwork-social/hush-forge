@@ -92,9 +92,10 @@ When("the user views the token list", async ({ page, mockDapi }) => {
 });
 
 When(
-  "the user enables the {string} filter",
-  async ({ page }, filterLabel: string) => {
-    await page.getByLabel(filterLabel).check();
+  "the user clicks the {string} tab",
+  async ({ page }, tabLabel: string) => {
+    await page.getByRole("tab", { name: tabLabel }).click();
+    await page.waitForTimeout(500); // allow filter to apply
   }
 );
 
@@ -112,16 +113,10 @@ Then(
   }
 );
 
-Then("own tokens appear at the top of the list", async ({ page }) => {
-  // Own tokens have a star (★) — check at least one is visible
-  await expect(page.getByText("★").first()).toBeVisible({ timeout: 10_000 });
-});
-
-Then("each own token shows a star marker", async ({ page }) => {
-  // Every card with a star should be visible
-  const stars = page.getByText("★");
-  await expect(stars.first()).toBeVisible({ timeout: 10_000 });
-  expect(await stars.count()).toBeGreaterThan(0);
+Then("each own token shows a Yours badge", async ({ page }) => {
+  const badges = page.getByLabel("Your token");
+  await expect(badges.first()).toBeVisible({ timeout: 10_000 });
+  expect(await badges.count()).toBeGreaterThan(0);
 });
 
 Then("that token shows an open lock icon", async ({ page }) => {
@@ -138,12 +133,11 @@ Then(
   "only tokens created by the test account are shown",
   async ({ page, mockDapi }) => {
     // All visible token cards should belong to the test address
-    // Check that the "My tokens only" filter hid non-own tokens by verifying
-    // that every card shows a star marker
-    const allCards = page.locator(".grid > div");
+    // Every visible card should have the Yours badge
+    const allCards = page.locator("article");
     const cardCount = await allCards.count();
-    const stars = await page.getByText("★").count();
-    expect(stars).toBe(cardCount);
+    const yoursCount = await page.getByLabel("Your token").count();
+    expect(yoursCount).toBe(cardCount);
   }
 );
 

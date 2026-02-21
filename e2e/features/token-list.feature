@@ -5,11 +5,10 @@ Feature: Token List Dashboard
     When the user navigates to /tokens
     Then the token grid shows tokens held by the test account
 
-  Scenario: Own tokens appear first in the list with a star marker
+  Scenario: Own tokens show a Yours badge
     Given the test account has created at least one token
     When the user views the /tokens dashboard
-    Then own tokens appear at the top of the list
-    And each own token shows a star marker
+    Then each own token shows a Yours badge
 
   Scenario: Upgradeable own tokens show an open lock icon
     Given the test account owns an upgradeable token
@@ -21,9 +20,9 @@ Feature: Token List Dashboard
     When the user views the token list
     Then that token shows a closed lock icon
 
-  Scenario: "My tokens only" filter hides all non-own tokens
+  Scenario: "Mine" tab shows only own tokens
     Given the test account holds tokens it does not own
-    When the user enables the "My tokens only" filter
+    When the user clicks the "Mine" tab
     Then only tokens created by the test account are shown
 
   Scenario: Token list is empty when wallet has no tokens

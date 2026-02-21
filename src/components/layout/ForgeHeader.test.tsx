@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ForgeHeader } from "./ForgeHeader";
 import { useWalletStore } from "@/modules/forge/wallet-store";
-import type { ConnectionStatus } from "@/modules/forge/wallet-store";
+import type { ConnectionStatus, WalletStore } from "@/modules/forge/wallet-store";
 
 vi.mock("@/modules/forge/wallet-store", () => ({
   useWalletStore: vi.fn(),
@@ -14,12 +14,8 @@ function mockWallet(
   disconnect = vi.fn()
 ) {
   vi.mocked(useWalletStore).mockImplementation(
-    (selector: (s: {
-      address: string | null;
-      connectionStatus: ConnectionStatus;
-      disconnect: () => void;
-    }) => unknown) =>
-      selector({ address, connectionStatus, disconnect })
+    (selector: (s: WalletStore) => unknown) =>
+      selector({ address, connectionStatus, disconnect } as unknown as WalletStore)
   );
 }
 

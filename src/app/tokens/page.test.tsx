@@ -150,7 +150,13 @@ function setupMocks({
       selector({
         loadTokensForAddress: vi.fn().mockResolvedValue(undefined),
         loadWalletHeldTokens: vi.fn().mockResolvedValue(undefined),
-      } as TokenStore)
+        tokens: [],
+        ownTokenHashes: new Set(),
+        activeTab: "all",
+        searchQuery: "",
+        loadingStatus: "idle",
+        errorMessage: null,
+      } as unknown as TokenStore)
   );
 
   vi.mocked(useWalletStore).mockImplementation(

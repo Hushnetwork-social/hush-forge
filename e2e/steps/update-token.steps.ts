@@ -26,8 +26,8 @@ async function navigateToOwnUpgradeableToken(
   await page.goto("/tokens");
   await connectWallet(page, address);
   await page.waitForTimeout(2_000); // allow token list to load
-  // Click the first card with a ★ marker (own token)
-  const ownCard = page.getByText("★").first().locator("..").locator("..");
+  // Click the first card with a "Yours" badge (own token)
+  const ownCard = page.locator("article").filter({ has: page.getByLabel("Your token") }).first();
   await ownCard.click();
   await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
   // Wait for the Update Token button to confirm this is an upgradeable own token

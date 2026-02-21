@@ -66,7 +66,7 @@ When("the mock wallet signs the transaction", async () => {
 });
 
 When(
-  "the transaction is confirmed on the NeoExpress devnet",
+  "the transaction is confirmed on the private devnet",
   async ({ page }) => {
     // Wait for the WaitingOverlay to close (polling detects confirmation)
     await expect(
@@ -101,8 +101,8 @@ Then("the new token appears in the own tokens list", async ({ page, mockDapi }) 
   await page.goto("/tokens");
   await connectWallet(page, mockDapi.address);
   await page.waitForTimeout(3_000); // allow token list to load from chain
-  // Own tokens show a star (★) marker
-  await expect(page.getByText("★")).toBeVisible({ timeout: 15_000 });
+  // Own tokens show the "Yours" badge
+  await expect(page.getByLabel("Your token").first()).toBeVisible({ timeout: 15_000 });
 });
 
 Then(
@@ -149,6 +149,6 @@ Then(
   }
 );
 
-Then("the newly created token appears with a star marker", async ({ page }) => {
-  await expect(page.getByText("★")).toBeVisible({ timeout: 15_000 });
+Then("the newly created token appears with a Yours badge", async ({ page }) => {
+  await expect(page.getByLabel("Your token").first()).toBeVisible({ timeout: 15_000 });
 });

@@ -48,8 +48,8 @@ Given(
   async ({ page, mockDapi }) => {
     await page.goto("/tokens");
     await connectWallet(page, mockDapi.address);
-    // Click the first starred (own) token card
-    const ownCard = page.getByText("★").first().locator("..").locator("..");
+    // Click the first card with a "Yours" badge (own token)
+    const ownCard = page.locator("article").filter({ has: page.getByLabel("Your token") }).first();
     await ownCard.click();
     await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
   }
@@ -65,8 +65,8 @@ Given(
     const count = await cards.count();
     for (let i = 0; i < count; i++) {
       const card = cards.nth(i);
-      const hasStar = await card.getByText("★").isVisible();
-      if (!hasStar) {
+      const isOwn = await card.getByLabel("Your token").isVisible();
+      if (!isOwn) {
         await card.click();
         await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
         return;
@@ -88,8 +88,8 @@ Given(
     await connectWallet(page, mockDapi.address);
     // Navigate to a known non-factory token hash from the env var, or use
     // the first non-own token
-    const nonOwnCard = page.locator(".grid > div").filter({
-      hasNot: page.getByText("★"),
+    const nonOwnCard = page.locator("article").filter({
+      hasNot: page.getByLabel("Your token"),
     }).first();
     if (await nonOwnCard.isVisible()) {
       await nonOwnCard.click();

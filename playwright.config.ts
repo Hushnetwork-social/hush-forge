@@ -30,7 +30,7 @@ export default defineConfig({
     },
   ],
 
-  globalSetup: "./e2e/fixtures/neoexpress.ts",
+  globalSetup: "./e2e/fixtures/global-setup.ts",
 
   webServer: {
     command: "npm run dev -- --port 3100",

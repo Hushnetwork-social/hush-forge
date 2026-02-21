@@ -1,19 +1,19 @@
 /**
  * Mock dAPI Playwright Fixture
  *
- * Injects a fake window.neo (NeoLine/OneGate compatible dAPI) into the browser
+ * Injects a fake window.neon (Neon Wallet compatible dAPI) into the browser
  * before each test. The mock:
- * - Returns the NeoExpress test account (alice) for getAccount()
- * - Signs and submits real transactions to the NeoExpress devnet using alice's WIF
+ * - Returns the neo3-privatenet-docker pre-funded account for getAccount()
+ * - Signs and submits real transactions to the private devnet using its WIF
  * - Supports "reject mode" per-test to simulate wallet rejection
  *
  * The signing bridge uses page.exposeFunction() to call Node.js neon-js from
  * the browser mock without exposing the private key to the browser context.
  *
  * Required env vars (set in .env.local):
- *   E2E_TEST_ACCOUNT_ADDRESS  — NeoExpress alice address (e.g. NbTiM6h8r...)
- *   E2E_TEST_ACCOUNT_WIF      — NeoExpress alice WIF private key
- *   NEXT_PUBLIC_NEO_RPC_URL   — NeoExpress RPC endpoint (http://localhost:10332)
+ *   E2E_TEST_ACCOUNT_ADDRESS  — docker pre-funded address: NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c
+ *   E2E_TEST_ACCOUNT_WIF      — docker pre-funded WIF: L3cNMQUSrvUrHx1MzacwHiUeCWzqK2MLt5fPvJj9mz6L2rzYZpok
+ *   NEXT_PUBLIC_NEO_RPC_URL   — private devnet RPC endpoint (default: http://localhost:10332)
  */
 
 import { test as base } from "@playwright/test";
@@ -117,7 +117,7 @@ async function signAndSubmit(invokeArgs: InvokeArgs): Promise<InvokeResult> {
   tx.systemFee = Neon.u.BigInteger.fromNumber(0);
 
   // Sign and send
-  tx.sign(account, await rpcClient.getVersion().then((v) => v.protocol?.network ?? 860833102));
+  tx.sign(account, await rpcClient.getVersion().then((v) => v.protocol?.network ?? 5195086));
 
   const txid = await rpcClient.sendRawTransaction(tx.serialize(true));
 
@@ -131,7 +131,7 @@ async function signAndSubmit(invokeArgs: InvokeArgs): Promise<InvokeResult> {
 type MockDapiFixture = {
   /** Sets reject mode — next invoke() call will throw a wallet rejection */
   setRejectMode(reject: boolean): Promise<void>;
-  /** The test account address (alice) */
+  /** The test account address (docker pre-funded account) */
   address: string;
 };
 

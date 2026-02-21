@@ -58,11 +58,15 @@ export function useWallet() {
     const t1 = setTimeout(tryReconnect, 100);
     const t2 = setTimeout(tryReconnect, 500);
     const t3 = setTimeout(tryReconnect, 1500);
+    // t4 fires after the 15s connect() timeout in wallet-store has had time
+    // to set "error" state.  This covers the MV3 service-worker restart race:
+    // the initial connect() hangs → times out at 15s → "error" → t4 retries.
+    const t4 = setTimeout(tryReconnect, 20_000);
 
     return () => {
       window.removeEventListener("NEOLine:DomReady", onNeoLineReady);
       document.removeEventListener("NEOLine:DomReady", onNeoLineReady);
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

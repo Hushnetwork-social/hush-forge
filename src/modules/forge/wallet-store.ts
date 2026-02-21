@@ -50,7 +50,21 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
   async connect(walletType: WalletType) {
     set({ connectionStatus: "connecting", errorMessage: null });
     try {
-      const address = await dapiConnect(walletType);
+      // Race the dAPI connect against a 15s deadline.  NeoLine's background
+      // service worker (MV3) can restart mid-flight, silently dropping the
+      // getAccount() message.  Without a timeout the store is permanently
+      // stuck in "connecting".  On timeout we fall into the catch block which
+      // sets "error" state, allowing the t4 retry timer in useWallet to fire
+      // after the SW has restarted and recovered.
+      const address = await Promise.race([
+        dapiConnect(walletType),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Wallet connection timed out — please try again")),
+            15_000
+          )
+        ),
+      ]);
       const balances = await dapiGetBalances(address);
       set({ walletType, address, balances, connectionStatus: "connected" });
       if (typeof localStorage !== "undefined") {

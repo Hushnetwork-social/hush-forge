@@ -1,6 +1,8 @@
 /**
  * useWallet — Provides wallet state and actions to React components.
  * Detects installed wallets once on mount and calls tryAutoReconnect() once on first mount.
+ * Also calls tryAutoReconnect() when NEOLine:DomReady fires, so that if the first attempt
+ * failed because NeoLine hadn't injected yet, it retries automatically.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -38,14 +40,24 @@ export function useWallet() {
     detectAndSet();
     void tryAutoReconnect();
 
-    function onNeoLineReady() { detectAndSet(); }
+    // When NeoLine injects, detect wallets AND retry auto-reconnect.
+    // This covers the case where tryAutoReconnect() above ran before NeoLine
+    // was ready (WalletNotConnectedError) — localStorage is preserved so retry works.
+    function onNeoLineReady() {
+      detectAndSet();
+      void tryAutoReconnect();
+    }
     window.addEventListener("NEOLine:DomReady", onNeoLineReady);
     document.addEventListener("NEOLine:DomReady", onNeoLineReady);
 
-    // Fallback polls in case the event fired before our listeners attached
-    const t1 = setTimeout(() => detectAndSet(), 100);
-    const t2 = setTimeout(() => detectAndSet(), 500);
-    const t3 = setTimeout(() => detectAndSet(), 1500);
+    // Fallback polls in case the event fired before our listeners attached.
+    // Each timeout also calls tryAutoReconnect() so that if NeoLine injected
+    // between the initial call (which may have failed) and this timeout, the
+    // wallet reconnects automatically without waiting for user interaction.
+    const tryReconnect = () => { detectAndSet(); void tryAutoReconnect(); };
+    const t1 = setTimeout(tryReconnect, 100);
+    const t2 = setTimeout(tryReconnect, 500);
+    const t3 = setTimeout(tryReconnect, 1500);
 
     return () => {
       window.removeEventListener("NEOLine:DomReady", onNeoLineReady);

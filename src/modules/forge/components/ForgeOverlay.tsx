@@ -29,6 +29,7 @@ export function ForgeOverlay({
     setImageUrl,
     imagePreview,
     errors,
+    validateForm,
     creationFeeDisplay,
     feeLoading,
     gasCheckResult,
@@ -92,7 +93,8 @@ export function ForgeOverlay({
   }, [submitting, onClose]);
 
   const gasInsufficient = gasCheckResult !== null && !gasCheckResult.sufficient;
-  const forgeDisabled = submitting || gasInsufficient || feeLoading;
+  const hasErrors = Object.keys(errors).length > 0;
+  const forgeDisabled = submitting || gasInsufficient || feeLoading || hasErrors;
 
   return (
     <div
@@ -164,6 +166,7 @@ export function ForgeOverlay({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onBlur={validateForm}
               disabled={submitting}
               className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
               style={{
@@ -194,6 +197,7 @@ export function ForgeOverlay({
               type="text"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
+              onBlur={validateForm}
               maxLength={10}
               disabled={submitting}
               className="w-full rounded-lg px-3 py-2 text-sm uppercase disabled:opacity-50"
@@ -225,6 +229,7 @@ export function ForgeOverlay({
               type="text"
               value={supply}
               onChange={(e) => setSupply(e.target.value)}
+              onBlur={validateForm}
               disabled={submitting}
               className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
               style={{
@@ -255,6 +260,7 @@ export function ForgeOverlay({
               type="text"
               value={decimals}
               onChange={(e) => setDecimals(e.target.value)}
+              onBlur={validateForm}
               disabled={submitting}
               className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
               style={{

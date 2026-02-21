@@ -116,6 +116,7 @@ export function useFactoryDeployment(
         console.log("[factory] deploy tx submitted:", txid);
         await pollDeploymentConfirmed(txid);
 
+        console.log("[factory] deploy tx confirmed — reading app log for hash...");
         // Primary: read the actual contract hash from ContractManagement's Deploy notification.
         // This is the only reliable source — pre-computing is fragile (byte-order of sender hash).
         const log = await getApplicationLog(txid);

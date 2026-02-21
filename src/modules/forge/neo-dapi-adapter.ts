@@ -527,7 +527,10 @@ export async function deployFactory(): Promise<string> {
       args: [
         { type: "ByteArray", value: nefBase64 },
         { type: "String", value: manifestText },
-        { type: "Any", value: null },
+        // Omit the optional `data` arg — NeoLine crashes trying to display it
+        // because ContractManagement's ABI only lists 2 named params (nef, manifest)
+        // and accessing abiParams[2].name on undefined throws TypeError.
+        // _deploy() receives null for data when it's not passed, same as null explicitly.
       ],
       // NeoLine signers.account must be the script hash (0x hex), not the address
       signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "CalledByEntry" }],

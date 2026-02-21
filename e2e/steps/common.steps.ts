@@ -54,6 +54,8 @@ export async function openForgeOverlay(page: Page, address: string): Promise<voi
   await expect(forgeBtn).not.toBeDisabled({ timeout: 20_000 });
   await forgeBtn.click();
   await expect(page.getByRole("dialog", { name: "Forge a Token" })).toBeVisible();
+  // Wait for the creation fee to load (fee loading keeps the FORGE button disabled)
+  await expect(page.getByRole("button", { name: /FORGE/ })).not.toBeDisabled({ timeout: 15_000 });
 }
 
 /**

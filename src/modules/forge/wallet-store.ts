@@ -94,6 +94,9 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
     if (typeof localStorage === "undefined") return;
     const saved = localStorage.getItem(WALLET_STORAGE_KEY) as WalletType | null;
     if (!saved || saved === "disconnected") return;
+    // Already connected or connecting — nothing to do
+    const { connectionStatus } = get();
+    if (connectionStatus === "connected" || connectionStatus === "connecting") return;
 
     const savedAddress = localStorage.getItem(WALLET_ADDRESS_STORAGE_KEY);
 
@@ -125,10 +128,15 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
         connectionStatus: "connected",
         errorMessage: null,
       });
-    } catch {
-      // Silent failure — clear stale storage and stay disconnected
-      localStorage.removeItem(WALLET_STORAGE_KEY);
-      localStorage.removeItem(WALLET_ADDRESS_STORAGE_KEY);
+    } catch (err) {
+      // If the wallet extension isn't injected yet (WalletNotConnectedError),
+      // keep localStorage so that when NEOLine:DomReady fires and tryAutoReconnect()
+      // is called again, it can succeed. Only clear storage for genuine auth failures.
+      const isInjectionNotReady = err instanceof Error && err.name === "WalletNotConnectedError";
+      if (!isInjectionNotReady) {
+        localStorage.removeItem(WALLET_STORAGE_KEY);
+        localStorage.removeItem(WALLET_ADDRESS_STORAGE_KEY);
+      }
       set({ connectionStatus: "disconnected" });
     }
   },

@@ -36,6 +36,8 @@ export interface UseForgeFormResult {
 
   // Validation
   errors: Record<string, string>;
+  /** Call on any field blur to surface errors before the user clicks FORGE */
+  validateForm: () => void;
 
   // Fee
   creationFeeDatoshi: bigint;
@@ -246,6 +248,7 @@ export function useForgeForm(
     setImageUrl,
     imagePreview,
     errors,
+    validateForm: validate,
     creationFeeDatoshi,
     creationFeeDisplay,
     feeLoading,

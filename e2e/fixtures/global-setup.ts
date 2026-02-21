@@ -184,16 +184,10 @@ async function globalSetup(_config: FullConfig): Promise<void> {
   }
 
   // ── 4. Verify test account credentials ──────────────────────────────────
-  const testAddress = process.env.E2E_TEST_ACCOUNT_ADDRESS ?? "";
-  const testWif = process.env.E2E_TEST_ACCOUNT_WIF ?? "";
-  if (!testAddress || !testWif) {
-    console.warn(
-      "⚠  E2E_TEST_ACCOUNT_ADDRESS / E2E_TEST_ACCOUNT_WIF not set.\n" +
-        "   Add the docker pre-funded account to .env.local:\n" +
-        "   E2E_TEST_ACCOUNT_ADDRESS=NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c\n" +
-        "   E2E_TEST_ACCOUNT_WIF=L3cNMQUSrvUrHx1MzacwHiUeCWzqK2MLt5fPvJj9mz6L2rzYZpok"
-    );
-  }
+  // Default to the neo3-privatenet-docker pre-funded account (see CLAUDE.md).
+  const testAddress =
+    process.env.E2E_TEST_ACCOUNT_ADDRESS ?? "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c";
+  console.log(`✓  E2E test account: ${testAddress}`);
 }
 
 export default globalSetup;

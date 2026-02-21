@@ -230,7 +230,7 @@ export function TokenDetail({ contractHash, onUpdateClick }: Props) {
       )}
 
       {loading ? (
-        /* Loading — contract hash always visible */
+        /* Loading — contract hash + NeoTube link always visible */
         <div className="space-y-4">
           <div
             className="rounded-xl p-4 flex items-center gap-2"
@@ -239,12 +239,34 @@ export function TokenDetail({ contractHash, onUpdateClick }: Props) {
               border: "1px solid var(--forge-border-subtle)",
             }}
           >
-            <span
-              className="text-xs font-mono"
+            <code
+              className="text-xs font-mono flex-1 truncate"
               style={{ color: "var(--forge-text-muted)" }}
             >
               {contractHash}
-            </span>
+            </code>
+            <button
+              aria-label="Copy contract hash"
+              onClick={copyHash}
+              className="text-xs px-2 py-0.5 rounded flex-shrink-0 transition-opacity hover:opacity-80"
+              style={{
+                color: copied
+                  ? "var(--forge-success)"
+                  : "var(--forge-text-muted)",
+              }}
+            >
+              {copied ? "✓ Copied!" : "⎘"}
+            </button>
+            <a
+              href={`${NEOTUBE_BASE_URL}/contract/${contractHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View on NeoTube"
+              className="text-xs px-2 py-0.5 rounded flex-shrink-0 transition-opacity hover:opacity-80"
+              style={{ color: "var(--forge-color-primary)" }}
+            >
+              ↗ NeoTube
+            </a>
           </div>
           <div
             role="status"
@@ -511,7 +533,45 @@ export function TokenDetail({ contractHash, onUpdateClick }: Props) {
             ))}
           </div>
         </div>
-      ) : null}
+      ) : (
+        /* Not found / error — still show the contract hash and NeoTube link */
+        <div
+          className="rounded-xl p-4 flex items-center gap-2"
+          style={{
+            background: "var(--forge-bg-card)",
+            border: "1px solid var(--forge-border-subtle)",
+          }}
+        >
+          <code
+            className="text-xs font-mono flex-1 truncate"
+            style={{ color: "var(--forge-text-muted)" }}
+          >
+            {contractHash}
+          </code>
+          <button
+            aria-label="Copy contract hash"
+            onClick={copyHash}
+            className="text-xs px-2 py-0.5 rounded flex-shrink-0 transition-opacity hover:opacity-80"
+            style={{
+              color: copied
+                ? "var(--forge-success)"
+                : "var(--forge-text-muted)",
+            }}
+          >
+            {copied ? "✓ Copied!" : "⎘"}
+          </button>
+          <a
+            href={`${NEOTUBE_BASE_URL}/contract/${contractHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="View on NeoTube"
+            className="text-xs px-2 py-0.5 rounded flex-shrink-0 transition-opacity hover:opacity-80"
+            style={{ color: "var(--forge-color-primary)" }}
+          >
+            ↗ NeoTube
+          </a>
+        </div>
+      )}
     </div>
   );
 }

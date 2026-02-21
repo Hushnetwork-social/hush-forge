@@ -7,7 +7,7 @@
 
 import { createBdd } from "playwright-bdd";
 import { test, expect } from "../fixtures/mock-dapi";
-import { openForgeOverlay } from "./common.steps";
+import { openForgeOverlay, connectWallet } from "./common.steps";
 
 const { Given, When, Then } = createBdd(test);
 
@@ -31,19 +31,41 @@ Given("the wallet has enough GAS to pay the creation fee", async ({ page, mockDa
   );
 });
 
-Given("the wallet has less GAS than the creation fee", async ({ page }) => {
-  // Navigate with wallet connected but mock the gasBalance as 0 by not
-  // having any GAS in the test account — this scenario requires a devnet
-  // account with insufficient GAS, or we test by observing the fee-check UI.
-  // For testing purposes, we simply open the overlay and let the real balance check run.
-  // If the test account genuinely has insufficient GAS, the indicator shows red.
+Given("the wallet has less GAS than the creation fee", async ({ page, mockDapi }) => {
+  // Intercept the Next.js RPC proxy and return 0 GAS for invokefunction on the
+  // GAS contract (balanceof). This makes useForgeForm see gasBalance=0 which
+  // is always less than the creation fee (~15 GAS).
+  await page.route(/\/api\/rpc/, async (route) => {
+    const req = route.request();
+    if (req.method() === "POST") {
+      let body: Record<string, unknown> = {};
+      try { body = JSON.parse(req.postData() ?? "{}"); } catch { /* ignore */ }
+      const GAS_HASH = "0xd2a4cff31913016155e38e474a2c06d08be276cf";
+      if (
+        body.method === "invokefunction" &&
+        Array.isArray(body.params) &&
+        body.params[0] === GAS_HASH
+      ) {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: (body.id as number) ?? 1,
+            result: {
+              state: "HALT",
+              gasconsumed: "0",
+              stack: [{ type: "Integer", value: "0" }],
+            },
+          }),
+        });
+        return;
+      }
+    }
+    await route.continue();
+  });
+
   await page.goto("/tokens");
-  await page.evaluate(
-    (key: string) => localStorage.setItem(key, "Neon"),
-    "forge_wallet_type"
-  );
-  await page.reload();
-  await page.waitForTimeout(1_000); // allow balance fetch to settle
+  await connectWallet(page, mockDapi.address);
 });
 
 // ---------------------------------------------------------------------------
@@ -90,9 +112,12 @@ When("the user clicks Cancel", async ({ page }) => {
 // ---------------------------------------------------------------------------
 
 Then("the GAS creation fee is displayed", async ({ page }) => {
-  // Fee row shows "~X.XX GAS" or "Loading…" then the fee
-  await expect(page.getByText(/GAS|Loading/)).toBeVisible();
-  await expect(page.getByText("Creation fee")).toBeVisible();
+  // Fee row shows "Creation fee" label and either "Loading…" or "~N GAS"
+  const dialog = page.getByRole("dialog", { name: "Forge a Token" });
+  await expect(dialog.getByText("Creation fee")).toBeVisible();
+  // Wait for fee to finish loading (shows "~N GAS") — scoped to dialog to avoid
+  // matching multiple GAS-related elements outside the overlay
+  await expect(dialog.getByText(/Loading…|GAS/).first()).toBeVisible();
 });
 
 Then("the symbol field shows {string}", async ({ page }, expected: string) => {

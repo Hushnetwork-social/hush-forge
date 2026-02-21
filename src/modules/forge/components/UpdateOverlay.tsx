@@ -118,12 +118,14 @@ export function UpdateOverlay({ token, onClose, onTxSubmitted }: Props) {
           {/* Token Name */}
           <div>
             <label
+              htmlFor="update-token-name"
               className="text-sm mb-1 block"
               style={{ color: "var(--forge-text-muted)" }}
             >
               Token Name
             </label>
             <input
+              id="update-token-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -141,12 +143,14 @@ export function UpdateOverlay({ token, onClose, onTxSubmitted }: Props) {
           {/* Symbol */}
           <div>
             <label
+              htmlFor="update-token-symbol"
               className="text-sm mb-1 block"
               style={{ color: "var(--forge-text-muted)" }}
             >
               Symbol
             </label>
             <input
+              id="update-token-symbol"
               type="text"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}

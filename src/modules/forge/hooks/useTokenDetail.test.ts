@@ -16,6 +16,9 @@ vi.mock("../forge-config", () => ({
 
 vi.mock("../neo-rpc-client", () => ({
   invokeFunction: vi.fn(),
+  // addressToHash160 is used in addressToBEHash; return a stub so tests don't throw.
+  // Synthetic test addresses (e.g. "NwCreator") fall back to direct === comparison anyway.
+  addressToHash160: vi.fn(() => { throw new Error("stub — not a real address"); }),
 }));
 
 import { resolveTokenMetadata as mockResolve } from "../token-metadata-service";
@@ -102,8 +105,20 @@ describe("useTokenDetail", () => {
     expect(result.current.isOwnToken).toBe(false);
   });
 
-  it("isUpgradeable is always false (placeholder)", async () => {
+  it("isUpgradeable is true for community mode tokens", async () => {
+    // makeToken sets mode: "community" — community tokens are managed by the factory
     vi.mocked(mockResolve).mockResolvedValue(makeToken("0xabc", null));
+
+    const { result } = renderHook(() => useTokenDetail("0xabc"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.isUpgradeable).toBe(true);
+  });
+
+  it("isUpgradeable is false for non-community (null) mode tokens", async () => {
+    const token = { ...makeToken("0xabc", null), mode: null } as TokenInfo;
+    vi.mocked(mockResolve).mockResolvedValue(token);
 
     const { result } = renderHook(() => useTokenDetail("0xabc"));
 

@@ -53,6 +53,7 @@ export function useTokenTransfers(
 
   useEffect(() => {
     if (!walletAddress) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTransfers([]);
       setLoading(false);
       return;

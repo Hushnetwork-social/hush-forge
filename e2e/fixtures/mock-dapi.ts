@@ -60,7 +60,9 @@ interface InvokeResult {
 // ---------------------------------------------------------------------------
 
 /** Recursively converts a dAPI ContractParam to a neon-js ContractParam. */
-function buildContractParam(p: ContractParam): Neon.sc.ContractParam {
+function buildContractParam(
+  p: ContractParam
+): ReturnType<typeof Neon.sc.ContractParam.any> {
   switch (p.type) {
     case "Hash160":
       return Neon.sc.ContractParam.hash160(p.value as string);
@@ -123,7 +125,7 @@ async function signAndSubmit(invokeArgs: InvokeArgs): Promise<InvokeResult> {
       ),
       scopes: Neon.tx.WitnessScope.CalledByEntry,
     });
-    const dryRun = await rpcClient.invokeScript(script.toHex(), [dryRunSigner]);
+    const dryRun = await rpcClient.invokeScript(script, [dryRunSigner]);
     if (dryRun.state === "FAULT") {
       throw new Error(`Dry-run faulted: ${dryRun.exception ?? "unknown"}`);
     }

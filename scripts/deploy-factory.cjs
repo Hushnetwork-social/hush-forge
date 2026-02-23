@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Deploys and initializes TokenFactory on the local Neo N3 private devnet.
  * Uses @cityofzion/neon-js directly — no NeoLine required.

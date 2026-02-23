@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Creates 1 test token on the neo3-privatenet-docker devnet.
  *

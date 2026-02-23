@@ -140,7 +140,7 @@ const INITIAL_STATE: TokenState = {
   errorMessage: null,
 };
 
-export const useTokenStore = create<TokenStore>()((set, get) => ({
+export const useTokenStore = create<TokenStore>()((set) => ({
   ...INITIAL_STATE,
 
   async loadTokensForAddress(address: string) {

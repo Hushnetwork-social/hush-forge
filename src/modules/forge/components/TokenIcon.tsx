@@ -35,6 +35,7 @@ export function TokenIcon({ contractHash, size = 36, imageUrl }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDisplaySrc(null);
 
     function probeCdn(initialDelay: number) {
@@ -93,6 +94,7 @@ export function TokenIcon({ contractHash, size = 36, imageUrl }: Props) {
           justifyContent: "center",
         }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={displaySrc}
           alt=""
@@ -104,6 +106,7 @@ export function TokenIcon({ contractHash, size = 36, imageUrl }: Props) {
 
   // Identicon — shown immediately and as permanent fallback if all sources fail
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       aria-hidden="true"
       src={generateIdenticonDataUrl(contractHash, size)}

@@ -359,6 +359,7 @@ export function ForgeOverlay({
                 )}
                 {imagePreview === "ok" && (
                   <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={imageUrl.trim()}
                       alt="Token icon preview"

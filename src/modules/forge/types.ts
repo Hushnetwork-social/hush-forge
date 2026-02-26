@@ -20,6 +20,9 @@ export interface TokenInfo {
   createdAt: number | null; // null for non-factory tokens
   isNative?: boolean; // true for NEO / GAS native contracts
   imageUrl?: string; // optional user-supplied icon URL (stored as metadataUri on TokenTemplate)
+  burnRate?: number; // basis points 0–1000; 0 = no burn
+  maxSupply?: string; // BigInt as string; "0" = uncapped
+  locked?: boolean; // true if token is permanently locked
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */

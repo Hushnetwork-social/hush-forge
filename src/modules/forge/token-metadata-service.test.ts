@@ -46,7 +46,7 @@ function haltResult(stack: { type: string; value: unknown }[]): HaltResult {
 
 /**
  * Builds a factory getToken() result matching the actual contract return format:
- *   [symbol, creator, supply, mode, tier, createdAt, imageUrl]
+ *   [symbol, creator, supply, mode, tier, createdAt, imageUrl, burnRate?, maxSupply?, locked?]
  * Note: name and decimals are NOT stored by the factory.
  */
 function factoryArrayResult(
@@ -56,22 +56,24 @@ function factoryArrayResult(
   mode: string,
   tier: string,
   createdAt: string,
-  imageUrl = ""
+  imageUrl = "",
+  burnRate?: string,
+  maxSupply?: string,
+  locked?: string
 ): HaltResult {
-  return haltResult([
-    {
-      type: "Array",
-      value: [
-        { type: "ByteString", value: b64(symbol) },
-        { type: "ByteString", value: b64Hash(creatorByte) },
-        { type: "Integer", value: supply },
-        { type: "ByteString", value: b64(mode) },
-        { type: "ByteString", value: b64(tier) },
-        { type: "Integer", value: createdAt },
-        { type: "ByteString", value: b64(imageUrl) },
-      ],
-    },
-  ]);
+  const items: { type: string; value: unknown }[] = [
+    { type: "ByteString", value: b64(symbol) },
+    { type: "ByteString", value: b64Hash(creatorByte) },
+    { type: "Integer", value: supply },
+    { type: "ByteString", value: b64(mode) },
+    { type: "ByteString", value: b64(tier) },
+    { type: "Integer", value: createdAt },
+    { type: "ByteString", value: b64(imageUrl) },
+  ];
+  if (burnRate !== undefined) items.push({ type: "Integer", value: burnRate });
+  if (maxSupply !== undefined) items.push({ type: "Integer", value: maxSupply });
+  if (locked !== undefined) items.push({ type: "Integer", value: locked });
+  return haltResult([{ type: "Array", value: items }]);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +221,78 @@ describe("resolveTokenMetadata", () => {
     expect(result.symbol).toBe("GAS");
     expect(result.supply).toBe(0n);
     expect(result.isNative).toBe(true);
+  });
+
+  it("parses burnRate from factory registry at index 7", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("BRN", 0xab, "1000", "community", "1", "100", "", "200")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("BRN") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("BurnToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+
+    const result = await resolveTokenMetadata("0xbrn");
+    expect(result.burnRate).toBe(200);
+  });
+
+  it("parses maxSupply as string from factory registry at index 8", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("MAX", 0xab, "1000", "community", "1", "100", "", "0", "1000000000000000000")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("MAX") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("MaxToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+
+    const result = await resolveTokenMetadata("0xmax");
+    expect(result.maxSupply).toBe("1000000000000000000");
+  });
+
+  it("parses locked=true when factory registry index 9 = 1", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("LCK", 0xab, "1000", "community", "1", "100", "", "0", "0", "1")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LCK") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LockToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+
+    const result = await resolveTokenMetadata("0xlck");
+    expect(result.locked).toBe(true);
+  });
+
+  it("parses locked=false when factory registry index 9 = 0", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("ULK", 0xab, "1000", "community", "1", "100", "", "0", "0", "0")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ULK") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("UnlockToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+
+    const result = await resolveTokenMetadata("0xulk");
+    expect(result.locked).toBe(false);
+  });
+
+  it("backward-compatible: defaults burnRate=0 maxSupply='0' locked=false for 7-element tokenInfo", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("OLD", 0xab, "5000", "community", "1", "100")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("OLD") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("OldToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "5000" }]));
+
+    const result = await resolveTokenMetadata("0xold");
+    expect(result.burnRate).toBe(0);
+    expect(result.maxSupply).toBe("0");
+    expect(result.locked).toBe(false);
   });
 
   it("uses contract data when factory Array has wrong format", async () => {

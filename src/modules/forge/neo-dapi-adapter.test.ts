@@ -5,6 +5,13 @@ import {
   disconnect,
   getAddress,
   invokeForge,
+  invokeUpdateMetadata,
+  invokeMintTokens,
+  invokeSetBurnRate,
+  invokeSetMaxSupply,
+  invokeSetCreatorFee,
+  invokeChangeMode,
+  invokeLockToken,
   WalletRejectedError,
 } from "./neo-dapi-adapter";
 
@@ -241,5 +248,104 @@ describe("invokeForge", () => {
     );
     expect(err).not.toBeInstanceOf(WalletRejectedError);
     expect(err.message).toBe("Network error");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lifecycle invoke functions (FEAT-078)
+// ---------------------------------------------------------------------------
+
+describe("lifecycle invoke functions", () => {
+  beforeEach(() => {
+    disconnect();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).NEOLineN3;
+  });
+
+  afterEach(() => {
+    disconnect();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).NEOLineN3;
+  });
+
+  async function connectMock() {
+    const instance = makeMockDapi();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
+    await connect("NeoLine");
+    return instance;
+  }
+
+  it("invokeUpdateMetadata calls factory with operation UpdateTokenMetadata", async () => {
+    const instance = await connectMock();
+    const txid = await invokeUpdateMetadata("0xfactory", "0xtoken", "https://img.png");
+    expect(txid).toBe("0xtestTxId");
+    expect(instance.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scriptHash: "0xfactory",
+        operation: "UpdateTokenMetadata",
+      })
+    );
+  });
+
+  it("invokeMintTokens passes amount as Integer string", async () => {
+    const instance = await connectMock();
+    await invokeMintTokens("0xfactory", "0xtoken", "NwTestAddress", 500n);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: string }[] };
+    expect(call.operation).toBe("MintTokens");
+    expect(call.args[2]).toEqual({ type: "Integer", value: "500" });
+  });
+
+  it("invokeSetBurnRate sends basisPoints as Integer", async () => {
+    const instance = await connectMock();
+    await invokeSetBurnRate("0xfactory", "0xtoken", 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: string }[] };
+    expect(call.operation).toBe("SetTokenBurnRate");
+    expect(call.args[1]).toEqual({ type: "Integer", value: "200" });
+  });
+
+  it("invokeSetMaxSupply sends newMax as Integer string", async () => {
+    const instance = await connectMock();
+    await invokeSetMaxSupply("0xfactory", "0xtoken", 1_000_000n);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: string }[] };
+    expect(call.operation).toBe("SetTokenMaxSupply");
+    expect(call.args[1]).toEqual({ type: "Integer", value: "1000000" });
+  });
+
+  it("invokeSetCreatorFee calls factory with operation SetCreatorFee", async () => {
+    const instance = await connectMock();
+    await invokeSetCreatorFee("0xfactory", "0xtoken", 5_000_000);
+    expect(instance.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "SetCreatorFee" })
+    );
+  });
+
+  it("invokeChangeMode sends newMode as String and params as Array", async () => {
+    const instance = await connectMock();
+    await invokeChangeMode("0xfactory", "0xtoken", "speculation", []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: unknown }[] };
+    expect(call.operation).toBe("ChangeTokenMode");
+    expect(call.args[1]).toEqual({ type: "String", value: "speculation" });
+    expect(call.args[2].type).toBe("Array");
+  });
+
+  it("invokeLockToken calls factory with operation LockToken", async () => {
+    const instance = await connectMock();
+    await invokeLockToken("0xfactory", "0xtoken");
+    expect(instance.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "LockToken" })
+    );
+  });
+
+  it("all lifecycle functions use Global witness scope", async () => {
+    const instance = await connectMock();
+    await invokeSetBurnRate("0xfactory", "0xtoken", 100);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { signers: { scopes: string }[] };
+    expect(call.signers[0].scopes).toBe("Global");
   });
 });

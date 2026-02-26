@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { invokeUpdate, WalletRejectedError } from "../neo-dapi-adapter";
-import type { TokenInfo, UpdateParams } from "../types";
+import type { TokenInfo } from "../types";
 
 interface Props {
   token: TokenInfo;
@@ -15,7 +14,7 @@ function formatSupply(supply: bigint, decimals: number): string {
   return (supply / factor).toLocaleString();
 }
 
-export function UpdateOverlay({ token, onClose, onTxSubmitted }: Props) {
+export function UpdateOverlay({ token, onClose }: Props) {
   const [name, setName] = useState(token.name);
   const [symbol, setSymbol] = useState(token.symbol);
   const [submitting, setSubmitting] = useState(false);
@@ -34,15 +33,8 @@ export function UpdateOverlay({ token, onClose, onTxSubmitted }: Props) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const params: UpdateParams = { name: name.trim(), symbol };
-      const txHash = await invokeUpdate(token.contractHash, params);
-      onTxSubmitted(txHash);
-    } catch (err) {
-      if (err instanceof WalletRejectedError) {
-        setSubmitError("Transaction cancelled. Please try again.");
-      } else {
-        setSubmitError(err instanceof Error ? err.message : String(err));
-      }
+      // UpdateOverlay is replaced by TokenAdminPanel (FEAT-078 Phase 7).
+      setSubmitError("Token update is unavailable. Please use the Token Administration Panel.");
     } finally {
       setSubmitting(false);
     }

@@ -1,18 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { UpdateOverlay } from "./UpdateOverlay";
-import { invokeUpdate } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 
-vi.mock("../neo-dapi-adapter", () => ({
-  invokeUpdate: vi.fn(),
-  WalletRejectedError: class WalletRejectedError extends Error {
-    constructor(message = "User rejected the transaction") {
-      super(message);
-      this.name = "WalletRejectedError";
-    }
-  },
-}));
+vi.mock("../neo-dapi-adapter", () => ({}));
 
 vi.mock("../forge-config", () => ({
   FACTORY_CONTRACT_HASH: "0xfactory",
@@ -36,10 +27,6 @@ function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
 }
 
 describe("UpdateOverlay", () => {
-  beforeEach(() => {
-    vi.mocked(invokeUpdate).mockResolvedValue("0xtx456");
-  });
-
   it("pre-fills Name field from token", () => {
     render(
       <UpdateOverlay
@@ -76,7 +63,7 @@ describe("UpdateOverlay", () => {
     expect(readOnlyLabels.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("calls onTxSubmitted with txHash on success", async () => {
+  it("shows deprecation message when submit is clicked", async () => {
     const onTxSubmitted = vi.fn();
     render(
       <UpdateOverlay
@@ -87,24 +74,25 @@ describe("UpdateOverlay", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Update Token/i }));
     await waitFor(() =>
-      expect(onTxSubmitted).toHaveBeenCalledWith("0xtx456")
+      expect(screen.getByText(/Token Administration Panel/i)).toBeInTheDocument()
     );
+    expect(onTxSubmitted).not.toHaveBeenCalled();
   });
 
-  it("shows inline error on wallet rejection", async () => {
-    const { WalletRejectedError } = await import("../neo-dapi-adapter");
-    vi.mocked(invokeUpdate).mockRejectedValue(new WalletRejectedError());
+  it("does not call onTxSubmitted after clicking submit (feature replaced)", async () => {
+    const onTxSubmitted = vi.fn();
     render(
       <UpdateOverlay
         token={makeToken()}
         onClose={vi.fn()}
-        onTxSubmitted={vi.fn()}
+        onTxSubmitted={onTxSubmitted}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /Update Token/i }));
     await waitFor(() =>
-      expect(screen.getByText(/Transaction cancelled/i)).toBeInTheDocument()
+      expect(screen.getByRole("alert")).toBeInTheDocument()
     );
+    expect(onTxSubmitted).not.toHaveBeenCalled();
   });
 
   it("Escape closes when not submitting", () => {

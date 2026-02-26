@@ -4,7 +4,23 @@ import { TokenAdminPanel } from "./TokenAdminPanel";
 import type { TokenInfo } from "../types";
 
 vi.mock("./AdminTabIdentity", () => ({
-  AdminTabIdentity: () => <div>Identity Content</div>,
+  AdminTabIdentity: ({ onStageChange }: { onStageChange?: (change: { id: string; type: "metadata"; label: string; payload: Record<string, string> }) => void }) => (
+    <div>
+      Identity Content
+      <button
+        onClick={() =>
+          onStageChange?.({
+            id: "metadata-0xtoken",
+            type: "metadata",
+            label: "Update image URL",
+            payload: { imageUrl: "https://new.png" },
+          })
+        }
+      >
+        Stage Mock
+      </button>
+    </div>
+  ),
 }));
 vi.mock("./AdminTabSupply", () => ({
   AdminTabSupply: () => <div>Supply Content</div>,
@@ -54,5 +70,13 @@ describe("TokenAdminPanel", () => {
     render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
     fireEvent.click(screen.getByRole("tab", { name: "Properties" }));
     expect(screen.getByText("Properties Content")).toBeInTheDocument();
+  });
+
+  it("shows staged changes list after staging from tab", () => {
+    render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Identity" }));
+    fireEvent.click(screen.getByText("Stage Mock"));
+    expect(screen.getByText("STAGED CHANGES (1)")).toBeInTheDocument();
+    expect(screen.getByText("Update image URL")).toBeInTheDocument();
   });
 });

@@ -70,4 +70,21 @@ describe("AdminTabSupply", () => {
     await waitFor(() => expect(invokeSetMaxSupply).toHaveBeenCalledWith("0xfactory", "0xtoken", 2000n));
     expect(onTxSubmitted).toHaveBeenCalledWith("0xtx2", "Updating max supply...");
   });
+
+  it("accepts grouped max supply input like 1.000.000", async () => {
+    invokeSetMaxSupply.mockResolvedValue("0xtx3");
+    render(<AdminTabSupply token={makeToken({ supply: 1000n })} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("New max supply"), { target: { value: "1.000.000" } });
+    fireEvent.click(screen.getByRole("button", { name: /Set Max Supply/i }));
+
+    await waitFor(() => expect(invokeSetMaxSupply).toHaveBeenCalledWith("0xfactory", "0xtoken", 1000000n));
+  });
+
+  it("rejects fractional-looking max supply input", () => {
+    render(<AdminTabSupply token={makeToken({ supply: 1000n })} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("New max supply"), { target: { value: "1.5" } });
+    expect(screen.getByRole("button", { name: /Set Max Supply/i })).toBeDisabled();
+  });
 });

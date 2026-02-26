@@ -8,11 +8,13 @@ import {
   WalletRejectedError,
 } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
+import type { StagedChange } from "./admin-types";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
+  onStageChange?: (change: StagedChange) => void;
 }
 
 function toErrorMessage(err: unknown): string {
@@ -35,7 +37,37 @@ function isValidAddress(address: string): boolean {
   }
 }
 
-export function AdminTabSupply({ token, factoryHash, onTxSubmitted }: Props) {
+function parseWholeTokenInput(value: string): bigint | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return 0n;
+
+  const plainDigits = /^\d+$/;
+  const groupedThousands = /^\d{1,3}(?:[.,\s_]\d{3})+$/;
+  if (!plainDigits.test(trimmed) && !groupedThousands.test(trimmed)) return null;
+
+  const normalized = trimmed.replace(/[.,\s_]/g, "");
+  try {
+    return BigInt(normalized);
+  } catch {
+    return null;
+  }
+}
+
+function formatRawSupply(raw: bigint, decimals: number): string {
+  const factor = 10n ** BigInt(decimals);
+  return (raw / factor).toLocaleString();
+}
+
+function formatRawSupplyString(raw: string | undefined, decimals: number): string {
+  if (!raw) return "0";
+  try {
+    return formatRawSupply(BigInt(raw), decimals);
+  } catch {
+    return raw;
+  }
+}
+
+export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
   const [recipient, setRecipient] = useState("");
   const [mintAmount, setMintAmount] = useState("");
   const [maxSupply, setMaxSupply] = useState(token.maxSupply ?? "0");
@@ -48,13 +80,14 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted }: Props) {
   const mintAmountValid = Number.isInteger(mintAmountParsed) && mintAmountParsed > 0;
   const recipientValid = recipient.trim().length > 0 && isValidAddress(recipient.trim());
 
-  const maxSupplyParsed = useMemo(() => {
-    try {
-      return BigInt(maxSupply.trim() || "0");
-    } catch {
-      return null;
-    }
-  }, [maxSupply]);
+  const maxSupplyWhole = useMemo(
+    () => parseWholeTokenInput(maxSupply.trim() || "0"),
+    [maxSupply]
+  );
+  const maxSupplyParsed = useMemo(
+    () => (maxSupplyWhole === null ? null : maxSupplyWhole * (10n ** BigInt(token.decimals))),
+    [maxSupplyWhole, token.decimals]
+  );
 
   const maxSupplyValid =
     maxSupplyParsed !== null &&
@@ -115,11 +148,31 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted }: Props) {
     }
   }
 
+  function handleStageMint() {
+    if (!recipientValid || !mintAmountValid) return;
+    onStageChange?.({
+      id: `mint-${token.contractHash}`,
+      type: "mint",
+      label: `Mint ${mintAmountParsed} ${token.symbol} to ${recipient.trim()}`,
+      payload: { to: recipient.trim(), amount: mintAmountParsed },
+    });
+  }
+
+  function handleStageMaxSupply() {
+    if (!maxSupplyValid || maxSupplyParsed === null || maxSupplyWhole === null) return;
+    onStageChange?.({
+      id: `maxSupply-${token.contractHash}`,
+      type: "maxSupply",
+      label: `Set max supply to ${maxSupplyWhole.toLocaleString()}`,
+      payload: { maxSupply: maxSupplyParsed.toString() },
+    });
+  }
+
   return (
     <section className="space-y-5" aria-label="Admin Supply Tab">
       <div className="text-sm" style={{ color: "var(--forge-text-muted)" }}>
         Current supply: <strong style={{ color: "var(--forge-text-primary)" }}>{formatSupply(token.supply, token.decimals)}</strong>
-        {" "}| Max supply: <strong style={{ color: "var(--forge-text-primary)" }}>{token.maxSupply ?? "0"}</strong>
+        {" "}| Max supply: <strong style={{ color: "var(--forge-text-primary)" }}>{formatRawSupplyString(token.maxSupply, token.decimals)}</strong>
       </div>
 
       <div className="space-y-2">
@@ -141,14 +194,24 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted }: Props) {
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
         {mintError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{mintError}</p>}
-        <button
-          onClick={handleMint}
-          disabled={!recipientValid || !mintAmountValid || minting}
-          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))", color: "var(--forge-text-primary)" }}
-        >
-          {minting ? "Minting..." : "Mint Tokens"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleMint}
+            disabled={!recipientValid || !mintAmountValid || minting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))", color: "var(--forge-text-primary)" }}
+          >
+            {minting ? "Minting..." : "Mint Tokens"}
+          </button>
+          <button
+            onClick={handleStageMint}
+            disabled={!recipientValid || !mintAmountValid}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Stage
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -161,20 +224,33 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted }: Props) {
           className="w-full rounded-lg px-3 py-2 text-sm"
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
+        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+          Enter whole tokens. Supports formats like `1000000` or `1.000.000`.
+        </p>
         {!maxSupplyValid && (
           <p className="text-xs" style={{ color: "var(--forge-error)" }}>
             Must be greater than current supply, or 0 to remove the cap
           </p>
         )}
         {maxError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{maxError}</p>}
-        <button
-          onClick={handleSetMaxSupply}
-          disabled={!maxSupplyValid || updatingMax}
-          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-        >
-          {updatingMax ? "Updating..." : "Set Max Supply"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSetMaxSupply}
+            disabled={!maxSupplyValid || updatingMax}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            {updatingMax ? "Updating..." : "Set Max Supply"}
+          </button>
+          <button
+            onClick={handleStageMaxSupply}
+            disabled={!maxSupplyValid}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Stage
+          </button>
+        </div>
       </div>
     </section>
   );

@@ -6,6 +6,7 @@ import { AdminTabIdentity } from "./AdminTabIdentity";
 import { AdminTabSupply } from "./AdminTabSupply";
 import { AdminTabProperties } from "./AdminTabProperties";
 import { AdminTabDangerZone } from "./AdminTabDangerZone";
+import type { StagedChange } from "./admin-types";
 
 type AdminTab = "identity" | "supply" | "properties" | "danger";
 
@@ -32,6 +33,9 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
   }, [storageKey, activeTab]);
 
   const showSupply = token.mintable !== false;
+  const [stagedChanges, setStagedChanges] = useState<StagedChange[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+  const [batchInfo, setBatchInfo] = useState<string | null>(null);
 
   const tabs = useMemo(() => {
     const list: Array<{ id: AdminTab; label: string }> = [
@@ -42,6 +46,41 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
     if (showSupply) list.splice(1, 0, { id: "supply", label: "Supply" });
     return list;
   }, [showSupply]);
+
+  function stageChange(change: StagedChange) {
+    setStagedChanges((prev) => {
+      const deduped = prev.filter((entry) => entry.id !== change.id);
+      return [...deduped, change];
+    });
+    setSelectedIds((prev) => ({ ...prev, [change.id]: true }));
+    setBatchInfo("Change staged. You can still send single actions, or apply selected together later.");
+  }
+
+  function removeChange(id: string) {
+    setStagedChanges((prev) => prev.filter((entry) => entry.id !== id));
+    setSelectedIds((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function applySelected() {
+    const selectedCount = stagedChanges.filter((entry) => selectedIds[entry.id]).length;
+    if (selectedCount === 0) {
+      setBatchInfo("Select one or more staged changes first.");
+      return;
+    }
+    setBatchInfo("Batch execution preview only. Atomic batch contract endpoint will be added before enabling this.");
+  }
+
+  function applyAll() {
+    if (stagedChanges.length === 0) {
+      setBatchInfo("No staged changes to apply.");
+      return;
+    }
+    setBatchInfo("Apply All is in design-preview mode. Contract batch support is required for a single atomic transaction.");
+  }
 
   if (token.locked) {
     return (
@@ -100,17 +139,114 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
       </div>
 
       {activeTab === "identity" && (
-        <AdminTabIdentity token={token} factoryHash={factoryHash} onTxSubmitted={onTxSubmitted} />
+        <AdminTabIdentity
+          token={token}
+          factoryHash={factoryHash}
+          onTxSubmitted={onTxSubmitted}
+          onStageChange={stageChange}
+        />
       )}
       {activeTab === "supply" && showSupply && (
-        <AdminTabSupply token={token} factoryHash={factoryHash} onTxSubmitted={onTxSubmitted} />
+        <AdminTabSupply
+          token={token}
+          factoryHash={factoryHash}
+          onTxSubmitted={onTxSubmitted}
+          onStageChange={stageChange}
+        />
       )}
       {activeTab === "properties" && (
-        <AdminTabProperties token={token} factoryHash={factoryHash} onTxSubmitted={onTxSubmitted} />
+        <AdminTabProperties
+          token={token}
+          factoryHash={factoryHash}
+          onTxSubmitted={onTxSubmitted}
+          onStageChange={stageChange}
+        />
       )}
       {activeTab === "danger" && (
-        <AdminTabDangerZone token={token} factoryHash={factoryHash} onTxSubmitted={onTxSubmitted} />
+        <AdminTabDangerZone
+          token={token}
+          factoryHash={factoryHash}
+          onTxSubmitted={onTxSubmitted}
+          onStageChange={stageChange}
+        />
       )}
+
+      <section
+        className="rounded-lg p-3 space-y-3"
+        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--forge-border-subtle)" }}
+      >
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold" style={{ color: "var(--forge-text-primary)" }}>
+            STAGED CHANGES ({stagedChanges.length})
+          </h4>
+          <div className="flex gap-2">
+            <button
+              onClick={applySelected}
+              className="px-2 py-1 rounded text-xs"
+              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              Apply Selected
+            </button>
+            <button
+              onClick={applyAll}
+              className="px-2 py-1 rounded text-xs"
+              style={{
+                background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",
+                color: "var(--forge-text-primary)",
+              }}
+            >
+              Apply All
+            </button>
+          </div>
+        </div>
+
+        {stagedChanges.length === 0 ? (
+          <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+            No staged changes yet. Use the Stage buttons in each tab.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {stagedChanges.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between gap-2 rounded px-2 py-1"
+                style={{ background: "rgba(255,255,255,0.03)" }}
+              >
+                <label
+                  className="flex items-center gap-2 text-xs min-w-0 flex-1"
+                  style={{ color: "var(--forge-text-primary)" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedIds[entry.id])}
+                    onChange={(e) => setSelectedIds((prev) => ({ ...prev, [entry.id]: e.target.checked }))}
+                  />
+                  <span
+                    className="truncate"
+                    title={entry.label}
+                    style={{ maxWidth: "100%" }}
+                  >
+                    {entry.label}
+                  </span>
+                </label>
+                <button
+                  onClick={() => removeChange(entry.id)}
+                  className="text-xs px-2 py-0.5 rounded flex-shrink-0"
+                  style={{ border: "1px solid var(--forge-border-subtle)", color: "var(--forge-text-muted)" }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {batchInfo && (
+          <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+            {batchInfo}
+          </p>
+        )}
+      </section>
     </section>
   );
 }

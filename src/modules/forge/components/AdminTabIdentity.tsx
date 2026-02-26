@@ -3,11 +3,13 @@
 import { useMemo, useState } from "react";
 import { invokeUpdateMetadata, WalletRejectedError } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
+import type { StagedChange } from "./admin-types";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
+  onStageChange?: (change: StagedChange) => void;
 }
 
 function toErrorMessage(err: unknown): string {
@@ -20,7 +22,7 @@ function isHttpUrl(value: string): boolean {
   return /^https?:\/\/.+/.test(value.trim());
 }
 
-export function AdminTabIdentity({ token, factoryHash, onTxSubmitted }: Props) {
+export function AdminTabIdentity({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
   const [imageUrl, setImageUrl] = useState(token.imageUrl ?? "");
   const [hidePreview, setHidePreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -49,6 +51,16 @@ export function AdminTabIdentity({ token, factoryHash, onTxSubmitted }: Props) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleStage() {
+    if (!isDirty) return;
+    onStageChange?.({
+      id: `metadata-${token.contractHash}`,
+      type: "metadata",
+      label: "Update image URL",
+      payload: { imageUrl: imageUrl.trim() },
+    });
   }
 
   return (
@@ -129,17 +141,27 @@ export function AdminTabIdentity({ token, factoryHash, onTxSubmitted }: Props) {
 
       {error && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{error}</p>}
 
-      <button
-        onClick={handleSubmit}
-        disabled={!isDirty || submitting}
-        className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-        style={{
-          background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",
-          color: "var(--forge-text-primary)",
-        }}
-      >
-        {submitting ? "Updating..." : "Update Image URL"}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={handleSubmit}
+          disabled={!isDirty || submitting}
+          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          style={{
+            background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",
+            color: "var(--forge-text-primary)",
+          }}
+        >
+          {submitting ? "Updating..." : "Update Image URL"}
+        </button>
+        <button
+          onClick={handleStage}
+          disabled={!isDirty}
+          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+        >
+          Stage
+        </button>
+      </div>
     </section>
   );
 }

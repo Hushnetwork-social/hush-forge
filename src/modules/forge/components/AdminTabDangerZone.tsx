@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { invokeLockToken, WalletRejectedError } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
+import type { StagedChange } from "./admin-types";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
+  onStageChange?: (change: StagedChange) => void;
 }
 
 function toErrorMessage(err: unknown): string {
@@ -16,7 +18,7 @@ function toErrorMessage(err: unknown): string {
   return String(err);
 }
 
-export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted }: Props) {
+export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
   const [confirmValue, setConfirmValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,16 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted }: Props)
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleStageLock() {
+    if (!canLock) return;
+    onStageChange?.({
+      id: `lock-${token.contractHash}`,
+      type: "lock",
+      label: "Lock token permanently",
+      payload: { symbolConfirmed: true },
+    });
   }
 
   return (
@@ -73,18 +85,28 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted }: Props)
 
       {error && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{error}</p>}
 
-      <button
-        onClick={handleLock}
-        disabled={!canLock}
-        className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-        style={{
-          border: "1px solid rgba(255,82,82,0.7)",
-          background: "rgba(255,82,82,0.15)",
-          color: "var(--forge-text-primary)",
-        }}
-      >
-        {submitting ? "Locking..." : "Lock Token Forever"}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={handleLock}
+          disabled={!canLock}
+          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          style={{
+            border: "1px solid rgba(255,82,82,0.7)",
+            background: "rgba(255,82,82,0.15)",
+            color: "var(--forge-text-primary)",
+          }}
+        >
+          {submitting ? "Locking..." : "Lock Token Forever"}
+        </button>
+        <button
+          onClick={handleStageLock}
+          disabled={!canLock}
+          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+        >
+          Stage
+        </button>
+      </div>
     </section>
   );
 }

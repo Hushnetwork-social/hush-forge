@@ -8,11 +8,13 @@ import {
   WalletRejectedError,
 } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
+import type { StagedChange } from "./admin-types";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
+  onStageChange?: (change: StagedChange) => void;
 }
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -27,7 +29,7 @@ function toErrorMessage(err: unknown): string {
   return String(err);
 }
 
-export function AdminTabProperties({ token, factoryHash, onTxSubmitted }: Props) {
+export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
   const initialMode = token.mode ?? "community";
   const [burnBps, setBurnBps] = useState(token.burnRate ?? 0);
   const [burnDisplay, setBurnDisplay] = useState(((token.burnRate ?? 0) / 100).toFixed(2));
@@ -129,6 +131,36 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted }: Props)
     }
   }
 
+  function handleStageBurnRate() {
+    onStageChange?.({
+      id: `burnRate-${token.contractHash}`,
+      type: "burnRate",
+      label: `Set burn rate to ${(burnBps / 100).toFixed(2)}%`,
+      payload: { basisPoints: burnBps },
+    });
+  }
+
+  function handleStageCreatorFee() {
+    const gasValue = Number(creatorFeeGas);
+    if (Number.isNaN(gasValue) || gasValue < 0 || gasValue > 0.05) return;
+    onStageChange?.({
+      id: `creatorFee-${token.contractHash}`,
+      type: "creatorFee",
+      label: `Set creator fee to ${gasValue.toFixed(3)} GAS`,
+      payload: { datoshi: Math.round(gasValue * 100_000_000) },
+    });
+  }
+
+  function handleStageMode() {
+    if (!modeChangeValid || mode === initialMode) return;
+    onStageChange?.({
+      id: `mode-${token.contractHash}`,
+      type: "mode",
+      label: `Change mode ${initialMode} -> ${mode}`,
+      payload: { mode },
+    });
+  }
+
   return (
     <section className="space-y-6" aria-label="Admin Properties Tab">
       <div className="space-y-2">
@@ -151,14 +183,23 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted }: Props)
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
         {burnError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{burnError}</p>}
-        <button
-          onClick={handleSetBurnRate}
-          disabled={savingBurn}
-          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))", color: "var(--forge-text-primary)" }}
-        >
-          {savingBurn ? "Saving..." : "Set Burn Rate"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSetBurnRate}
+            disabled={savingBurn}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))", color: "var(--forge-text-primary)" }}
+          >
+            {savingBurn ? "Saving..." : "Set Burn Rate"}
+          </button>
+          <button
+            onClick={handleStageBurnRate}
+            className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Stage
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -175,14 +216,23 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted }: Props)
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
         {feeError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{feeError}</p>}
-        <button
-          onClick={handleSetCreatorFee}
-          disabled={savingFee}
-          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-        >
-          {savingFee ? "Saving..." : "Set Creator Fee"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSetCreatorFee}
+            disabled={savingFee}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            {savingFee ? "Saving..." : "Set Creator Fee"}
+          </button>
+          <button
+            onClick={handleStageCreatorFee}
+            className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Stage
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -208,14 +258,24 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted }: Props)
           Mode transitions are permanent.
         </p>
         {modeError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{modeError}</p>}
-        <button
-          onClick={handleChangeMode}
-          disabled={savingMode || !modeChangeValid || mode === initialMode}
-          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-        >
-          {savingMode ? "Saving..." : "Change Mode"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleChangeMode}
+            disabled={savingMode || !modeChangeValid || mode === initialMode}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            {savingMode ? "Saving..." : "Change Mode"}
+          </button>
+          <button
+            onClick={handleStageMode}
+            disabled={!modeChangeValid || mode === initialMode}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Stage
+          </button>
+        </div>
       </div>
     </section>
   );

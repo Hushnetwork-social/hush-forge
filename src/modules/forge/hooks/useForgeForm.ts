@@ -1,12 +1,5 @@
 /**
- * useForgeForm — Manages the Forge token creation form.
- *
- * Responsibilities:
- * - Controlled form fields with setters (symbol auto-uppercased)
- * - On-submit validation (field errors map)
- * - Fee fetch on mount (fetchCreationFee)
- * - GAS sufficiency check derived from gasBalance prop vs fee + 10% buffer
- * - TX submission orchestration via ForgeService.submitForge()
+ * useForgeForm - Manages the Forge token creation form.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -14,14 +7,9 @@ import { WalletRejectedError } from "../neo-dapi-adapter";
 import { fetchCreationFee, submitForge, type GasBalanceCheck } from "../forge-service";
 import type { ForgeParams } from "../types";
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
 export type ImagePreviewState = "idle" | "loading" | "ok" | "error";
 
 export interface UseForgeFormResult {
-  // Form fields
   name: string;
   setName: (v: string) => void;
   symbol: string;
@@ -33,94 +21,72 @@ export interface UseForgeFormResult {
   imageUrl: string;
   setImageUrl: (v: string) => void;
   imagePreview: ImagePreviewState;
+  creatorFee: string;
+  setCreatorFee: (v: string) => void;
 
-  // Validation
   errors: Record<string, string>;
-  /** Call on any field blur to surface errors before the user clicks FORGE */
   validateForm: () => void;
 
-  // Fee
   creationFeeDatoshi: bigint;
   creationFeeDisplay: string;
   feeLoading: boolean;
 
-  // GAS balance check
   gasCheckResult: GasBalanceCheck | null;
 
-  // Submit
   submitting: boolean;
   submittedTxHash: string | null;
   submitError: string | null;
   submit: () => Promise<void>;
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
-
-/**
- * @param address  - Connected wallet address (used implicitly by submitForge via dAPI state)
- * @param gasBalance - GAS balance in datoshi, from useWallet().gasBalance
- */
 export function useForgeForm(
   _address: string | null,
   gasBalance: bigint
 ): UseForgeFormResult {
-  // Form fields
   const [name, setName] = useState("");
   const [symbol, setSymbolRaw] = useState("");
   const [supply, setSupply] = useState("");
   const [decimals, setDecimals] = useState("8");
   const [imageUrl, setImageUrl] = useState("");
   const [imagePreview, setImagePreview] = useState<ImagePreviewState>("idle");
+  const [creatorFee, setCreatorFee] = useState("0");
 
-  // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Fee state
   const [creationFeeDatoshi, setCreationFeeDatoshi] = useState(0n);
   const [creationFeeDisplay, setCreationFeeDisplay] = useState("15");
   const [feeLoading, setFeeLoading] = useState(true);
 
-  // Submit state
   const [submitting, setSubmitting] = useState(false);
   const [submittedTxHash, setSubmittedTxHash] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Auto-uppercase symbol setter
   const setSymbol = (v: string) => setSymbolRaw(v.toUpperCase());
 
-  // Fetch fee once on mount
   useEffect(() => {
     fetchCreationFee()
       .then((fee) => {
         setCreationFeeDatoshi(fee.datoshi);
         setCreationFeeDisplay(fee.displayGas);
       })
-      .catch(() => {
-        // fetchCreationFee already falls back to 15 GAS internally;
-        // this catch guards against unexpected rejections to prevent
-        // feeLoading from hanging forever.
-      })
+      .catch(() => {})
       .finally(() => {
         setFeeLoading(false);
       });
   }, []);
 
-  // Image URL probe — debounced 600ms, uses Image() constructor (not <img onError>)
-  // so browser negative-cache doesn't prevent re-probing on change.
   useEffect(() => {
     const trimmed = imageUrl.trim();
     if (!trimmed) {
       setImagePreview("idle");
       return;
     }
+
     setImagePreview("loading");
     const timer = setTimeout(() => {
       const img = new Image();
       img.onload = () => setImagePreview("ok");
       img.onerror = () => {
-        // Retry once with cache-buster
         const retry = new Image();
         retry.onload = () => setImagePreview("ok");
         retry.onerror = () => setImagePreview("error");
@@ -128,10 +94,10 @@ export function useForgeForm(
       };
       img.src = trimmed;
     }, 600);
+
     return () => clearTimeout(timer);
   }, [imageUrl]);
 
-  // GAS sufficiency check — recomputed whenever fee or gasBalance changes
   const gasCheckResult = useMemo<GasBalanceCheck | null>(() => {
     if (feeLoading) return null;
     const required = creationFeeDatoshi + creationFeeDatoshi / 10n;
@@ -141,10 +107,6 @@ export function useForgeForm(
       required,
     };
   }, [feeLoading, creationFeeDatoshi, gasBalance]);
-
-  // ---------------------------------------------------------------------------
-  // Validation
-  // ---------------------------------------------------------------------------
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
@@ -158,23 +120,12 @@ export function useForgeForm(
     }
 
     const supplyNum = Number(supply);
-    if (
-      !supply ||
-      isNaN(supplyNum) ||
-      supplyNum <= 0 ||
-      !Number.isInteger(supplyNum)
-    ) {
+    if (!supply || Number.isNaN(supplyNum) || supplyNum <= 0 || !Number.isInteger(supplyNum)) {
       errs.supply = "Supply must be a positive integer";
     }
 
     const decimalsNum = Number(decimals);
-    if (
-      decimals === "" ||
-      isNaN(decimalsNum) ||
-      decimalsNum < 0 ||
-      decimalsNum > 18 ||
-      !Number.isInteger(decimalsNum)
-    ) {
+    if (decimals === "" || Number.isNaN(decimalsNum) || decimalsNum < 0 || decimalsNum > 18 || !Number.isInteger(decimalsNum)) {
       errs.decimals = "Decimals must be an integer between 0 and 18";
     }
 
@@ -182,52 +133,47 @@ export function useForgeForm(
       errs.imageUrl = "Must be a valid http/https URL";
     }
 
+    const creatorFeeNum = Number(creatorFee);
+    if (creatorFee.trim() !== "" && (Number.isNaN(creatorFeeNum) || creatorFeeNum < 0 || creatorFeeNum > 0.05)) {
+      errs.creatorFee = "Maximum 0.05 GAS";
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
-  // ---------------------------------------------------------------------------
-  // Submit orchestration
-  // ---------------------------------------------------------------------------
-
   async function submit() {
-    console.log("[forge] submit() — name:", name, "symbol:", symbol, "supply:", supply, "decimals:", decimals);
-    if (!validate()) {
-      console.warn("[forge] validation failed — aborting");
-      return;
-    }
+    if (!validate()) return;
 
     setSubmitting(true);
     setSubmitError(null);
 
     try {
       const decimalsNum = Number(decimals);
+      const creatorFeeGas = creatorFee.trim() === "" ? 0 : Number(creatorFee);
+
       const params: ForgeParams = {
         name: name.trim(),
         symbol,
-        // supply field is in display units — convert to raw (smallest) units
         supply: BigInt(supply) * (10n ** BigInt(decimalsNum)),
         decimals: decimalsNum,
         mode: "community",
         imageUrl: imageUrl.trim() || undefined,
+        creatorFeeRate: Math.round(creatorFeeGas * 100_000_000),
       };
-      console.log("[forge] calling submitForge — params:", params, "fee datoshi:", creationFeeDatoshi.toString());
+
       const txHash = await submitForge(params, creationFeeDatoshi);
-      console.log("[forge] TX submitted — txHash:", txHash);
       setSubmittedTxHash(txHash);
     } catch (err) {
-      console.error("[forge] submit error:", err);
       if (err instanceof WalletRejectedError) {
         setSubmitError("Transaction cancelled. Please try again.");
       } else {
-        // Serialize non-Error objects so the user sees something useful
         const msg =
           err instanceof Error
             ? err.message
             : typeof err === "object" && err !== null
               ? JSON.stringify(err)
               : String(err);
-        console.error("[forge] error message to display:", msg);
         setSubmitError(msg);
       }
     } finally {
@@ -247,6 +193,8 @@ export function useForgeForm(
     imageUrl,
     setImageUrl,
     imagePreview,
+    creatorFee,
+    setCreatorFee,
     errors,
     validateForm: validate,
     creationFeeDatoshi,

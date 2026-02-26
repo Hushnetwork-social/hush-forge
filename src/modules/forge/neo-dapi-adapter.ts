@@ -386,6 +386,7 @@ export async function invokeForge(
           { type: "Integer", value: params.decimals.toString() },
           { type: "String", value: params.mode },
           { type: "String", value: params.imageUrl ?? "" },
+          { type: "Integer", value: String(params.creatorFeeRate ?? 0) },
         ],
       },
     ],

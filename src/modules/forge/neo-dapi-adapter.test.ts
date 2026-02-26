@@ -185,7 +185,7 @@ describe("invokeForge", () => {
     expect(txid).toBe("0xtestTxId");
   });
 
-  it("sends data array with 6 elements including 'community' and imageUrl", async () => {
+  it("sends data array with 7 elements including creatorFeeRate", async () => {
     const capturedArgs: unknown[] = [];
     const instance = makeMockDapi({
       invoke: vi.fn().mockImplementation((params: { args: unknown[] }) => {
@@ -202,11 +202,13 @@ describe("invokeForge", () => {
     // The 4th arg (index 3) is the data Array
     const dataArg = capturedArgs[3] as { type: string; value: unknown[] };
     expect(dataArg.type).toBe("Array");
-    expect(dataArg.value).toHaveLength(6);
+    expect(dataArg.value).toHaveLength(7);
     expect((dataArg.value[4] as { value: unknown }).value).toBe("community");
     // index 5 = imageUrl — defaults to "" when not provided
     expect((dataArg.value[5] as { type: string; value: unknown }).type).toBe("String");
     expect((dataArg.value[5] as { value: unknown }).value).toBe("");
+    expect((dataArg.value[6] as { type: string; value: unknown }).type).toBe("Integer");
+    expect((dataArg.value[6] as { value: unknown }).value).toBe("0");
   });
 
   it("throws WalletRejectedError on CANCELED type", async () => {
@@ -349,3 +351,4 @@ describe("lifecycle invoke functions", () => {
     expect(call.signers[0].scopes).toBe("Global");
   });
 });
+

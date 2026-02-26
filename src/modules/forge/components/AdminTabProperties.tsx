@@ -17,6 +17,11 @@ interface Props {
   onStageChange?: (change: StagedChange) => void;
 }
 
+interface InfoHintProps {
+  label: string;
+  hint: string;
+}
+
 const VALID_TRANSITIONS: Record<string, string[]> = {
   community: ["speculative", "crowdfund"],
   speculative: ["community"],
@@ -27,6 +32,26 @@ function toErrorMessage(err: unknown): string {
   if (err instanceof WalletRejectedError) return "Transaction cancelled.";
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+function InfoHint({ label, hint }: InfoHintProps) {
+  return (
+    <h4 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--forge-text-primary)" }}>
+      <span>{label}</span>
+      <span
+        aria-label={`${label} help`}
+        title={hint}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold cursor-help"
+        style={{
+          border: "1px solid var(--forge-border-medium)",
+          color: "var(--forge-text-muted)",
+          background: "rgba(255,255,255,0.04)",
+        }}
+      >
+        i
+      </span>
+    </h4>
+  );
 }
 
 export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
@@ -50,6 +75,16 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
   );
 
   const modeChangeValid = mode === initialMode || allowedTransitions.includes(mode);
+  const creatorFeeValue = Number(creatorFeeGas);
+  const creatorFeeValid =
+    creatorFeeGas.trim() !== "" &&
+    !Number.isNaN(creatorFeeValue) &&
+    creatorFeeValue >= 0 &&
+    creatorFeeValue <= 0.05;
+  const feeValidationMessage =
+    creatorFeeGas.trim() !== "" && !creatorFeeValid
+      ? "Creator transfer fee must be between 0 and 0.05 GAS."
+      : null;
 
   function onSliderChange(value: number) {
     setBurnBps(value);
@@ -89,16 +124,15 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
       return;
     }
 
-    const gasValue = Number(creatorFeeGas);
-    if (Number.isNaN(gasValue) || gasValue < 0 || gasValue > 0.05) {
-      setFeeError("Maximum 0.05 GAS");
+    if (!creatorFeeValid) {
+      setFeeError("Creator transfer fee must be between 0 and 0.05 GAS.");
       return;
     }
 
     setSavingFee(true);
     setFeeError(null);
     try {
-      const datoshi = Math.round(gasValue * 100_000_000);
+      const datoshi = Math.round(creatorFeeValue * 100_000_000);
       const txHash = await invokeSetCreatorFee(factoryHash, token.contractHash, datoshi);
       onTxSubmitted(txHash, "Setting creator fee...");
     } catch (err) {
@@ -141,13 +175,12 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
   }
 
   function handleStageCreatorFee() {
-    const gasValue = Number(creatorFeeGas);
-    if (Number.isNaN(gasValue) || gasValue < 0 || gasValue > 0.05) return;
+    if (!creatorFeeValid) return;
     onStageChange?.({
       id: `creatorFee-${token.contractHash}`,
       type: "creatorFee",
-      label: `Set creator fee to ${gasValue.toFixed(3)} GAS`,
-      payload: { datoshi: Math.round(gasValue * 100_000_000) },
+      label: `Set creator fee to ${creatorFeeValue.toFixed(3)} GAS`,
+      payload: { datoshi: Math.round(creatorFeeValue * 100_000_000) },
     });
   }
 
@@ -164,7 +197,10 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
   return (
     <section className="space-y-6" aria-label="Admin Properties Tab">
       <div className="space-y-2">
-        <h4 className="text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>Burn Rate</h4>
+        <InfoHint
+          label="Burn Rate"
+          hint="Percentage of every transfer that is permanently burned. 100 bps = 1.00% and the allowed range is 0% to 10%."
+        />
         <input
           aria-label="Burn rate slider"
           type="range"
@@ -182,6 +218,9 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
           className="w-full rounded-lg px-3 py-2 text-sm"
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
+        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+          Transfer burn rate in percent (0.00 to 10.00). Applies to token transfers.
+        </p>
         {burnError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{burnError}</p>}
         <div className="flex gap-2">
           <button
@@ -203,18 +242,31 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
       </div>
 
       <div className="space-y-2">
-        <h4 className="text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>Creator Transfer Fee</h4>
+        <InfoHint
+          label="Creator Transfer Fee"
+          hint="Flat fee paid in GAS on each token transfer, routed to the token creator. Allowed range is 0 to 0.05 GAS."
+        />
         <input
           aria-label="Creator fee input"
-          type="number"
-          min={0}
-          max={0.05}
-          step={0.001}
+          type="text"
+          inputMode="decimal"
           value={creatorFeeGas}
           onChange={(e) => setCreatorFeeGas(e.target.value)}
           className="w-full rounded-lg px-3 py-2 text-sm"
-          style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          style={{
+            background: "var(--forge-bg-primary)",
+            border: `1px solid ${feeError || feeValidationMessage ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+            color: "var(--forge-text-primary)",
+          }}
         />
+        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+          Fee per transfer in GAS (0 to 0.05). Example: 0.010 means 0.01 GAS charged on each transfer.
+        </p>
+        {feeValidationMessage && (
+          <p className="text-xs" style={{ color: "var(--forge-error)" }}>
+            {feeValidationMessage}
+          </p>
+        )}
         {feeError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{feeError}</p>}
         <div className="flex gap-2">
           <button
@@ -236,7 +288,10 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
       </div>
 
       <div className="space-y-2">
-        <h4 className="text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>Token Mode</h4>
+        <InfoHint
+          label="Token Mode"
+          hint="Controls token behavior profile. Some transitions are one-way and cannot be undone."
+        />
         <select
           aria-label="Mode selector"
           value={mode}
@@ -255,7 +310,7 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
           })}
         </select>
         <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-          Mode transitions are permanent.
+          Mode transitions are permanent and may unlock or disable protocol features.
         </p>
         {modeError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{modeError}</p>}
         <div className="flex gap-2">

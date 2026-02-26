@@ -63,11 +63,10 @@ describe("AdminTabProperties", () => {
     expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Setting burn rate...");
   });
 
-  it("creator fee over max shows validation", () => {
+  it("creator fee over max shows validation with GAS units", () => {
     render(<AdminTabProperties token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Creator fee input"), { target: { value: "0.1" } });
-    fireEvent.click(screen.getByRole("button", { name: /Set Creator Fee/i }));
-    expect(screen.getByText("Maximum 0.05 GAS")).toBeInTheDocument();
+    expect(screen.getByText("Creator transfer fee must be between 0 and 0.05 GAS.")).toBeInTheDocument();
   });
 
   it("mode transition calls invokeChangeMode", async () => {

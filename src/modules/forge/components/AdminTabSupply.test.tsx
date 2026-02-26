@@ -5,7 +5,9 @@ import type { TokenInfo } from "../types";
 
 const invokeMintTokens = vi.fn();
 const invokeSetMaxSupply = vi.fn();
+const getAddress = vi.fn();
 vi.mock("../neo-dapi-adapter", () => ({
+  getAddress: () => getAddress(),
   invokeMintTokens: (...args: unknown[]) => invokeMintTokens(...args),
   invokeSetMaxSupply: (...args: unknown[]) => invokeSetMaxSupply(...args),
   WalletRejectedError: class WalletRejectedError extends Error {},
@@ -38,6 +40,8 @@ describe("AdminTabSupply", () => {
   beforeEach(() => {
     invokeMintTokens.mockReset();
     invokeSetMaxSupply.mockReset();
+    getAddress.mockReset();
+    getAddress.mockReturnValue("NwAdmin");
   });
 
   it("mint calls invokeMintTokens", async () => {
@@ -86,5 +90,20 @@ describe("AdminTabSupply", () => {
 
     fireEvent.change(screen.getByLabelText("New max supply"), { target: { value: "1.5" } });
     expect(screen.getByRole("button", { name: /Set Max Supply/i })).toBeDisabled();
+  });
+
+  it("fills recipient with connected administrator wallet", () => {
+    render(<AdminTabSupply token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Mint to administrator wallet/i }));
+    expect(screen.getByLabelText("Recipient address")).toHaveValue("NwAdmin");
+  });
+
+  it("shows helper error when no administrator wallet is connected", () => {
+    getAddress.mockReturnValueOnce(null);
+    render(<AdminTabSupply token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Mint to administrator wallet/i }));
+    expect(screen.getByText("Connect an administrator wallet first.")).toBeInTheDocument();
   });
 });

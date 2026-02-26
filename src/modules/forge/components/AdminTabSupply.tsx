@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import { addressToHash160 } from "../neo-rpc-client";
 import {
+  getAddress,
   invokeMintTokens,
   invokeSetMaxSupply,
   WalletRejectedError,
 } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
+import { InfoHint } from "./InfoHint";
 
 interface Props {
   token: TokenInfo;
@@ -93,6 +95,7 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
     maxSupplyParsed !== null &&
     maxSupplyParsed >= 0n &&
     (maxSupplyParsed === 0n || maxSupplyParsed > token.supply);
+  const adminAddress = getAddress();
 
   async function handleMint() {
     if (!factoryHash) {
@@ -168,6 +171,15 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
     });
   }
 
+  function handleUseAdminWallet() {
+    if (!adminAddress) {
+      setMintError("Connect an administrator wallet first.");
+      return;
+    }
+    setMintError(null);
+    setRecipient(adminAddress);
+  }
+
   return (
     <section className="space-y-5" aria-label="Admin Supply Tab">
       <div className="text-sm" style={{ color: "var(--forge-text-muted)" }}>
@@ -176,7 +188,10 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
       </div>
 
       <div className="space-y-2">
-        <h4 className="text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>Mint Tokens</h4>
+        <InfoHint
+          label="Mint Tokens"
+          hint="Mint creates new tokens and sends them to the recipient wallet you provide. Use the administrator shortcut to mint directly to the connected admin wallet."
+        />
         <input
           aria-label="Recipient address"
           placeholder="Recipient address"
@@ -193,8 +208,18 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
           className="w-full rounded-lg px-3 py-2 text-sm"
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
+        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+          Mint sends new {token.symbol} tokens to the recipient wallet address.
+        </p>
         {mintError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{mintError}</p>}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleUseAdminWallet}
+            className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Mint to administrator wallet
+          </button>
           <button
             onClick={handleMint}
             disabled={!recipientValid || !mintAmountValid || minting}
@@ -215,7 +240,10 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
       </div>
 
       <div className="space-y-2">
-        <h4 className="text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>Max Supply Cap</h4>
+        <InfoHint
+          label="Max Supply Cap"
+          hint="Hard cap of total token supply. Set 0 to remove the cap. Enter whole tokens (example: 1000000 or 1.000.000). Value must be 0 or greater than current supply."
+        />
         <input
           aria-label="New max supply"
           placeholder="New Max Supply (0 = uncapped)"
@@ -224,9 +252,6 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
           className="w-full rounded-lg px-3 py-2 text-sm"
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
-        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-          Enter whole tokens. Supports formats like `1000000` or `1.000.000`.
-        </p>
         {!maxSupplyValid && (
           <p className="text-xs" style={{ color: "var(--forge-error)" }}>
             Must be greater than current supply, or 0 to remove the cap

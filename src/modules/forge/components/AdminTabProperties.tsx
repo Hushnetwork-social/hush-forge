@@ -9,17 +9,13 @@ import {
 } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
+import { InfoHint } from "./InfoHint";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
   onStageChange?: (change: StagedChange) => void;
-}
-
-interface InfoHintProps {
-  label: string;
-  hint: string;
 }
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -32,26 +28,6 @@ function toErrorMessage(err: unknown): string {
   if (err instanceof WalletRejectedError) return "Transaction cancelled.";
   if (err instanceof Error) return err.message;
   return String(err);
-}
-
-function InfoHint({ label, hint }: InfoHintProps) {
-  return (
-    <h4 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--forge-text-primary)" }}>
-      <span>{label}</span>
-      <span
-        aria-label={`${label} help`}
-        title={hint}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold cursor-help"
-        style={{
-          border: "1px solid var(--forge-border-medium)",
-          color: "var(--forge-text-muted)",
-          background: "rgba(255,255,255,0.04)",
-        }}
-      >
-        i
-      </span>
-    </h4>
-  );
 }
 
 export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { invokeUpdateMetadata, WalletRejectedError } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
+import { InfoHint } from "./InfoHint";
 
 interface Props {
   token: TokenInfo;
@@ -102,9 +103,13 @@ export function AdminTabIdentity({ token, factoryHash, onTxSubmitted, onStageCha
       </div>
 
       <div>
-        <label htmlFor="admin-image-url" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-          Image URL
-        </label>
+        <div className="mb-1">
+          <InfoHint
+            label="Image URL"
+            htmlFor="admin-image-url"
+            hint="Token icon URL. Recommended square PNG/WebP/JPG, ideally 512x512 px. Keep hosted file size under 2 MB for fast loading."
+          />
+        </div>
         <input
           id="admin-image-url"
           value={imageUrl}
@@ -119,6 +124,9 @@ export function AdminTabIdentity({ token, factoryHash, onTxSubmitted, onStageCha
             border: "1px solid var(--forge-border-medium)",
           }}
         />
+        <p className="text-xs mt-2" style={{ color: "var(--forge-text-muted)" }}>
+          Recommended: square icon (512x512), PNG/WebP/JPG, hosted file under 2 MB.
+        </p>
 
         {canPreview && (
           <div className="mt-2">

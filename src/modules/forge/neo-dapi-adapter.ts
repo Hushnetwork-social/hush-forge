@@ -371,12 +371,11 @@ export async function invokeForge(
   console.log("[dapi] invokeForge — factoryHash:", factoryHash, "feeAmount:", feeAmount.toString());
   console.log("[dapi] invokeForge — params:", params);
 
-  // For GAS.transfer via NeoLine, sender Hash160/signer is more compatible when
-  // provided as the wallet address string (NeoLine normalizes it internally).
-  const fromAccount = _connectedAddress!;
+  // GAS.transfer expects the sender hash160; use script hash and keep signer
+  // scope conservative for NeoLine compatibility.
+  const fromAccount = addressToScriptHash(_connectedAddress!);
 
   const invokeArgs = {
-    ...(_activeNetwork ? { network: _activeNetwork } : {}),
     scriptHash: "0xd2a4cff31913016155e38e474a2c06d08be276cf", // GAS hash
     operation: "transfer",
     args: [
@@ -396,9 +395,7 @@ export async function invokeForge(
         ],
       },
     ],
-    // Keep forge signer format aligned with lifecycle invokes, which NeoLine
-    // private-net accepts consistently.
-    signers: [{ account: fromAccount, scopes: "Global" as const }],
+    signers: [{ account: fromAccount, scopes: "CalledByEntry" as const }],
     description: `Forge token: ${params.name} (${params.symbol})`,
   };
 

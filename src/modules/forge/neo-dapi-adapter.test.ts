@@ -185,7 +185,7 @@ describe("invokeForge", () => {
     expect(txid).toBe("0xtestTxId");
   });
 
-  it("invokeForge uses Global signer scope", async () => {
+  it("invokeForge uses CalledByEntry signer scope", async () => {
     const instance = makeMockDapi();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
@@ -195,7 +195,7 @@ describe("invokeForge", () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { signers: { scopes: string }[] };
-    expect(call.signers[0].scopes).toBe("Global");
+    expect(call.signers[0].scopes).toBe("CalledByEntry");
   });
 
   it("sends data array with 7 elements including creatorFeeRate", async () => {

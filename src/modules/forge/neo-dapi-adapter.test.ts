@@ -278,14 +278,14 @@ describe("lifecycle invoke functions", () => {
     return instance;
   }
 
-  it("invokeUpdateMetadata calls factory with operation UpdateTokenMetadata", async () => {
+  it("invokeUpdateMetadata calls factory with operation updateTokenMetadata", async () => {
     const instance = await connectMock();
     const txid = await invokeUpdateMetadata("0xfactory", "0xtoken", "https://img.png");
     expect(txid).toBe("0xtestTxId");
     expect(instance.invoke).toHaveBeenCalledWith(
       expect.objectContaining({
         scriptHash: "0xfactory",
-        operation: "UpdateTokenMetadata",
+        operation: "updateTokenMetadata",
       })
     );
   });
@@ -295,7 +295,7 @@ describe("lifecycle invoke functions", () => {
     await invokeMintTokens("0xfactory", "0xtoken", "NwTestAddress", 500n);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: string }[] };
-    expect(call.operation).toBe("MintTokens");
+    expect(call.operation).toBe("mintTokens");
     expect(call.args[2]).toEqual({ type: "Integer", value: "500" });
   });
 
@@ -304,7 +304,7 @@ describe("lifecycle invoke functions", () => {
     await invokeSetBurnRate("0xfactory", "0xtoken", 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: string }[] };
-    expect(call.operation).toBe("SetTokenBurnRate");
+    expect(call.operation).toBe("setTokenBurnRate");
     expect(call.args[1]).toEqual({ type: "Integer", value: "200" });
   });
 
@@ -313,15 +313,15 @@ describe("lifecycle invoke functions", () => {
     await invokeSetMaxSupply("0xfactory", "0xtoken", 1_000_000n);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: string }[] };
-    expect(call.operation).toBe("SetTokenMaxSupply");
+    expect(call.operation).toBe("setTokenMaxSupply");
     expect(call.args[1]).toEqual({ type: "Integer", value: "1000000" });
   });
 
-  it("invokeSetCreatorFee calls factory with operation SetCreatorFee", async () => {
+  it("invokeSetCreatorFee calls factory with operation setCreatorFee", async () => {
     const instance = await connectMock();
     await invokeSetCreatorFee("0xfactory", "0xtoken", 5_000_000);
     expect(instance.invoke).toHaveBeenCalledWith(
-      expect.objectContaining({ operation: "SetCreatorFee" })
+      expect.objectContaining({ operation: "setCreatorFee" })
     );
   });
 
@@ -330,16 +330,16 @@ describe("lifecycle invoke functions", () => {
     await invokeChangeMode("0xfactory", "0xtoken", "speculation", []);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: unknown }[] };
-    expect(call.operation).toBe("ChangeTokenMode");
+    expect(call.operation).toBe("changeTokenMode");
     expect(call.args[1]).toEqual({ type: "String", value: "speculation" });
     expect(call.args[2].type).toBe("Array");
   });
 
-  it("invokeLockToken calls factory with operation LockToken", async () => {
+  it("invokeLockToken calls factory with operation lockToken", async () => {
     const instance = await connectMock();
     await invokeLockToken("0xfactory", "0xtoken");
     expect(instance.invoke).toHaveBeenCalledWith(
-      expect.objectContaining({ operation: "LockToken" })
+      expect.objectContaining({ operation: "lockToken" })
     );
   });
 

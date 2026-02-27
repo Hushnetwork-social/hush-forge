@@ -546,7 +546,7 @@ export async function addNEP17Token(
 // ---------------------------------------------------------------------------
 
 /**
- * Calls UpdateTokenMetadata on the factory to update a token's image URL.
+ * Calls updateTokenMetadata on the factory to update a token's image URL.
  * Throws WalletRejectedError if the user cancels.
  */
 export async function invokeUpdateMetadata(
@@ -558,7 +558,7 @@ export async function invokeUpdateMetadata(
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
-      operation: "UpdateTokenMetadata",
+      operation: "updateTokenMetadata",
       args: [
         { type: "Hash160", value: tokenHash },
         { type: "String", value: imageUrl },
@@ -574,7 +574,7 @@ export async function invokeUpdateMetadata(
 }
 
 /**
- * Calls MintTokens on the factory to mint additional supply to a recipient.
+ * Calls mintTokens on the factory to mint additional supply to a recipient.
  * Throws WalletRejectedError if the user cancels.
  */
 export async function invokeMintTokens(
@@ -587,7 +587,7 @@ export async function invokeMintTokens(
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
-      operation: "MintTokens",
+      operation: "mintTokens",
       args: [
         { type: "Hash160", value: tokenHash },
         { type: "Hash160", value: addressToScriptHash(to) },
@@ -604,7 +604,7 @@ export async function invokeMintTokens(
 }
 
 /**
- * Calls SetTokenBurnRate on the factory.
+ * Calls setTokenBurnRate on the factory.
  * basisPoints: 0–1000 (0 = no burn, 1000 = 10%).
  * Throws WalletRejectedError if the user cancels.
  */
@@ -617,7 +617,7 @@ export async function invokeSetBurnRate(
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
-      operation: "SetTokenBurnRate",
+      operation: "setTokenBurnRate",
       args: [
         { type: "Hash160", value: tokenHash },
         { type: "Integer", value: basisPoints.toString() },
@@ -633,7 +633,7 @@ export async function invokeSetBurnRate(
 }
 
 /**
- * Calls SetTokenMaxSupply on the factory.
+ * Calls setTokenMaxSupply on the factory.
  * newMax: 0 = uncapped.
  * Throws WalletRejectedError if the user cancels.
  */
@@ -646,7 +646,7 @@ export async function invokeSetMaxSupply(
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
-      operation: "SetTokenMaxSupply",
+      operation: "setTokenMaxSupply",
       args: [
         { type: "Hash160", value: tokenHash },
         { type: "Integer", value: newMax.toString() },
@@ -662,7 +662,7 @@ export async function invokeSetMaxSupply(
 }
 
 /**
- * Calls SetCreatorFee on the factory.
+ * Calls setCreatorFee on the factory.
  * datoshi: fee per transfer in datoshi (1 GAS = 100,000,000 datoshi).
  * Throws WalletRejectedError if the user cancels.
  */
@@ -675,7 +675,7 @@ export async function invokeSetCreatorFee(
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
-      operation: "SetCreatorFee",
+      operation: "setCreatorFee",
       args: [
         { type: "Hash160", value: tokenHash },
         { type: "Integer", value: datoshi.toString() },
@@ -691,7 +691,7 @@ export async function invokeSetCreatorFee(
 }
 
 /**
- * Calls ChangeTokenMode on the factory.
+ * Calls changeTokenMode on the factory.
  * newMode: "community" | "speculation" | "crowdfunding"
  * params: mode-specific parameters (serialized as strings).
  * Throws WalletRejectedError if the user cancels.
@@ -706,7 +706,7 @@ export async function invokeChangeMode(
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
-      operation: "ChangeTokenMode",
+      operation: "changeTokenMode",
       args: [
         { type: "Hash160", value: tokenHash },
         { type: "String", value: newMode },
@@ -726,7 +726,7 @@ export async function invokeChangeMode(
 }
 
 /**
- * Calls LockToken on the factory — permanently and irreversibly locks the token.
+ * Calls lockToken on the factory — permanently and irreversibly locks the token.
  * Throws WalletRejectedError if the user cancels.
  */
 export async function invokeLockToken(
@@ -737,7 +737,7 @@ export async function invokeLockToken(
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
-      operation: "LockToken",
+      operation: "lockToken",
       args: [
         { type: "Hash160", value: tokenHash },
       ],

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ForgeHeader } from "@/components/layout/ForgeHeader";
 import { TokenDetail } from "@/modules/forge/components/TokenDetail";
-import { UpdateOverlay } from "@/modules/forge/components/UpdateOverlay";
 import { WaitingOverlay } from "@/modules/forge/components/WaitingOverlay";
 import {
   ForgeSuccessToast,
@@ -17,7 +16,6 @@ import { useTokenDetail } from "@/modules/forge/hooks/useTokenDetail";
 
 type PageView =
   | "detail"
-  | "update-overlay"
   | "waiting-for-tx"
   | "show-success-toaster"
   | "show-error-toaster";
@@ -32,6 +30,7 @@ export default function TokenDetailPage() {
 
   const [view, setView] = useState<PageView>("detail");
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
+  const [pendingTxMessage, setPendingTxMessage] = useState<string>("Processing...");
   const [toastError, setToastError] = useState<string | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
 
@@ -39,15 +38,11 @@ export default function TokenDetailPage() {
     view === "waiting-for-tx" ? pendingTxHash : null
   );
 
-  // React to TX polling result
   useEffect(() => {
     if (view !== "waiting-for-tx") return;
     if (polling.status === "confirmed") {
       queueMicrotask(() => setView("show-success-toaster"));
-    } else if (
-      polling.status === "faulted" ||
-      polling.status === "timeout"
-    ) {
+    } else if (polling.status === "faulted" || polling.status === "timeout") {
       const err = polling.error ?? "Transaction failed.";
       queueMicrotask(() => {
         setToastError(err);
@@ -56,8 +51,9 @@ export default function TokenDetailPage() {
     }
   }, [view, polling]);
 
-  function handleTxSubmitted(txHash: string) {
+  function handleTxSubmitted(txHash: string, message: string) {
     setPendingTxHash(txHash);
+    setPendingTxMessage(message);
     setView("waiting-for-tx");
   }
 
@@ -65,29 +61,12 @@ export default function TokenDetailPage() {
     <>
       <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
 
-      <main
-        className="min-h-screen"
-        style={{ background: "var(--forge-bg-primary)" }}
-      >
-        <TokenDetail
-          contractHash={hash}
-          onUpdateClick={() => setView("update-overlay")}
-        />
+      <main className="min-h-screen" style={{ background: "var(--forge-bg-primary)" }}>
+        <TokenDetail contractHash={hash} onTxSubmitted={handleTxSubmitted} />
       </main>
 
-      {view === "update-overlay" && token && (
-        <UpdateOverlay
-          token={token}
-          onTxSubmitted={handleTxSubmitted}
-          onClose={() => setView("detail")}
-        />
-      )}
-
       {view === "waiting-for-tx" && pendingTxHash && (
-        <WaitingOverlay
-          txHash={pendingTxHash}
-          message="Updating your token…"
-        />
+        <WaitingOverlay txHash={pendingTxHash} message={pendingTxMessage} />
       )}
 
       {view === "show-success-toaster" && token && (

@@ -1,12 +1,12 @@
 Feature: Update Token
 
-  Scenario: Update overlay opens from token detail page
+  Scenario: Token administration panel is available for creator tokens
     Given the user is on the detail page of their own upgradeable token
-    When the user clicks "Update Token"
-    Then the UpdateOverlay modal is visible
+    Then the Token Administration panel is visible
+    And the panel shows tabs Identity, Supply, Properties, and Danger Zone
 
-  Scenario: Update form is pre-filled with current token values
-    Given the UpdateOverlay is open for an own upgradeable token
-    Then the name field is pre-filled
-    And the other fields show the current on-chain values
-
+  Scenario: Identity change can be staged from the admin panel
+    Given the user is on the detail page of their own upgradeable token
+    When the user updates the image URL field in the Identity tab
+    And the user clicks Stage for the identity change
+    Then the staged changes list contains an image URL update entry

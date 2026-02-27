@@ -1,6 +1,6 @@
 /**
  * Shared TypeScript types for the Forge token module.
- * All Neo N3 entities are strongly typed — no `any`.
+ * All Neo N3 entities are strongly typed - no `any`.
  */
 
 // ---------------------------------------------------------------------------
@@ -13,13 +13,18 @@ export interface TokenInfo {
   symbol: string;
   name: string;
   creator: string | null; // null for non-factory tokens
-  supply: bigint; // raw integer (never number — precision loss risk)
+  supply: bigint; // raw integer (never number - precision loss risk)
   decimals: number;
   mode: "community" | "speculative" | "crowdfund" | "premium" | null; // null for non-factory tokens
   tier: number | null; // null for non-factory tokens
   createdAt: number | null; // null for non-factory tokens
   isNative?: boolean; // true for NEO / GAS native contracts
   imageUrl?: string; // optional user-supplied icon URL (stored as metadataUri on TokenTemplate)
+  burnRate?: number; // basis points 0-1000; 0 = no burn
+  maxSupply?: string; // BigInt as string; "0" = uncapped
+  locked?: boolean; // true if token is permanently locked
+  mintable?: boolean; // false for fixed supply tokens (hides supply admin tab)
+  creatorFeeRate?: number; // per-transfer GAS fee in datoshi
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */
@@ -72,10 +77,11 @@ export type TxStatus =
 export interface ForgeParams {
   name: string;
   symbol: string;
-  supply: bigint; // stored as bigint — never number
+  supply: bigint; // stored as bigint - never number
   decimals: number;
   mode: "community";
-  imageUrl?: string; // optional icon URL — stored as metadataUri on the deployed TokenTemplate
+  imageUrl?: string; // optional icon URL - stored as metadataUri on the deployed TokenTemplate
+  creatorFeeRate?: number; // optional per-transfer creator fee in datoshi
 }
 
 /** User-entered parameters for updating an existing token. */

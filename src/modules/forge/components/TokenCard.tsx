@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { TokenInfo } from "../types";
 import { TokenIcon } from "./TokenIcon";
+import { BurnBadge } from "./BurnBadge";
+import { LockBadge } from "./LockBadge";
 
 interface Props {
   token: TokenInfo;
@@ -16,19 +18,17 @@ function truncateHash(hash: string): string {
 }
 
 function formatSupply(supply: bigint, decimals: number): string {
-  if (supply === 0n) return "—";
+  if (supply === 0n) return "-";
   const factor = 10n ** BigInt(decimals);
   const whole = supply / factor;
   if (whole === 0n && decimals > 0) {
-    // Supply is less than 1 whole unit — show fractional representation
     const frac = (supply % factor).toString().padStart(decimals, "0").replace(/0+$/, "");
     return `0.${frac}`;
   }
   return whole.toLocaleString();
 }
 
-
-const NEW_THRESHOLD_SECS = 86_400; // 24 hours
+const NEW_THRESHOLD_SECS = 86_400;
 
 function isNewToken(createdAt: number | null, isNative: boolean): boolean {
   if (isNative || createdAt === null) return false;
@@ -40,9 +40,7 @@ function TypeBadge({ isNative }: { isNative: boolean }) {
     <span
       className="text-xs px-1.5 py-0.5 rounded"
       style={{
-        background: isNative
-          ? "rgba(0,229,153,0.15)"
-          : "rgba(255,107,53,0.15)",
+        background: isNative ? "rgba(0,229,153,0.15)" : "rgba(255,107,53,0.15)",
         color: isNative ? "#00e599" : "var(--forge-color-primary)",
       }}
     >
@@ -51,28 +49,10 @@ function TypeBadge({ isNative }: { isNative: boolean }) {
   );
 }
 
-const MODE_CONFIG: Record<
-  string,
-  { icon: string; label: string; color: string; bg: string }
-> = {
-  community: {
-    icon: "👥",
-    label: "Community",
-    color: "#00c8d8",
-    bg: "rgba(0,180,200,0.15)",
-  },
-  crowdfund: {
-    icon: "🚀",
-    label: "Crowdfund",
-    color: "#00c050",
-    bg: "rgba(0,180,80,0.15)",
-  },
-  speculative: {
-    icon: "⚡",
-    label: "Speculative",
-    color: "#ff9600",
-    bg: "rgba(255,140,0,0.15)",
-  },
+const MODE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  community: { label: "Community", color: "#00c8d8", bg: "rgba(0,180,200,0.15)" },
+  crowdfund: { label: "Crowdfund", color: "#00c050", bg: "rgba(0,180,80,0.15)" },
+  speculative: { label: "Speculative", color: "#ff9600", bg: "rgba(255,140,0,0.15)" },
 };
 
 function ModeBadge({ mode }: { mode: string }) {
@@ -83,7 +63,7 @@ function ModeBadge({ mode }: { mode: string }) {
       className="text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1"
       style={{ background: cfg.bg, color: cfg.color }}
     >
-      {cfg.icon} {cfg.label}
+      {cfg.label}
     </span>
   );
 }
@@ -100,9 +80,7 @@ export function TokenCard({ token, isOwn, onClick }: Props) {
     });
   }
 
-  // Only show name when it differs from symbol (e.g. GasToken ≠ GAS)
-  const displayName =
-    token.name && token.name !== token.symbol ? token.name : null;
+  const displayName = token.name && token.name !== token.symbol ? token.name : null;
 
   return (
     <article
@@ -114,77 +92,44 @@ export function TokenCard({ token, isOwn, onClick }: Props) {
         border: `1px solid ${isOwn ? "var(--forge-border-own)" : "var(--forge-border-subtle)"}`,
       }}
     >
-      {/* Row 1: Avatar + Symbol (left)  |  TypeBadge + Yours (right) */}
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2 min-w-0">
           <TokenIcon contractHash={token.contractHash} size={36} imageUrl={token.imageUrl} />
-          <span
-            className="text-xl font-bold truncate"
-            style={{ color: "var(--forge-text-primary)" }}
-          >
+          <span className="text-xl font-bold truncate" style={{ color: "var(--forge-text-primary)" }}>
             {token.symbol}
           </span>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           <TypeBadge isNative={token.isNative ?? false} />
           {isNew && (
-            <span
-              aria-label="New token"
-              className="text-xs px-1.5 py-0.5 rounded animate-pulse"
-              style={{
-                background: "rgba(0,200,120,0.18)",
-                color: "#00c878",
-                fontSize: "10px",
-                fontWeight: 700,
-                letterSpacing: "0.05em",
-              }}
-            >
+            <span aria-label="New token" className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(0,200,120,0.18)", color: "#00c878", fontSize: "10px", fontWeight: 700 }}>
               NEW
             </span>
           )}
           {isOwn && (
-            <span
-              aria-label="Your token"
-              className="text-xs px-1.5 py-0.5 rounded"
-              style={{
-                background: "rgba(255,107,53,0.2)",
-                color: "var(--forge-color-primary)",
-                fontSize: "10px",
-                fontWeight: 600,
-                letterSpacing: "0.03em",
-              }}
-            >
+            <span aria-label="Your token" className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(255,107,53,0.2)", color: "var(--forge-color-primary)", fontSize: "10px", fontWeight: 600 }}>
               Yours
             </span>
           )}
         </div>
       </div>
 
-      {/* Row 2: Full name — always rendered to keep consistent card height.
-          Empty string when name === symbol (community tokens). */}
-      <p
-        className="text-sm mb-2"
-        style={{
-          color: "var(--forge-text-muted)",
-          minHeight: "1.25rem",   // same height whether or not there is a name
-          paddingLeft: "44px",    // align with symbol text (avatar 36px + gap 8px)
-        }}
-      >
+      <p className="text-sm mb-2" style={{ color: "var(--forge-text-muted)", minHeight: "1.25rem", paddingLeft: "44px" }}>
         {displayName ?? ""}
       </p>
 
-      {/* Row 3: Supply */}
+      <div className="flex flex-wrap gap-2 mb-2" style={{ paddingLeft: "44px" }}>
+        <BurnBadge burnRate={token.burnRate ?? 0} />
+        <LockBadge locked={token.locked ?? false} />
+      </div>
+
       <p className="text-xs mb-2" style={{ color: "var(--forge-text-muted)" }}>
         Supply {formatSupply(token.supply, token.decimals)}
       </p>
 
-      {/* Row 4: Hash + copy (left)  |  Mode badge (right) */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 min-w-0">
-          <span
-            className="text-xs font-mono truncate"
-            style={{ color: "var(--forge-text-muted)" }}
-          >
+          <span className="text-xs font-mono truncate" style={{ color: "var(--forge-text-muted)" }}>
             {truncateHash(token.contractHash)}
           </span>
           <button
@@ -193,7 +138,7 @@ export function TokenCard({ token, isOwn, onClick }: Props) {
             className="text-xs px-1 rounded transition-opacity hover:opacity-80 flex-shrink-0"
             style={{ color: "var(--forge-text-muted)", lineHeight: 1 }}
           >
-            {copied ? "✓" : "⧉"}
+            {copied ? "OK" : "COPY"}
           </button>
         </div>
         {token.mode && <ModeBadge mode={token.mode} />}

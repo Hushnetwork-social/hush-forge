@@ -8,7 +8,7 @@
 
 import { GAS_CONTRACT_HASH, PRIVATE_NET_RPC_URL, WALLET_STORAGE_KEY } from "./forge-config";
 import { getTokenBalance } from "./neo-rpc-client";
-import type { ForgeParams, UpdateParams, WalletBalance, WalletType } from "./types";
+import type { ForgeParams, WalletBalance, WalletType } from "./types";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -62,6 +62,7 @@ interface NeoDapi {
   getNetworks(): Promise<{ networks: string[]; defaultNetwork: string }>;
   getBalance(params: { params: { address: string }[] }): Promise<{ address: string; balances: NeoDapiBalance[] }[]>;
   invoke(params: {
+    network?: string;
     scriptHash: string;
     operation: string;
     args: unknown[];
@@ -367,14 +368,15 @@ export async function invokeForge(
   console.log("[dapi] invokeForge — factoryHash:", factoryHash, "feeAmount:", feeAmount.toString());
   console.log("[dapi] invokeForge — params:", params);
 
-  // NeoLine requires Hash160 args to be script hash (0x hex), not N3 addresses.
-  const fromHash = addressToScriptHash(_connectedAddress!);
+  // GAS.transfer expects the sender hash160; use script hash and keep signer
+  // scope conservative for NeoLine compatibility.
+  const fromAccount = addressToScriptHash(_connectedAddress!);
 
   const invokeArgs = {
     scriptHash: "0xd2a4cff31913016155e38e474a2c06d08be276cf", // GAS hash
     operation: "transfer",
     args: [
-      { type: "Hash160", value: fromHash },
+      { type: "Hash160", value: fromAccount },
       { type: "Hash160", value: factoryHash },
       { type: "Integer", value: feeAmount.toString() },
       {
@@ -386,10 +388,11 @@ export async function invokeForge(
           { type: "Integer", value: params.decimals.toString() },
           { type: "String", value: params.mode },
           { type: "String", value: params.imageUrl ?? "" },
+          { type: "Integer", value: String(params.creatorFeeRate ?? 0) },
         ],
       },
     ],
-    signers: [{ account: fromHash, scopes: "CalledByEntry" as const }],
+    signers: [{ account: fromAccount, scopes: "CalledByEntry" as const }],
     description: `Forge token: ${params.name} (${params.symbol})`,
   };
 
@@ -457,33 +460,6 @@ export async function initializeFactory(factoryHash: string): Promise<string> {
     return result.txid;
   } catch (err) {
     console.error("[dapi] initializeFactory — failed:", err);
-    if (isWalletRejection(err)) throw new WalletRejectedError();
-    throw err;
-  }
-}
-
-/**
- * Submits a token update transaction.
- * Throws WalletRejectedError if the user cancels.
- */
-export async function invokeUpdate(
-  tokenHash: string,
-  params: UpdateParams
-): Promise<string> {
-  if (!_dapi) throw new WalletNotConnectedError();
-
-  try {
-    const result = await _dapi.invoke({
-      scriptHash: tokenHash,
-      operation: "update",
-      args: [
-        { type: "String", value: params.name },
-        { type: "String", value: params.symbol },
-      ],
-      description: `Update token: ${params.name}`,
-    });
-    return result.txid;
-  } catch (err) {
     if (isWalletRejection(err)) throw new WalletRejectedError();
     throw err;
   }
@@ -562,5 +538,279 @@ export async function addNEP17Token(
     await _dapi.AddNEP17({ scriptHash: contractHash, symbol, decimals });
   } catch {
     // Non-critical — ignore if wallet doesn't support it
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Token lifecycle invoke functions (FEAT-078)
+// All require WitnessScope.Global — factory calls GAS.Transfer as a nested
+// cross-contract call, so CalledByEntry scope would block CheckWitness(creator).
+// ---------------------------------------------------------------------------
+
+/**
+ * Calls updateTokenMetadata on the factory to update a token's image URL.
+ * Throws WalletRejectedError if the user cancels.
+ */
+export async function invokeUpdateMetadata(
+  factoryHash: string,
+  tokenHash: string,
+  imageUrl: string
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "updateTokenMetadata",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "String", value: imageUrl },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: "Update token image URL",
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls mintTokens on the factory to mint additional supply to a recipient.
+ * Throws WalletRejectedError if the user cancels.
+ */
+export async function invokeMintTokens(
+  factoryHash: string,
+  tokenHash: string,
+  to: string,
+  amount: bigint
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "mintTokens",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "Hash160", value: addressToScriptHash(to) },
+        { type: "Integer", value: amount.toString() },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: `Mint ${amount} tokens`,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls setTokenBurnRate on the factory.
+ * basisPoints: 0–1000 (0 = no burn, 1000 = 10%).
+ * Throws WalletRejectedError if the user cancels.
+ */
+export async function invokeSetBurnRate(
+  factoryHash: string,
+  tokenHash: string,
+  basisPoints: number
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "setTokenBurnRate",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "Integer", value: basisPoints.toString() },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: `Set burn rate to ${basisPoints} bps`,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls setTokenMaxSupply on the factory.
+ * newMax: 0 = uncapped.
+ * Throws WalletRejectedError if the user cancels.
+ */
+export async function invokeSetMaxSupply(
+  factoryHash: string,
+  tokenHash: string,
+  newMax: bigint
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "setTokenMaxSupply",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "Integer", value: newMax.toString() },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: `Set max supply to ${newMax}`,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls setCreatorFee on the factory.
+ * datoshi: fee per transfer in datoshi (1 GAS = 100,000,000 datoshi).
+ * Throws WalletRejectedError if the user cancels.
+ */
+export async function invokeSetCreatorFee(
+  factoryHash: string,
+  tokenHash: string,
+  datoshi: number
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "setCreatorFee",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "Integer", value: datoshi.toString() },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: `Set creator fee to ${datoshi} datoshi`,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls changeTokenMode on the factory.
+ * newMode: "community" | "speculation" | "crowdfunding"
+ * params: mode-specific parameters (serialized as strings).
+ * Throws WalletRejectedError if the user cancels.
+ */
+export async function invokeChangeMode(
+  factoryHash: string,
+  tokenHash: string,
+  newMode: string,
+  params: unknown[]
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "changeTokenMode",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "String", value: newMode },
+        {
+          type: "Array",
+          value: params.map((p) => ({ type: "String", value: String(p) })),
+        },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: `Change token mode to ${newMode}`,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls lockToken on the factory — permanently and irreversibly locks the token.
+ * Throws WalletRejectedError if the user cancels.
+ */
+export async function invokeLockToken(
+  factoryHash: string,
+  tokenHash: string
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "lockToken",
+      args: [
+        { type: "Hash160", value: tokenHash },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: "Lock token permanently — this cannot be undone",
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls applyTokenChanges on the factory to execute staged lifecycle changes
+ * in a single transaction.
+ *
+ * Sentinel values:
+ * - imageUrl = ""        -> unchanged
+ * - burnRate = -1        -> unchanged
+ * - creatorFeeRate = -1  -> unchanged
+ * - newMode = ""         -> unchanged
+ * - newMaxSupply = -1    -> unchanged
+ * - mintAmount = 0       -> unchanged
+ * - lockToken = false    -> unchanged
+ */
+export async function invokeApplyTokenChanges(
+  factoryHash: string,
+  tokenHash: string,
+  params: {
+    imageUrl: string;
+    burnRate: number;
+    creatorFeeRate: number;
+    newMode: string;
+    modeParams: string[];
+    newMaxSupply: bigint;
+    mintTo: string | null;
+    mintAmount: bigint;
+    lockToken: boolean;
+  }
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const mintToValue = params.mintTo
+      ? addressToScriptHash(params.mintTo)
+      : "0x0000000000000000000000000000000000000000";
+
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "applyTokenChanges",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "String", value: params.imageUrl },
+        { type: "Integer", value: params.burnRate.toString() },
+        { type: "Integer", value: params.creatorFeeRate.toString() },
+        { type: "String", value: params.newMode },
+        {
+          type: "Array",
+          value: params.modeParams.map((p) => ({ type: "String", value: p })),
+        },
+        { type: "Integer", value: params.newMaxSupply.toString() },
+        { type: "Hash160", value: mintToValue },
+        { type: "Integer", value: params.mintAmount.toString() },
+        { type: "Boolean", value: params.lockToken },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: "Apply staged token changes",
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
   }
 }

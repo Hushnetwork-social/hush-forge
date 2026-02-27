@@ -135,6 +135,9 @@ function parseFactoryToken(
       tier: v[4] !== undefined ? Number(v[4].value) || null : null,
       createdAt: v[5] !== undefined ? Number(v[5].value) || null : null,
       imageUrl: v[6] !== undefined ? decodeStr(v[6].value as string) || undefined : undefined,
+      burnRate: v[7] !== undefined ? Number(v[7].value) || 0 : 0,
+      maxSupply: v[8] !== undefined ? String(v[8].value ?? "0") : "0",
+      locked: v[9] !== undefined ? Number(v[9].value) !== 0 : false,
     };
   } catch {
     return null;
@@ -257,5 +260,8 @@ export async function resolveTokenMetadata(
     tier: factoryData?.tier ?? null,
     createdAt: factoryData?.createdAt ?? null,
     imageUrl: factoryData?.imageUrl,
+    burnRate: factoryData?.burnRate ?? 0,
+    maxSupply: factoryData?.maxSupply ?? "0",
+    locked: factoryData?.locked ?? false,
   };
 }

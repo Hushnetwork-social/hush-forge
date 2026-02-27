@@ -52,8 +52,7 @@ Given(
     await connectWallet(page, mockDapi.address);
 
     // Wait for own token cards to appear (token list loads asynchronously),
-    // then iterate until we find one with the "Update Token" button
-    // (only upgradeable / community-mode tokens expose this button).
+    // then iterate until we find one with the Token Administration panel.
     const ownCards = page.locator("article").filter({ has: page.getByLabel("Your token") });
     await expect(ownCards.first()).toBeVisible({ timeout: 10_000 });
     const count = await ownCards.count();
@@ -61,12 +60,12 @@ Given(
       await ownCards.nth(i).click();
       await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
       // waitFor() is needed — isVisible() snapshots immediately and misses async metadata load
-      const hasUpdateBtn = await page
-        .getByRole("button", { name: "Update Token" })
+      const hasAdminPanel = await page
+        .getByText("TOKEN ADMINISTRATION")
         .waitFor({ state: "visible", timeout: 10_000 })
         .then(() => true)
         .catch(() => false);
-      if (hasUpdateBtn) return;
+      if (hasAdminPanel) return;
       // Not upgradeable — go back and try the next card
       await page.goto("/tokens");
       await connectWallet(page, mockDapi.address);
@@ -146,6 +145,11 @@ When("the user navigates to its detail page", async ({ page }) => {
 When(
   "the user clicks the copy icon next to the contract hash",
   async ({ page }) => {
+    // Admin hint overlay can intercept clicks on first own-token visit.
+    const ok = page.getByRole("button", { name: "OK" });
+    if (await ok.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await ok.click();
+    }
     // Grant clipboard permissions so the copy API works in headless Chromium
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.getByRole("button", { name: "Copy contract hash" }).click();
@@ -191,20 +195,16 @@ Then("a brief {string} confirmation appears", async ({ page }, text: string) => 
 });
 
 Then(
-  "an {string} button is visible on the detail page",
-  async ({ page }, buttonText: string) => {
-    await expect(
-      page.getByRole("button", { name: buttonText })
-    ).toBeVisible({ timeout: 5_000 });
+  "the Token Administration panel is visible on the detail page",
+  async ({ page }) => {
+    await expect(page.getByText("TOKEN ADMINISTRATION")).toBeVisible({ timeout: 10_000 });
   }
 );
 
 Then(
-  "no {string} button is shown on the detail page",
-  async ({ page }, buttonText: string) => {
-    await expect(
-      page.getByRole("button", { name: buttonText })
-    ).not.toBeVisible({ timeout: 5_000 });
+  "the Token Administration panel is not shown on the detail page",
+  async ({ page }) => {
+    await expect(page.getByText("TOKEN ADMINISTRATION")).not.toBeVisible({ timeout: 5_000 });
   }
 );
 

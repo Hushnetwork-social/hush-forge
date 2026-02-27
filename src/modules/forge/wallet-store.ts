@@ -1,5 +1,5 @@
-/**
- * WalletStore — Zustand store for wallet connection state.
+﻿/**
+ * WalletStore â€” Zustand store for wallet connection state.
  * Wraps the dAPI adapter with UI-friendly state management and localStorage
  * persistence. Components only interact with this store, never the adapter directly.
  */
@@ -50,7 +50,7 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
   async connect(walletType: WalletType) {
     set({ connectionStatus: "connecting", errorMessage: null });
     try {
-      // Race the dAPI connect against a 15s deadline.  NeoLine's background
+      // Race the dAPI connect against a 10s deadline.  NeoLine's background
       // service worker (MV3) can restart mid-flight, silently dropping the
       // getAccount() message.  Without a timeout the store is permanently
       // stuck in "connecting".  On timeout we fall into the catch block which
@@ -60,8 +60,8 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
         dapiConnect(walletType),
         new Promise<never>((_, reject) =>
           setTimeout(
-            () => reject(new Error("Wallet connection timed out — please try again")),
-            15_000
+            () => reject(new Error("Wallet connection timed out â€” please try again")),
+            10_000
           )
         ),
       ]);
@@ -100,7 +100,7 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
       const balances = await dapiGetBalances(address);
       set({ balances });
     } catch {
-      // Non-critical — keep existing balances on RPC failure
+      // Non-critical â€” keep existing balances on RPC failure
     }
   },
 
@@ -108,7 +108,7 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
     if (typeof localStorage === "undefined") return;
     const saved = localStorage.getItem(WALLET_STORAGE_KEY) as WalletType | null;
     if (!saved || saved === "disconnected") return;
-    // Already connected or connecting — nothing to do
+    // Already connected or connecting â€” nothing to do
     const { connectionStatus } = get();
     if (connectionStatus === "connected" || connectionStatus === "connecting") return;
 
@@ -124,8 +124,8 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
       if (savedAddress && address !== savedAddress) {
         console.warn(
           "[wallet-store] auto-reconnect: wallet account changed",
-          savedAddress, "→", address,
-          "— staying disconnected"
+          savedAddress, "â†’", address,
+          "â€” staying disconnected"
         );
         dapiDisconnect();
         localStorage.removeItem(WALLET_STORAGE_KEY);
@@ -155,3 +155,4 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
     }
   },
 }));
+

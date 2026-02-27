@@ -45,6 +45,8 @@ function makeFormResult(
     imageUrl: "",
     setImageUrl: vi.fn(),
     imagePreview: "idle",
+    creatorFee: "0",
+    setCreatorFee: vi.fn(),
     errors: {},
     creationFeeDatoshi: 1_500_000_000n,
     creationFeeDisplay: "15",

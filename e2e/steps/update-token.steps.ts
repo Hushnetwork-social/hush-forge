@@ -1,11 +1,5 @@
 /**
  * Step definitions for: update-token.feature
- *
- * Shared steps ("the user clicks FORGE and the wallet signs") are in
- * common.steps.ts.
- *
- * These scenarios require a running NeoExpress devnet where the test account
- * owns at least one upgradeable token.
  */
 
 import { createBdd } from "playwright-bdd";
@@ -14,167 +8,65 @@ import { connectWallet } from "./common.steps";
 
 const { Given, When, Then } = createBdd(test);
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Navigate to the detail page of the first own upgradeable token.
- * An upgradeable token shows the "Update Token" button on its detail page.
- */
-async function navigateToOwnUpgradeableToken(
+async function forgeOwnTokenAndOpenDetail(
   page: import("@playwright/test").Page,
   address: string
 ): Promise<void> {
   await page.goto("/tokens");
   await connectWallet(page, address);
-  await page.waitForTimeout(2_000); // allow token list to load
+  await expect(page.getByLabel("Your token").first()).toBeVisible({ timeout: 10_000 });
+  await page.getByLabel("Your token").first().click();
+  await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
 
-  // Wait for own token cards to appear (token list loads asynchronously)
-  const ownCards = page.locator("article").filter({ has: page.getByLabel("Your token") });
-  await expect(ownCards.first()).toBeVisible({ timeout: 10_000 });
-  const count = await ownCards.count();
-
-  for (let i = 0; i < count; i++) {
-    await ownCards.nth(i).click();
-    await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
-    // waitFor() is used instead of isVisible() because isVisible() is a synchronous
-    // snapshot — it returns false immediately if metadata hasn't loaded yet.
-    // Token detail loads isUpgradeable asynchronously from on-chain data (~2–8 s).
-    const hasUpdateBtn = await page
-      .getByRole("button", { name: "Update Token" })
-      .waitFor({ state: "visible", timeout: 10_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (hasUpdateBtn) return;
-    // Not upgradeable — go back and try the next card
-    await page.goto("/tokens");
-    await connectWallet(page, address);
-    await page.waitForTimeout(1_000);
+  const ok = page.getByRole("button", { name: "OK" });
+  if (await ok.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    await ok.click();
   }
 
-  // Fallback: click first own card regardless (test will surface the issue clearly)
-  if (count > 0) {
-    await ownCards.first().click();
-    await page.waitForURL(/\/tokens\/0x/, { timeout: 10_000 });
-  }
+  await expect(page.getByText("TOKEN ADMINISTRATION")).toBeVisible({ timeout: 10_000 });
 }
-
-// ---------------------------------------------------------------------------
-// Given
-// ---------------------------------------------------------------------------
 
 Given(
   "the user is on the detail page of their own upgradeable token",
   async ({ page, mockDapi }) => {
-    await navigateToOwnUpgradeableToken(page, mockDapi.address);
+    await forgeOwnTokenAndOpenDetail(page, mockDapi.address);
   }
 );
 
-Given(
-  "the UpdateOverlay is open for an own upgradeable token",
-  async ({ page, mockDapi }) => {
-    await navigateToOwnUpgradeableToken(page, mockDapi.address);
-    await page.getByRole("button", { name: "Update Token" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "Update Token" })
-    ).toBeVisible();
-  }
-);
 
-Given(
-  "the UpdateOverlay is open with modified values",
-  async ({ page, mockDapi }) => {
-    await navigateToOwnUpgradeableToken(page, mockDapi.address);
-    await page.getByRole("button", { name: "Update Token" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "Update Token" })
-    ).toBeVisible();
-    // Modify the name field
-    await page.getByLabel("Token Name").fill("Updated Token");
-  }
-);
-
-Given(
-  "the UpdateOverlay submitted a transaction",
-  async ({ page, mockDapi }) => {
-    await navigateToOwnUpgradeableToken(page, mockDapi.address);
-    await page.getByRole("button", { name: "Update Token" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "Update Token" })
-    ).toBeVisible();
-    await page.getByRole("button", { name: /Update Token/ }).click();
-    // Wait for WaitingOverlay to appear — mock-dapi signs+submits a real TX which
-    // takes ~2–5 s; 30 s gives plenty of headroom for a slow devnet.
-    await expect(
-      page.getByRole("status", { name: "Waiting for transaction" })
-    ).toBeVisible({ timeout: 30_000 });
-  }
-);
-
-// ---------------------------------------------------------------------------
-// When
-// ---------------------------------------------------------------------------
-
-When(
-  "the update transaction is confirmed on-chain",
-  async ({ page }) => {
-    // Wait for WaitingOverlay to close (polling detects confirmation)
-    await expect(
-      page.getByRole("status", { name: "Waiting for transaction" })
-    ).not.toBeVisible({ timeout: 60_000 });
-  }
-);
-
-// ---------------------------------------------------------------------------
-// Then
-// ---------------------------------------------------------------------------
-
-Then("the UpdateOverlay modal is visible", async ({ page }) => {
-  await expect(
-    page.getByRole("dialog", { name: "Update Token" })
-  ).toBeVisible();
+When("the user updates the image URL field in the Identity tab", async ({ page }) => {
+  await page.getByRole("tab", { name: "Identity" }).click();
+  const input = page.getByRole("textbox", { name: "Image URL" });
+  await input.fill("https://example.com/new-image.png");
 });
 
-Then("the name field is pre-filled", async ({ page }) => {
-  // The name field should have a non-empty value (pre-populated from on-chain data)
-  await expect(page.getByLabel("Token Name")).not.toHaveValue("");
+When("the user clicks Stage for the identity change", async ({ page }) => {
+  await page
+    .locator("section[aria-label='Admin Identity Tab']")
+    .getByRole("button", { name: "Stage" })
+    .click();
 });
 
-Then("the name field shows {string}", async ({ page }, expectedName: string) => {
-  await expect(page.getByLabel("Token Name")).toHaveValue(expectedName);
-});
-
-Then("the other fields show the current on-chain values", async ({ page }) => {
-  // Symbol input should have a non-empty value
-  const symbol = page.getByLabel(/^Symbol/);
-  await expect(symbol).not.toHaveValue("");
-  // Supply and decimals are shown as read-only text in the dialog.
-  // Scope to the dialog to avoid matching the token detail page's dl which also has "Decimals".
-  const dialog = page.getByRole("dialog", { name: "Update Token" });
-  await expect(dialog.getByText("Total Supply")).toBeVisible();
-  await expect(dialog.getByText("Decimals")).toBeVisible();
+Then("the Token Administration panel is visible", async ({ page }) => {
+  await expect(page.getByText("TOKEN ADMINISTRATION")).toBeVisible({ timeout: 10_000 });
 });
 
 Then(
-  "a success toaster appears: {string}",
-  async ({ page }, message: string) => {
-    // ForgeSuccessToast shows role="status" with "🔥 Token Forged!" heading
-    await expect(page.getByRole("status")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(message)).toBeVisible({ timeout: 5_000 });
+  "the panel shows tabs Identity, Supply, Properties, and Danger Zone",
+  async ({ page }) => {
+    await expect(page.getByRole("tab", { name: "Identity" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("tab", { name: "Supply" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("tab", { name: "Properties" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("tab", { name: "Danger Zone" })).toBeVisible({ timeout: 10_000 });
   }
 );
 
 Then(
-  "the token detail page refreshes with the new values",
+  "the staged changes list contains an image URL update entry",
   async ({ page }) => {
-    // Page stays on /tokens/0x... and shows updated token data
-    await expect(page).toHaveURL(/\/tokens\/0x/);
-    // The ForgeSuccessToast "View Token" button can be clicked to reload
-    const viewBtn = page.getByRole("button", { name: /View Token/ });
-    if (await viewBtn.isVisible()) {
-      await viewBtn.click();
-    }
-    await expect(page.locator("h1")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("STAGED CHANGES (1)")).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.locator("span[title='Update image URL']").first()
+    ).toBeVisible({ timeout: 10_000 });
   }
 );

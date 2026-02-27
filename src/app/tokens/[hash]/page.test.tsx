@@ -3,8 +3,6 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import TokenDetailPage from "./page";
 import type { TokenInfo } from "@/modules/forge/types";
 
-// ── Mock all hooks ─────────────────────────────────────────────────────────
-
 vi.mock("next/navigation", () => ({
   useParams: () => ({ hash: "0xabc123" }),
 }));
@@ -25,8 +23,6 @@ vi.mock("@/modules/forge/wallet-store", () => ({
   useWalletStore: vi.fn(),
 }));
 
-// ── Mock all components ────────────────────────────────────────────────────
-
 vi.mock("@/components/layout/ForgeHeader", () => ({
   ForgeHeader: ({ onConnectClick }: { onConnectClick: () => void }) => (
     <header data-testid="forge-header">
@@ -36,78 +32,33 @@ vi.mock("@/components/layout/ForgeHeader", () => ({
 }));
 
 vi.mock("@/modules/forge/components/TokenDetail", () => ({
-  TokenDetail: ({
-    contractHash,
-    onUpdateClick,
-  }: {
-    contractHash: string;
-    onUpdateClick?: () => void;
-  }) => (
+  TokenDetail: ({ contractHash, onTxSubmitted }: { contractHash: string; onTxSubmitted: (txHash: string, message: string) => void }) => (
     <div data-testid="token-detail" data-hash={contractHash}>
-      <button onClick={onUpdateClick}>Update Token</button>
-    </div>
-  ),
-}));
-
-vi.mock("@/modules/forge/components/UpdateOverlay", () => ({
-  UpdateOverlay: ({
-    onClose,
-    onTxSubmitted,
-  }: {
-    onClose: () => void;
-    onTxSubmitted: (txHash: string) => void;
-  }) => (
-    <div role="dialog" aria-label="Update Token">
-      <button onClick={onClose}>Cancel</button>
-      <button onClick={() => onTxSubmitted("0xupdatehash")}>Update</button>
+      <button onClick={() => onTxSubmitted("0xupdatehash", "Setting burn rate...")}>Submit TX</button>
     </div>
   ),
 }));
 
 vi.mock("@/modules/forge/components/WaitingOverlay", () => ({
   WaitingOverlay: ({ message }: { message: string }) => (
-    <div role="status" aria-label="Waiting for transaction">
-      {message}
-    </div>
+    <div role="status" aria-label="Waiting for transaction">{message}</div>
   ),
 }));
 
 vi.mock("@/modules/forge/components/ForgeToaster", () => ({
-  ForgeSuccessToast: ({
-    symbol,
-    onDismiss,
-  }: {
-    symbol: string;
-    onDismiss: () => void;
-  }) => (
-    <div data-testid="success-toast">
-      {symbol}
-      <button onClick={onDismiss}>Dismiss</button>
-    </div>
+  ForgeSuccessToast: ({ symbol, onDismiss }: { symbol: string; onDismiss: () => void }) => (
+    <div data-testid="success-toast">{symbol}<button onClick={onDismiss}>Dismiss</button></div>
   ),
-  ForgeErrorToast: ({
-    message,
-    onDismiss,
-  }: {
-    message: string;
-    onDismiss: () => void;
-  }) => (
-    <div data-testid="error-toast">
-      {message}
-      <button onClick={onDismiss}>Dismiss</button>
-    </div>
+  ForgeErrorToast: ({ message, onDismiss }: { message: string; onDismiss: () => void }) => (
+    <div data-testid="error-toast">{message}<button onClick={onDismiss}>Dismiss</button></div>
   ),
 }));
 
 vi.mock("@/modules/forge/components/WalletConnectModal", () => ({
   WalletConnectModal: ({ onClose }: { onClose: () => void }) => (
-    <div role="dialog" aria-label="Connect Wallet">
-      <button onClick={onClose}>Close</button>
-    </div>
+    <div role="dialog" aria-label="Connect Wallet"><button onClick={onClose}>Close</button></div>
   ),
 }));
-
-// ── Test fixtures ──────────────────────────────────────────────────────────
 
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 import { useTokenPolling } from "@/modules/forge/hooks/useTokenPolling";
@@ -155,13 +106,10 @@ function setupMocks({ token = mockToken as TokenInfo | null } = {}) {
     isUpgradeable: false,
   });
 
-  vi.mocked(useWalletStore).mockImplementation(
-    (selector: (s: WalletStore) => unknown) =>
-      selector({ address: null, connectionStatus: "disconnected" } as WalletStore)
+  vi.mocked(useWalletStore).mockImplementation((selector: (s: WalletStore) => unknown) =>
+    selector({ address: null, connectionStatus: "disconnected" } as WalletStore)
   );
 }
-
-// ── Tests ──────────────────────────────────────────────────────────────────
 
 describe("TokenDetailPage", () => {
   beforeEach(() => {
@@ -174,37 +122,10 @@ describe("TokenDetailPage", () => {
     expect(detail).toHaveAttribute("data-hash", "0xabc123");
   });
 
-  it("UpdateOverlay is not visible initially", () => {
+  it("WaitingOverlay appears after tx is submitted", () => {
     render(<TokenDetailPage />);
-    expect(
-      screen.queryByRole("dialog", { name: "Update Token" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("clicking Update Token opens the UpdateOverlay", () => {
-    render(<TokenDetailPage />);
-    fireEvent.click(screen.getByText("Update Token"));
-    expect(
-      screen.getByRole("dialog", { name: "Update Token" })
-    ).toBeInTheDocument();
-  });
-
-  it("UpdateOverlay Cancel returns to detail view", () => {
-    render(<TokenDetailPage />);
-    fireEvent.click(screen.getByText("Update Token"));
-    fireEvent.click(screen.getByText("Cancel"));
-    expect(
-      screen.queryByRole("dialog", { name: "Update Token" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("WaitingOverlay appears after update TX is submitted", () => {
-    render(<TokenDetailPage />);
-    fireEvent.click(screen.getByText("Update Token"));
-    fireEvent.click(screen.getByText("Update"));
-    expect(
-      screen.getByRole("status", { name: "Waiting for transaction" })
-    ).toBeInTheDocument();
-    expect(screen.getByText("Updating your token…")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Submit TX"));
+    expect(screen.getByRole("status", { name: "Waiting for transaction" })).toBeInTheDocument();
+    expect(screen.getByText("Setting burn rate...")).toBeInTheDocument();
   });
 });

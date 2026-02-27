@@ -6,23 +6,17 @@ import {
   getAddress,
   invokeMintTokens,
   invokeSetMaxSupply,
-  WalletRejectedError,
 } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
 import { InfoHint } from "./InfoHint";
+import { toUiErrorMessage } from "./error-utils";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
   onStageChange?: (change: StagedChange) => void;
-}
-
-function toErrorMessage(err: unknown): string {
-  if (err instanceof WalletRejectedError) return "Transaction cancelled.";
-  if (err instanceof Error) return err.message;
-  return String(err);
 }
 
 function formatSupply(raw: bigint, decimals: number): string {
@@ -81,6 +75,13 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
   const mintAmountParsed = Number(mintAmount);
   const mintAmountValid = Number.isInteger(mintAmountParsed) && mintAmountParsed > 0;
   const recipientValid = recipient.trim().length > 0 && isValidAddress(recipient.trim());
+  const maxSupplyRaw = useMemo(() => {
+    try {
+      return token.maxSupply ? BigInt(token.maxSupply) : 0n;
+    } catch {
+      return 0n;
+    }
+  }, [token.maxSupply]);
 
   const maxSupplyWhole = useMemo(
     () => parseWholeTokenInput(maxSupply.trim() || "0"),
@@ -115,6 +116,12 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
     setMintError(null);
     try {
       const amountRaw = BigInt(mintAmountParsed) * (10n ** BigInt(token.decimals));
+      if (maxSupplyRaw > 0n && token.supply + amountRaw > maxSupplyRaw) {
+        setMintError(
+          `Mint would exceed max supply cap (${formatSupply(maxSupplyRaw, token.decimals)} ${token.symbol}).`
+        );
+        return;
+      }
       const txHash = await invokeMintTokens(
         factoryHash,
         token.contractHash,
@@ -123,7 +130,7 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
       );
       onTxSubmitted(txHash, "Minting tokens...");
     } catch (err) {
-      setMintError(toErrorMessage(err));
+      setMintError(toUiErrorMessage(err));
     } finally {
       setMinting(false);
     }
@@ -145,7 +152,7 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
       const txHash = await invokeSetMaxSupply(factoryHash, token.contractHash, maxSupplyParsed);
       onTxSubmitted(txHash, "Updating max supply...");
     } catch (err) {
-      setMaxError(toErrorMessage(err));
+      setMaxError(toUiErrorMessage(err));
     } finally {
       setUpdatingMax(false);
     }

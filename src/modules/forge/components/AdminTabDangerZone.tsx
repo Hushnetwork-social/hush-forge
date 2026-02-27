@@ -1,22 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { invokeLockToken, WalletRejectedError } from "../neo-dapi-adapter";
+import { invokeLockToken } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
 import { InfoHint } from "./InfoHint";
+import { toUiErrorMessage } from "./error-utils";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
   onStageChange?: (change: StagedChange) => void;
-}
-
-function toErrorMessage(err: unknown): string {
-  if (err instanceof WalletRejectedError) return "Transaction cancelled.";
-  if (err instanceof Error) return err.message;
-  return String(err);
 }
 
 export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
@@ -40,7 +35,7 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageC
       const txHash = await invokeLockToken(factoryHash, token.contractHash);
       onTxSubmitted(txHash, "Locking token...");
     } catch (err) {
-      setError(toErrorMessage(err));
+      setError(toUiErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

@@ -106,4 +106,34 @@ describe("AdminTabSupply", () => {
     fireEvent.click(screen.getByRole("button", { name: /Mint to administrator wallet/i }));
     expect(screen.getByText("Connect an administrator wallet first.")).toBeInTheDocument();
   });
+
+  it("blocks mint when amount would exceed max supply cap", async () => {
+    render(
+      <AdminTabSupply
+        token={makeToken({ supply: 1_010_000n, maxSupply: "1100000" })}
+        factoryHash="0xfactory"
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Recipient address"), { target: { value: "NwValid" } });
+    fireEvent.change(screen.getByLabelText("Mint amount"), { target: { value: "100000" } });
+    fireEvent.click(screen.getByRole("button", { name: /Mint Tokens/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Mint would exceed max supply cap/i)).toBeInTheDocument()
+    );
+    expect(invokeMintTokens).not.toHaveBeenCalled();
+  });
+
+  it("renders object-shaped wallet errors as readable text", async () => {
+    invokeMintTokens.mockRejectedValue({ type: "RPC_ERROR", description: "Mint exceeds max supply" });
+    render(<AdminTabSupply token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Recipient address"), { target: { value: "NwValid" } });
+    fireEvent.change(screen.getByLabelText("Mint amount"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: /Mint Tokens/i }));
+
+    await waitFor(() => expect(screen.getByText("Mint exceeds max supply")).toBeInTheDocument());
+  });
 });

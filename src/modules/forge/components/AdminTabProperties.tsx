@@ -5,11 +5,11 @@ import {
   invokeChangeMode,
   invokeSetBurnRate,
   invokeSetCreatorFee,
-  WalletRejectedError,
 } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
 import { InfoHint } from "./InfoHint";
+import { toUiErrorMessage } from "./error-utils";
 
 interface Props {
   token: TokenInfo;
@@ -23,12 +23,6 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   speculative: ["community"],
   crowdfund: [],
 };
-
-function toErrorMessage(err: unknown): string {
-  if (err instanceof WalletRejectedError) return "Transaction cancelled.";
-  if (err instanceof Error) return err.message;
-  return String(err);
-}
 
 export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
   const initialMode = token.mode ?? "community";
@@ -88,7 +82,7 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
       const txHash = await invokeSetBurnRate(factoryHash, token.contractHash, burnBps);
       onTxSubmitted(txHash, "Setting burn rate...");
     } catch (err) {
-      setBurnError(toErrorMessage(err));
+      setBurnError(toUiErrorMessage(err));
     } finally {
       setSavingBurn(false);
     }
@@ -112,7 +106,7 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
       const txHash = await invokeSetCreatorFee(factoryHash, token.contractHash, datoshi);
       onTxSubmitted(txHash, "Setting creator fee...");
     } catch (err) {
-      setFeeError(toErrorMessage(err));
+      setFeeError(toUiErrorMessage(err));
     } finally {
       setSavingFee(false);
     }
@@ -135,7 +129,7 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
       const txHash = await invokeChangeMode(factoryHash, token.contractHash, mode, []);
       onTxSubmitted(txHash, "Changing token mode...");
     } catch (err) {
-      setModeError(toErrorMessage(err));
+      setModeError(toUiErrorMessage(err));
     } finally {
       setSavingMode(false);
     }

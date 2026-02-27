@@ -1,22 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { invokeUpdateMetadata, WalletRejectedError } from "../neo-dapi-adapter";
+import { invokeUpdateMetadata } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
 import { InfoHint } from "./InfoHint";
+import { toUiErrorMessage } from "./error-utils";
 
 interface Props {
   token: TokenInfo;
   factoryHash: string;
   onTxSubmitted: (txHash: string, message: string) => void;
   onStageChange?: (change: StagedChange) => void;
-}
-
-function toErrorMessage(err: unknown): string {
-  if (err instanceof WalletRejectedError) return "Transaction cancelled.";
-  if (err instanceof Error) return err.message;
-  return String(err);
 }
 
 function isHttpUrl(value: string): boolean {
@@ -48,7 +43,7 @@ export function AdminTabIdentity({ token, factoryHash, onTxSubmitted, onStageCha
       const txHash = await invokeUpdateMetadata(factoryHash, token.contractHash, imageUrl.trim());
       onTxSubmitted(txHash, "Updating image URL...");
     } catch (err) {
-      setError(toErrorMessage(err));
+      setError(toUiErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

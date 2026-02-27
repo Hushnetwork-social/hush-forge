@@ -35,9 +35,9 @@ export default defineConfig({
   testMatch: "**/*.spec.ts",
   globalTeardown: path.resolve(__dirname, "global-teardown.ts"),
 
-  // Integration tests are slow — chain reset (2min) + deploy + TX confirm + init + forge
-  timeout: 600_000,        // 10 min per test
-  expect: { timeout: 20_000 },
+  // Keep feedback fast while allowing chain reset + deploy + forge on privnet.
+  timeout: 180_000,        // 3 min per test
+  expect: { timeout: 10_000 },
 
   // Never run in parallel — each test resets the chain
   fullyParallel: false,
@@ -73,3 +73,4 @@ export default defineConfig({
     },
   },
 });
+

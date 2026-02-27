@@ -185,7 +185,7 @@ describe("invokeForge", () => {
     expect(txid).toBe("0xtestTxId");
   });
 
-  it("invokeForge includes explicit empty signer allow-lists", async () => {
+  it("invokeForge uses Global signer scope", async () => {
     const instance = makeMockDapi();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
@@ -194,9 +194,8 @@ describe("invokeForge", () => {
     await invokeForge("0xfactory", 10_000_000n, forgeParams);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const call = (instance.invoke.mock.calls[0] as any[])[0] as { signers: { allowedContracts?: unknown[]; allowedGroups?: unknown[] }[] };
-    expect(call.signers[0].allowedContracts).toEqual([]);
-    expect(call.signers[0].allowedGroups).toEqual([]);
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { signers: { scopes: string }[] };
+    expect(call.signers[0].scopes).toBe("Global");
   });
 
   it("sends data array with 7 elements including creatorFeeRate", async () => {

@@ -390,14 +390,9 @@ export async function invokeForge(
         ],
       },
     ],
-    // NeoLine private-net path can serialize optional signer fields as `undefined`
-    // unless we provide explicit empty arrays for CalledByEntry.
-    signers: [{
-      account: fromHash,
-      scopes: "CalledByEntry" as const,
-      allowedContracts: [],
-      allowedGroups: [],
-    }],
+    // Keep forge signer format aligned with lifecycle invokes, which NeoLine
+    // private-net accepts consistently.
+    signers: [{ account: fromHash, scopes: "Global" as const }],
     description: `Forge token: ${params.name} (${params.symbol})`,
   };
 

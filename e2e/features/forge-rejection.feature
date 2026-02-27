@@ -14,3 +14,9 @@ Feature: Forge Error Handling
     Then a warning banner explains the factory needs initialization
     And an "Initialize Factory" action button is shown
     And the Forge Token button is disabled
+
+  Scenario: Protocol RPC error is surfaced to the user
+    Given the Forge overlay is open with valid token details
+    And the mock wallet returns a protocol RPC error
+    When the user clicks FORGE
+    Then an inline error message appears: "Mint exceeds max supply"

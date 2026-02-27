@@ -967,6 +967,36 @@ test.describe("Forge Full Integration Flow", () => {
         console.log("[detail] WARNING: POC not visible on detail page — continuing to list check.");
       }
 
+      // Step 11b: Set max supply, then verify over-cap mint is blocked in UI
+      // with no NeoLine popup (client-side guard prevents wallet invoke).
+      await page.getByRole("button", { name: "Supply" }).first().click();
+      await expect(page.getByText("TOKEN ADMINISTRATION")).toBeVisible({ timeout: 15_000 });
+
+      await page.getByLabel("New max supply").fill("1100000");
+      await signInNeoLine(
+        context,
+        async () => {
+          await page.getByRole("button", { name: "Set Max Supply" }).click();
+        },
+        60_000
+      );
+      await expect(page.getByText(/Max supply:\s*1,100,000/)).toBeVisible({ timeout: 120_000 });
+
+      await page.getByRole("button", { name: "Mint to administrator wallet" }).click();
+      await page.getByLabel("Mint amount").fill("200000");
+
+      // Listen for popup before click: if UI validation works, no popup appears.
+      const popupOpenedPromise = context
+        .waitForEvent("page", { timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+
+      await page.getByRole("button", { name: "Mint Tokens" }).click();
+      await expect(page.getByText(/Mint would exceed max supply cap/)).toBeVisible({ timeout: 10_000 });
+      const popupOpened = await popupOpenedPromise;
+      expect(popupOpened).toBe(false);
+      console.log("[admin] Over-cap mint blocked in UI; NeoLine popup not opened.");
+
       // ── Step 12: Back to /tokens — new token shows with Yours badge ───────
       // Use goBack() (client-side popstate) instead of page.goto() to preserve:
       //   - Zustand store state (ownTokenHashes already has the new token from addToken())

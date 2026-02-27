@@ -19,6 +19,15 @@ Given("the mock wallet is set to reject mode", async ({ mockDapi }) => {
   await mockDapi.setRejectMode(true);
 });
 
+Given("the mock wallet returns a protocol RPC error", async ({ page }) => {
+  await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).neon.invoke = async () => {
+      throw { type: "RPC_ERROR", description: "Mint exceeds max supply" };
+    };
+  });
+});
+
 /**
  * Intercepts the RPC isInitialized call so the factory appears deployed
  * but NOT yet initialized — simulating a partial setup by the operator.

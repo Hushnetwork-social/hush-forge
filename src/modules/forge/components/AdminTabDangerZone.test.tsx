@@ -34,10 +34,10 @@ describe("AdminTabDangerZone", () => {
     const button = screen.getByRole("button", { name: /Lock Token Forever/i });
     expect(button).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/type the token symbol/i), { target: { value: "mytok" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Confirmation" }), { target: { value: "mytok" } });
     expect(button).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/type the token symbol/i), { target: { value: "MYTOK" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Confirmation" }), { target: { value: "MYTOK" } });
     expect(button).toBeEnabled();
   });
 
@@ -46,7 +46,7 @@ describe("AdminTabDangerZone", () => {
     const onTxSubmitted = vi.fn();
     render(<AdminTabDangerZone token={makeToken()} factoryHash="0xfactory" onTxSubmitted={onTxSubmitted} />);
 
-    fireEvent.change(screen.getByLabelText(/type the token symbol/i), { target: { value: "MYTOK" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Confirmation" }), { target: { value: "MYTOK" } });
     fireEvent.click(screen.getByRole("button", { name: /Lock Token Forever/i }));
 
     await waitFor(() => expect(invokeLockToken).toHaveBeenCalledWith("0xfactory", "0xtoken"));

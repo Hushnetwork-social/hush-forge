@@ -4,6 +4,7 @@ import { useState } from "react";
 import { invokeLockToken, WalletRejectedError } from "../neo-dapi-adapter";
 import type { TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
+import { InfoHint } from "./InfoHint";
 
 interface Props {
   token: TokenInfo;
@@ -61,18 +62,23 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageC
         className="rounded-lg p-4"
         style={{ border: "1px solid rgba(255,82,82,0.4)", background: "rgba(255,82,82,0.08)" }}
       >
-        <h4 className="text-sm font-semibold mb-1" style={{ color: "var(--forge-text-primary)" }}>
-          DANGER ZONE
-        </h4>
+        <InfoHint
+          label="DANGER ZONE"
+          hint="Locking is irreversible. After lock, metadata, fees, mode, minting, and all other admin setters are permanently disabled on-chain."
+        />
         <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
           Once locked, this token is permanently immutable.
         </p>
       </div>
 
       <div>
-        <label htmlFor="lock-confirm" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-          To confirm, type the token symbol:
-        </label>
+        <div className="mb-1">
+          <InfoHint
+            label="Confirmation"
+            htmlFor="lock-confirm"
+            hint="Type the exact token symbol (case-sensitive) to confirm you understand the permanent lock action."
+          />
+        </div>
         <input
           id="lock-confirm"
           placeholder={token.symbol}
@@ -81,6 +87,9 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageC
           className="w-full rounded-lg px-3 py-2 text-sm"
           style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
         />
+        <p className="text-xs mt-2" style={{ color: "var(--forge-text-muted)" }}>
+          Exact match required: <strong style={{ color: "var(--forge-text-primary)" }}>{token.symbol}</strong> (case-sensitive).
+        </p>
       </div>
 
       {error && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{error}</p>}
@@ -107,6 +116,9 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageC
           Stage
         </button>
       </div>
+      <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+        `Stage` queues this action for later batch apply. `Lock Token Forever` submits immediately.
+      </p>
     </section>
   );
 }

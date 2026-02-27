@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addressToHash160 } from "../neo-rpc-client";
 import {
   getAddress,
@@ -66,7 +66,7 @@ function formatRawSupplyString(raw: string | undefined, decimals: number): strin
 export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
   const [recipient, setRecipient] = useState("");
   const [mintAmount, setMintAmount] = useState("");
-  const [maxSupply, setMaxSupply] = useState(token.maxSupply ?? "0");
+  const [maxSupply, setMaxSupply] = useState(() => formatRawSupplyString(token.maxSupply, token.decimals));
   const [mintError, setMintError] = useState<string | null>(null);
   const [maxError, setMaxError] = useState<string | null>(null);
   const [minting, setMinting] = useState(false);
@@ -87,6 +87,9 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
     () => parseWholeTokenInput(maxSupply.trim() || "0"),
     [maxSupply]
   );
+  useEffect(() => {
+    setMaxSupply(formatRawSupplyString(token.maxSupply, token.decimals));
+  }, [token.contractHash, token.maxSupply, token.decimals]);
   const maxSupplyParsed = useMemo(
     () => (maxSupplyWhole === null ? null : maxSupplyWhole * (10n ** BigInt(token.decimals))),
     [maxSupplyWhole, token.decimals]

@@ -85,6 +85,19 @@ describe("AdminTabSupply", () => {
     await waitFor(() => expect(invokeSetMaxSupply).toHaveBeenCalledWith("0xfactory", "0xtoken", 1000000n));
   });
 
+  it("shows max supply input as whole tokens when token has decimals", () => {
+    render(
+      <AdminTabSupply
+        token={makeToken({ decimals: 8, maxSupply: "110000000000000" })}
+        factoryHash="0xfactory"
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    const input = screen.getByLabelText("New max supply") as HTMLInputElement;
+    expect(input.value.replace(/[^\d]/g, "")).toBe("1100000");
+  });
+
   it("rejects fractional-looking max supply input", () => {
     render(<AdminTabSupply token={makeToken({ supply: 1000n })} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
 

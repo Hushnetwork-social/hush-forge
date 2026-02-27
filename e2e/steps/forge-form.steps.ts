@@ -16,7 +16,7 @@ const { Given, When, Then } = createBdd(test);
 // ---------------------------------------------------------------------------
 
 Given("the wallet has enough GAS to pay the creation fee", async ({ page, mockDapi }) => {
-  // connect wallet with the test account â€” alice has GAS on the devnet
+  // connect wallet with the test account — alice has GAS on the devnet
   await page.goto("/tokens");
   await page.evaluate(
     (key: string) => localStorage.setItem(key, "Neon"),
@@ -116,12 +116,12 @@ When("the user clicks Cancel", async ({ page }) => {
 // ---------------------------------------------------------------------------
 
 Then("the GAS creation fee is displayed", async ({ page }) => {
-  // Fee row shows "Creation fee" label and either "Loadingâ€¦" or "~N GAS"
+  // Fee row shows "Creation fee" label and either "Loading…" or "~N GAS"
   const dialog = page.getByRole("dialog", { name: "Forge a Token" });
   await expect(dialog.getByText("Creation fee")).toBeVisible();
-  // Wait for fee to finish loading (shows "~N GAS") â€” scoped to dialog to avoid
+  // Wait for fee to finish loading (shows "~N GAS") — scoped to dialog to avoid
   // matching multiple GAS-related elements outside the overlay
-  await expect(dialog.getByText(/Loadingâ€¦|GAS/).first()).toBeVisible();
+  await expect(dialog.getByText(/Loading…|GAS/).first()).toBeVisible();
 });
 
 Then("the symbol field shows {string}", async ({ page }, expected: string) => {
@@ -149,13 +149,13 @@ Then("a validation error appears on the supply field", async ({ page }) => {
 });
 
 Then("the GAS balance indicator shows green", async ({ page }) => {
-  // The balance check shows "âœ“" in forge-color-success (green) style
-  const balanceRow = page.getByText(/Your GAS balance/).locator("..");
-  await expect(balanceRow.getByText("âœ“")).toBeVisible({ timeout: 10_000 });
+  // Positive state renders "OK" and does not show insufficiency message.
+  const balanceRow = page.getByText(/Your GAS balance/i).locator("..");
+  await expect(balanceRow.getByText(/OK/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Insufficient GAS/i)).not.toBeVisible();
 });
 
 Then("the GAS balance indicator shows red", async ({ page }) => {
-  // Insufficient GAS shows "âœ—" and the red error message
   await expect(page.getByText(/Insufficient GAS/)).toBeVisible({ timeout: 10_000 });
 });
 

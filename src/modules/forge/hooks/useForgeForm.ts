@@ -4,7 +4,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { WalletRejectedError } from "../neo-dapi-adapter";
-import { fetchCreationFee, submitForge, type GasBalanceCheck } from "../forge-service";
+import {
+  checkSymbolAvailability,
+  fetchCreationFee,
+  submitForge,
+  type GasBalanceCheck,
+} from "../forge-service";
 import type { ForgeParams } from "../types";
 
 export type ImagePreviewState = "idle" | "loading" | "ok" | "error";
@@ -41,7 +46,8 @@ export interface UseForgeFormResult {
 
 export function useForgeForm(
   _address: string | null,
-  gasBalance: bigint
+  gasBalance: bigint,
+  existingSymbols: string[] = []
 ): UseForgeFormResult {
   const [name, setName] = useState("");
   const [symbol, setSymbolRaw] = useState("");
@@ -142,6 +148,25 @@ export function useForgeForm(
     return Object.keys(errs).length === 0;
   }
 
+  function extractDuplicateSymbolMessage(err: unknown): string | null {
+    const raw =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null
+          ? JSON.stringify(err)
+          : String(err);
+    const normalized = raw.toLowerCase();
+    const looksLikeDuplicate =
+      (normalized.includes("symbol") &&
+        (normalized.includes("already") ||
+          normalized.includes("duplicate") ||
+          normalized.includes("in use") ||
+          normalized.includes("exists"))) ||
+      normalized.includes("duplicate symbol");
+    if (!looksLikeDuplicate) return null;
+    return `Symbol ${symbol} is already in use. Choose a different symbol.`;
+  }
+
   async function submit() {
     if (!validate()) return;
 
@@ -149,6 +174,25 @@ export function useForgeForm(
     setSubmitError(null);
 
     try {
+      const inMemoryDuplicate = existingSymbols.some(
+        (s) => s.trim().toUpperCase() === symbol.trim().toUpperCase()
+      );
+      if (inMemoryDuplicate) {
+        const msg = `Symbol ${symbol} is already in use. Choose a different symbol.`;
+        setErrors((prev) => ({ ...prev, symbol: msg }));
+        setSubmitError(msg);
+        return;
+      }
+
+      const symbolAvailability = await checkSymbolAvailability(symbol);
+      if (!symbolAvailability.available) {
+        setErrors((prev) => ({
+          ...prev,
+          symbol: symbolAvailability.reason ?? "Symbol is already in use",
+        }));
+        return;
+      }
+
       const decimalsNum = Number(decimals);
       const creatorFeeGas = creatorFee.trim() === "" ? 0 : Number(creatorFee);
 
@@ -168,6 +212,12 @@ export function useForgeForm(
       if (err instanceof WalletRejectedError) {
         setSubmitError("Transaction cancelled. Please try again.");
       } else {
+        const duplicateSymbolMsg = extractDuplicateSymbolMessage(err);
+        if (duplicateSymbolMsg) {
+          setErrors((prev) => ({ ...prev, symbol: duplicateSymbolMsg }));
+          setSubmitError(duplicateSymbolMsg);
+          return;
+        }
         const msg =
           err instanceof Error
             ? err.message

@@ -12,6 +12,7 @@ import {
   invokeSetCreatorFee,
   invokeChangeMode,
   invokeLockToken,
+  invokeApplyTokenChanges,
   WalletRejectedError,
 } from "./neo-dapi-adapter";
 
@@ -354,6 +355,34 @@ describe("lifecycle invoke functions", () => {
     expect(instance.invoke).toHaveBeenCalledWith(
       expect.objectContaining({ operation: "lockToken" })
     );
+  });
+
+  it("invokeApplyTokenChanges sends batch payload with sentinel and changed values", async () => {
+    const instance = await connectMock();
+    await invokeApplyTokenChanges("0xfactory", "0xtoken", {
+      imageUrl: "https://scarlet-given-sheep-822.mypinata.cloud/ipfs/bafybeic7fqu2ri7bd4jhxlvfu35pzzoqhbb54etgk56q5dqmbymicdanme",
+      burnRate: 220,
+      creatorFeeRate: 150000,
+      newMode: "speculation",
+      modeParams: [],
+      newMaxSupply: -1n,
+      mintTo: null,
+      mintAmount: 0n,
+      lockToken: false,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: unknown }[] };
+    expect(call.operation).toBe("applyTokenChanges");
+    expect(call.args[1]).toEqual({
+      type: "String",
+      value: "https://scarlet-given-sheep-822.mypinata.cloud/ipfs/bafybeic7fqu2ri7bd4jhxlvfu35pzzoqhbb54etgk56q5dqmbymicdanme",
+    });
+    expect(call.args[2]).toEqual({ type: "Integer", value: "220" });
+    expect(call.args[3]).toEqual({ type: "Integer", value: "150000" });
+    expect(call.args[4]).toEqual({ type: "String", value: "speculation" });
+    expect(call.args[6]).toEqual({ type: "Integer", value: "-1" });
+    expect(call.args[8]).toEqual({ type: "Integer", value: "0" });
+    expect(call.args[9]).toEqual({ type: "Boolean", value: false });
   });
 
   it("all lifecycle functions use Global witness scope", async () => {

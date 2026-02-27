@@ -5,7 +5,7 @@ import { LockBadge } from "./LockBadge";
 describe("LockBadge", () => {
   it("renders when locked", () => {
     render(<LockBadge locked={true} />);
-    expect(screen.getByText("?? Immutable")).toBeInTheDocument();
+    expect(screen.getByText("Locked (Immutable)")).toBeInTheDocument();
   });
 
   it("renders nothing when unlocked", () => {

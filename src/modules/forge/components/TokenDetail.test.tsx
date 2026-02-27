@@ -133,13 +133,13 @@ describe("TokenDetail", () => {
   it("shows burn badge when burnRate > 0", () => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ token: makeToken({ burnRate: 100 }) }));
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
-    expect(screen.getByText("?? 1.00% burn")).toBeInTheDocument();
+    expect(screen.getByText("Burn 1.00%")).toBeInTheDocument();
   });
 
   it("shows lock badge when locked = true", () => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ token: makeToken({ locked: true }) }));
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
-    expect(screen.getByText("?? Immutable")).toBeInTheDocument();
+    expect(screen.getByText("Locked (Immutable)")).toBeInTheDocument();
   });
 
   it("calls addNEP17Token when Add to NeoLine is clicked", async () => {

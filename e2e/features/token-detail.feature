@@ -12,13 +12,13 @@ Feature: Token Detail Page
     Then the contract hash is copied to the clipboard
     And a brief "Copied!" confirmation appears
 
-  Scenario: Own token shows Update Token button
+  Scenario: Own token shows Token Administration panel
     Given the user is viewing a token they created
-    Then an "Update Token" button is visible on the detail page
+    Then the Token Administration panel is visible on the detail page
 
-  Scenario: Third-party token shows no Update Token button
+  Scenario: Third-party token hides Token Administration panel
     Given the user is viewing a token created by another address
-    Then no "Update Token" button is shown on the detail page
+    Then the Token Administration panel is not shown on the detail page
 
   Scenario: Missing factory data falls back to RPC token contract data
     Given a token that was not created through the Forge factory

@@ -66,7 +66,10 @@ function formatSupply(supply: bigint, decimals: number): string {
 }
 
 function formatDate(timestamp: number): string {
-  return new Date(timestamp * 1000).toLocaleDateString();
+  // Runtime timestamps can arrive in seconds or milliseconds depending on source.
+  // Heuristic: values above year-2286 seconds threshold are treated as milliseconds.
+  const ms = timestamp > 10_000_000_000 ? timestamp : timestamp * 1000;
+  return new Date(ms).toLocaleDateString();
 }
 
 const MODE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {

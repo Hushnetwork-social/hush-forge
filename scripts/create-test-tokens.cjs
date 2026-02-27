@@ -150,7 +150,8 @@ async function createToken(client, account, name, symbol, mode) {
     sc.ContractParam.integer(1_000_000),   // total supply
     sc.ContractParam.integer(8),           // decimals
     sc.ContractParam.string(mode),
-    sc.ContractParam.string("")            // imageUrl (empty)
+    sc.ContractParam.string(""),           // imageUrl (empty)
+    sc.ContractParam.integer(0)            // creatorFeeRate (datoshi)
   );
 
   // GAS transfer: transfer(from, to, amount, data)

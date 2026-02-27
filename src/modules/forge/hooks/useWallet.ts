@@ -1,5 +1,5 @@
-/**
- * useWallet — Provides wallet state and actions to React components.
+﻿/**
+ * useWallet â€” Provides wallet state and actions to React components.
  * Detects installed wallets once on mount and calls tryAutoReconnect() once on first mount.
  * Also calls tryAutoReconnect() when NEOLine:DomReady fires, so that if the first attempt
  * failed because NeoLine hadn't injected yet, it retries automatically.
@@ -42,7 +42,7 @@ export function useWallet() {
 
     // When NeoLine injects, detect wallets AND retry auto-reconnect.
     // This covers the case where tryAutoReconnect() above ran before NeoLine
-    // was ready (WalletNotConnectedError) — localStorage is preserved so retry works.
+    // was ready (WalletNotConnectedError) â€” localStorage is preserved so retry works.
     function onNeoLineReady() {
       detectAndSet();
       void tryAutoReconnect();
@@ -58,10 +58,10 @@ export function useWallet() {
     const t1 = setTimeout(tryReconnect, 100);
     const t2 = setTimeout(tryReconnect, 500);
     const t3 = setTimeout(tryReconnect, 1500);
-    // t4 fires after the 15s connect() timeout in wallet-store has had time
+    // t4 fires after the 10s connect() timeout in wallet-store has had time
     // to set "error" state.  This covers the MV3 service-worker restart race:
-    // the initial connect() hangs → times out at 15s → "error" → t4 retries.
-    const t4 = setTimeout(tryReconnect, 20_000);
+    // the initial connect() hangs â†’ times out at 10s â†’ "error" â†’ t4 retries.
+    const t4 = setTimeout(tryReconnect, 10_000);
 
     return () => {
       window.removeEventListener("NEOLine:DomReady", onNeoLineReady);
@@ -90,3 +90,4 @@ export function useWallet() {
     refreshBalances,
   };
 }
+

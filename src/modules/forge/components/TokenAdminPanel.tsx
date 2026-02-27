@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { TokenInfo } from "../types";
+import { invokeApplyTokenChanges } from "../neo-dapi-adapter";
 import { AdminTabIdentity } from "./AdminTabIdentity";
 import { AdminTabSupply } from "./AdminTabSupply";
 import { AdminTabProperties } from "./AdminTabProperties";
 import { AdminTabDangerZone } from "./AdminTabDangerZone";
 import type { StagedChange } from "./admin-types";
+import { toUiErrorMessage } from "./error-utils";
 
 type AdminTab = "identity" | "supply" | "properties" | "danger";
 
@@ -36,6 +38,8 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
   const [stagedChanges, setStagedChanges] = useState<StagedChange[]>([]);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [batchInfo, setBatchInfo] = useState<string | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [applyingBatch, setApplyingBatch] = useState(false);
 
   const tabs = useMemo(() => {
     const list: Array<{ id: AdminTab; label: string }> = [
@@ -65,21 +69,110 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
     });
   }
 
-  function applySelected() {
-    const selectedCount = stagedChanges.filter((entry) => selectedIds[entry.id]).length;
-    if (selectedCount === 0) {
+  function buildBatchParams(changes: StagedChange[]) {
+    const decimalsFactor = 10n ** BigInt(token.decimals);
+    let imageUrl = "";
+    let burnRate = -1;
+    let creatorFeeRate = -1;
+    let newMode = "";
+    let newMaxSupply = -1n;
+    let mintTo: string | null = null;
+    let mintAmount = 0n;
+    let lockToken = false;
+
+    for (const change of changes) {
+      switch (change.type) {
+        case "metadata":
+          imageUrl = String(change.payload.imageUrl ?? "").trim();
+          break;
+        case "burnRate":
+          burnRate = Number(change.payload.basisPoints ?? -1);
+          break;
+        case "creatorFee":
+          creatorFeeRate = Number(change.payload.datoshi ?? -1);
+          break;
+        case "mode":
+          newMode = String(change.payload.mode ?? "").trim();
+          break;
+        case "maxSupply":
+          newMaxSupply = BigInt(String(change.payload.maxSupply ?? "-1"));
+          break;
+        case "mint": {
+          const to = String(change.payload.to ?? "").trim();
+          const amountWhole = BigInt(Number(change.payload.amount ?? 0));
+          mintTo = to.length > 0 ? to : null;
+          mintAmount = amountWhole > 0n ? amountWhole * decimalsFactor : 0n;
+          break;
+        }
+        case "lock":
+          lockToken = true;
+          break;
+      }
+    }
+
+    return {
+      imageUrl,
+      burnRate,
+      creatorFeeRate,
+      newMode,
+      modeParams: [] as string[],
+      newMaxSupply,
+      mintTo,
+      mintAmount,
+      lockToken,
+    };
+  }
+
+  async function applyBatch(entries: StagedChange[]) {
+    if (!factoryHash) {
+      setBatchError("Factory hash is not configured.");
+      return;
+    }
+    if (entries.length === 0) {
       setBatchInfo("Select one or more staged changes first.");
       return;
     }
-    setBatchInfo("Batch execution preview only. Atomic batch contract endpoint will be added before enabling this.");
+    const hasMint = entries.some((entry) => entry.type === "mint");
+    const hasMaxSupply = entries.some((entry) => entry.type === "maxSupply");
+    if (hasMint && hasMaxSupply) {
+      setBatchError(
+        "Cannot apply Mint and Max Supply in the same staged transaction. " +
+          "Set Max Supply first, wait for confirmation, then mint."
+      );
+      return;
+    }
+
+    setApplyingBatch(true);
+    setBatchError(null);
+    setBatchInfo(null);
+    try {
+      const txHash = await invokeApplyTokenChanges(
+        factoryHash,
+        token.contractHash,
+        buildBatchParams(entries)
+      );
+      onTxSubmitted(txHash, `Applying ${entries.length} staged changes...`);
+      const appliedIds = new Set(entries.map((entry) => entry.id));
+      setStagedChanges((prev) => prev.filter((entry) => !appliedIds.has(entry.id)));
+      setSelectedIds((prev) => {
+        const next = { ...prev };
+        for (const id of appliedIds) delete next[id];
+        return next;
+      });
+      setBatchInfo(`Submitted ${entries.length} staged change(s) in one transaction.`);
+    } catch (err) {
+      setBatchError(toUiErrorMessage(err));
+    } finally {
+      setApplyingBatch(false);
+    }
+  }
+
+  function applySelected() {
+    void applyBatch(stagedChanges.filter((entry) => selectedIds[entry.id]));
   }
 
   function applyAll() {
-    if (stagedChanges.length === 0) {
-      setBatchInfo("No staged changes to apply.");
-      return;
-    }
-    setBatchInfo("Apply All is in design-preview mode. Contract batch support is required for a single atomic transaction.");
+    void applyBatch(stagedChanges);
   }
 
   if (token.locked) {
@@ -182,6 +275,7 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
           <div className="flex gap-2">
             <button
               onClick={applySelected}
+              disabled={applyingBatch}
               className="px-2 py-1 rounded text-xs"
               style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
             >
@@ -189,6 +283,7 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
             </button>
             <button
               onClick={applyAll}
+              disabled={applyingBatch}
               className="px-2 py-1 rounded text-xs"
               style={{
                 background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",
@@ -244,6 +339,11 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
         {batchInfo && (
           <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
             {batchInfo}
+          </p>
+        )}
+        {batchError && (
+          <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>
+            {batchError}
           </p>
         )}
       </section>

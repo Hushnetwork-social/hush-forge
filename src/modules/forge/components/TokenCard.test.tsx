@@ -96,11 +96,11 @@ describe("TokenCard", () => {
 
   it("shows burn badge when burnRate > 0", () => {
     render(<TokenCard token={makeToken({ burnRate: 100 })} isOwn={false} onClick={vi.fn()} />);
-    expect(screen.getByText("?? 1.00% burn")).toBeInTheDocument();
+    expect(screen.getByText("Burn 1.00%")).toBeInTheDocument();
   });
 
   it("shows lock badge when locked", () => {
     render(<TokenCard token={makeToken({ locked: true })} isOwn={false} onClick={vi.fn()} />);
-    expect(screen.getByText("?? Immutable")).toBeInTheDocument();
+    expect(screen.getByText("Locked (Immutable)")).toBeInTheDocument();
   });
 });

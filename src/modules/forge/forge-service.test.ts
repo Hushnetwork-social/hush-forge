@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  checkSymbolAvailability,
   fetchCreationFee,
   checkGasBalance,
   pollForConfirmation,
@@ -20,6 +21,7 @@ vi.mock("./forge-config", () => ({
 }));
 
 vi.mock("./neo-rpc-client", () => ({
+  getAllFactoryTokenHashes: vi.fn(),
   invokeFunction: vi.fn(),
   getApplicationLog: vi.fn(),
   getTokenBalance: vi.fn(),
@@ -30,11 +32,13 @@ vi.mock("./neo-dapi-adapter", () => ({
 }));
 
 import {
+  getAllFactoryTokenHashes as mockGetAllFactoryTokenHashes,
   invokeFunction as mockInvokeFunction,
   getApplicationLog as mockGetApplicationLog,
   getTokenBalance as mockGetTokenBalance,
 } from "./neo-rpc-client";
 import "./neo-dapi-adapter"; // mock only — no named imports needed
+import { getRuntimeFactoryHash as mockGetRuntimeFactoryHash } from "./forge-config";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,7 +98,10 @@ function buildFaultLog(): ApplicationLog {
 // ---------------------------------------------------------------------------
 
 describe("fetchCreationFee", () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(mockGetRuntimeFactoryHash).mockReturnValue("0xfactory");
+  });
 
   it("returns fee in datoshi and displayGas", async () => {
     vi.mocked(mockInvokeFunction).mockResolvedValue({
@@ -140,7 +147,10 @@ describe("fetchCreationFee", () => {
 // ---------------------------------------------------------------------------
 
 describe("checkGasBalance", () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(mockGetRuntimeFactoryHash).mockReturnValue("0xfactory");
+  });
 
   it("returns sufficient=true when balance exceeds fee + 10% buffer", async () => {
     vi.mocked(mockGetTokenBalance).mockResolvedValue(2_000_000_000n); // 20 GAS
@@ -164,11 +174,74 @@ describe("checkGasBalance", () => {
 });
 
 // ---------------------------------------------------------------------------
+// checkSymbolAvailability
+// ---------------------------------------------------------------------------
+
+describe("checkSymbolAvailability", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(mockGetRuntimeFactoryHash).mockReturnValue("0xfactory");
+  });
+
+  it("blocks native symbols NEO/GAS", async () => {
+    await expect(checkSymbolAvailability("NEO")).resolves.toEqual({
+      available: false,
+      reason: "Symbol NEO is reserved by a native Neo token.",
+    });
+    await expect(checkSymbolAvailability("gas")).resolves.toEqual({
+      available: false,
+      reason: "Symbol GAS is reserved by a native Neo token.",
+    });
+  });
+
+  it("blocks symbol already used by a factory token", async () => {
+    vi.mocked(mockGetAllFactoryTokenHashes).mockResolvedValue(["0xtoken1"]);
+    vi.mocked(mockInvokeFunction).mockResolvedValue({
+      state: "HALT",
+      gasconsumed: "1",
+      script: "",
+      stack: [
+        {
+          type: "Array",
+          value: [{ type: "ByteString", value: btoa("HUSH") }],
+        },
+      ],
+    });
+
+    const result = await checkSymbolAvailability("hush");
+    expect(result.available).toBe(false);
+    expect(result.reason).toContain("Symbol HUSH is already in use by 0xtoken1.");
+  });
+
+  it("allows symbol when no match exists", async () => {
+    vi.mocked(mockGetAllFactoryTokenHashes).mockResolvedValue(["0xtoken1"]);
+    vi.mocked(mockInvokeFunction).mockResolvedValue({
+      state: "HALT",
+      gasconsumed: "1",
+      script: "",
+      stack: [
+        {
+          type: "Array",
+          value: [{ type: "ByteString", value: btoa("OTHER") }],
+        },
+      ],
+    });
+
+    await expect(checkSymbolAvailability("HUSH")).resolves.toEqual({
+      available: true,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // pollForConfirmation
 // ---------------------------------------------------------------------------
 
 describe("pollForConfirmation", () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(mockGetRuntimeFactoryHash).mockReturnValue("0xfactory");
+  });
   afterEach(() => vi.useRealTimers());
 
   it("resolves with TokenCreatedEvent when found on the third poll", async () => {

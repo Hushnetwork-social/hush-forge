@@ -5,7 +5,7 @@ import { BurnBadge } from "./BurnBadge";
 describe("BurnBadge", () => {
   it("renders formatted burn rate when > 0", () => {
     render(<BurnBadge burnRate={100} />);
-    expect(screen.getByText("?? 1.00% burn")).toBeInTheDocument();
+    expect(screen.getByText("Burn 1.00%")).toBeInTheDocument();
   });
 
   it("renders nothing when burnRate is 0", () => {

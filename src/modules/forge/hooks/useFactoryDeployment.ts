@@ -1,11 +1,11 @@
-/**
- * useFactoryDeployment — detects whether the TokenFactory is deployed and
+﻿/**
+ * useFactoryDeployment â€” detects whether the TokenFactory is deployed and
  * initialized on the current network, and provides deploy/initialize actions.
  *
  * Status lifecycle:
- *   "idle" → "checking" → "deployed" | "not-deployed" | "not-initialized"
- *   "not-deployed"    → [deploy()]      → "deploying" → "initializing" → "deployed" | "deploy-error"
- *   "not-initialized" → [initialize()]  → "initializing" → "deployed" | "deploy-error"
+ *   "idle" â†’ "checking" â†’ "deployed" | "not-deployed" | "not-initialized"
+ *   "not-deployed"    â†’ [deploy()]      â†’ "deploying" â†’ "initializing" â†’ "deployed" | "deploy-error"
+ *   "not-initialized" â†’ [initialize()]  â†’ "initializing" â†’ "deployed" | "deploy-error"
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -49,7 +49,7 @@ interface UseFactoryDeployment {
 }
 
 export function useFactoryDeployment(
-  /** Connected wallet address — starts checking once this is set */
+  /** Connected wallet address â€” starts checking once this is set */
   address: string | null
 ): UseFactoryDeployment {
   const [status, setStatus] = useState<FactoryDeployStatus>("idle");
@@ -68,7 +68,7 @@ export function useFactoryDeployment(
 
     const hash = getRuntimeFactoryHash();
     if (!hash) {
-      // No hash configured and nothing in localStorage — factory has never been deployed.
+      // No hash configured and nothing in localStorage â€” factory has never been deployed.
       setStatus("not-deployed");
       return;
     }
@@ -84,7 +84,7 @@ export function useFactoryDeployment(
         return;
       }
 
-      // Contract exists — check if initialized (NEF stored in factory)
+      // Contract exists â€” check if initialized (NEF stored in factory)
       try {
         const result = await invokeFunction(hash, "isInitialized", []);
         const initialized = result.stack[0]?.value === true || result.stack[0]?.value === "1";
@@ -116,9 +116,9 @@ export function useFactoryDeployment(
         console.log("[factory] deploy tx submitted:", txid);
         await pollDeploymentConfirmed(txid);
 
-        console.log("[factory] deploy tx confirmed — reading app log for hash...");
+        console.log("[factory] deploy tx confirmed â€” reading app log for hash...");
         // Primary: read the actual contract hash from ContractManagement's Deploy notification.
-        // This is the only reliable source — pre-computing is fragile (byte-order of sender hash).
+        // This is the only reliable source â€” pre-computing is fragile (byte-order of sender hash).
         const log = await getApplicationLog(txid);
         if (log) {
           const extracted = extractDeployedHashFromLog(log);
@@ -152,8 +152,8 @@ export function useFactoryDeployment(
         }
 
         // Wait for the contract to be visible to NeoLine's RPC (timing safety).
-        // NeoLine does an invokefunction dry-run before submitting — the state must be ready.
-        await waitUntilContractDeployed(deployedHash, 30_000);
+        // NeoLine does an invokefunction dry-run before submitting â€” the state must be ready.
+        await waitUntilContractDeployed(deployedHash, 10_000);
 
         console.log("[factory] deployed at:", deployedHash);
       } catch (deployErr) {
@@ -164,14 +164,14 @@ export function useFactoryDeployment(
           console.log(
             "[factory] contract already exists at:",
             deployedHash ?? "(unknown hash)",
-            "— recovering"
+            "â€” recovering"
           );
 
           if (deployedHash) {
             saveFactoryHash(deployedHash);
             setFactoryHash(deployedHash);
 
-            // Check if already initialized — return early if so
+            // Check if already initialized â€” return early if so
             try {
               const result = await invokeFunction(deployedHash, "isInitialized", []);
               const initialized =
@@ -180,7 +180,7 @@ export function useFactoryDeployment(
                 setStatus("deployed");
                 return;
               }
-            } catch { /* not initialized — fall through to initialize */ }
+            } catch { /* not initialized â€” fall through to initialize */ }
           } else {
             throw new Error(
               "Contract already deployed but its hash could not be determined. " +
@@ -203,7 +203,7 @@ export function useFactoryDeployment(
         const initTxid = await dapiInitializeFactory(deployedHash);
         console.log("[factory] setNefAndManifest tx submitted:", initTxid);
         await pollDeploymentConfirmed(initTxid);
-        console.log("[factory] initialized — ready to forge tokens");
+        console.log("[factory] initialized â€” ready to forge tokens");
         setStatus("deployed");
       } catch (initErr) {
         // Factory is deployed but initialization failed (e.g. NeoLine state lag, user cancel).
@@ -230,7 +230,7 @@ export function useFactoryDeployment(
       console.log("[factory] setNefAndManifest tx submitted:", initTxid);
 
       await pollDeploymentConfirmed(initTxid);
-      console.log("[factory] initialized — ready to forge tokens");
+      console.log("[factory] initialized â€” ready to forge tokens");
 
       setStatus("deployed");
     } catch (err) {
@@ -247,7 +247,7 @@ export function useFactoryDeployment(
 // Hash / timing helpers
 // ---------------------------------------------------------------------------
 
-/** Returns the hash with all 20 bytes in reversed order (LE ↔ BE swap). */
+/** Returns the hash with all 20 bytes in reversed order (LE â†” BE swap). */
 function reverseHashBytes(hash: string): string {
   const hex = hash.startsWith("0x") ? hash.slice(2) : hash;
   return "0x" + hex.match(/.{2}/g)!.reverse().join("");
@@ -275,7 +275,7 @@ async function waitUntilContractDeployed(hash: string, timeoutMs: number): Promi
 // ApplicationLog helpers
 // ---------------------------------------------------------------------------
 
-/** ContractManagement hash — same on every Neo N3 network. */
+/** ContractManagement hash â€” same on every Neo N3 network. */
 const CONTRACT_MGMT_HASH = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd";
 
 /**
@@ -287,11 +287,11 @@ const CONTRACT_MGMT_HASH = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd";
  */
 function extractDeployedHashFromLog(log: ApplicationLog): string | null {
   for (const exec of log.executions) {
-    console.log("[factory] applog exec — trigger:", exec.trigger, "vmstate:", exec.vmstate,
+    console.log("[factory] applog exec â€” trigger:", exec.trigger, "vmstate:", exec.vmstate,
       "notifications:", exec.notifications?.length ?? 0);
     if (exec.trigger !== "Application") continue;
     for (const notif of exec.notifications ?? []) {
-      console.log("[factory] notification — contract:", notif.contract,
+      console.log("[factory] notification â€” contract:", notif.contract,
         "event:", notif.eventname, "state[0]:", JSON.stringify(notif.state.value[0]));
       if (
         notif.contract.toLowerCase() === CONTRACT_MGMT_HASH &&
@@ -306,7 +306,7 @@ function extractDeployedHashFromLog(log: ApplicationLog): string | null {
             if (bytes.length === 20) {
               return "0x" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
             }
-          } catch { /* invalid base64 or wrong length — skip */ }
+          } catch { /* invalid base64 or wrong length â€” skip */ }
         } else {
           console.log("[factory] Deploy notification item type:", item?.type, "value:", item?.value);
         }
@@ -394,3 +394,4 @@ function pollDeploymentConfirmed(txid: string): Promise<void> {
     check();
   });
 }
+

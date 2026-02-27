@@ -13,7 +13,12 @@ import {
   TX_POLLING_TIMEOUT_MS,
 } from "./forge-config";
 import { invokeForge as dapiInvokeForge } from "./neo-dapi-adapter";
-import { getApplicationLog, getTokenBalance, invokeFunction } from "./neo-rpc-client";
+import {
+  getAllFactoryTokenHashes,
+  getApplicationLog,
+  getTokenBalance,
+  invokeFunction,
+} from "./neo-rpc-client";
 import type {
   ApplicationLog,
   ForgeParams,
@@ -91,6 +96,75 @@ export interface GasBalanceCheck {
   sufficient: boolean;
   actual: bigint;
   required: bigint; // fee + 10% buffer
+}
+
+export interface SymbolAvailability {
+  available: boolean;
+  reason?: string;
+}
+
+function parseFactorySymbolFromStack(stack: RpcStackItem[]): string | null {
+  const top = stack[0];
+  if (!top || top.type !== "Array") return null;
+  const values = top.value as RpcStackItem[];
+  const raw = values?.[0];
+  if (!raw || raw.type !== "ByteString") return null;
+  try {
+    return atob(raw.value as string);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Checks whether a symbol is already used by known network tokens:
+ * - native NEO/GAS (always blocked)
+ * - all tokens currently registered in TokenFactory global list
+ */
+export async function checkSymbolAvailability(
+  symbol: string
+): Promise<SymbolAvailability> {
+  const normalized = symbol.trim().toUpperCase();
+  if (!normalized) return { available: true };
+
+  if (normalized === "NEO" || normalized === "GAS") {
+    return {
+      available: false,
+      reason: `Symbol ${normalized} is reserved by a native Neo token.`,
+    };
+  }
+
+  const factoryHash = getRuntimeFactoryHash();
+  if (!factoryHash) return { available: true };
+
+  const hashes = await getAllFactoryTokenHashes(factoryHash);
+  if (hashes.length === 0) return { available: true };
+
+  const checks = await Promise.all(
+    hashes.map(async (contractHash) => {
+      try {
+        const result = await invokeFunction(factoryHash, "getToken", [
+          { type: "Hash160", value: contractHash },
+        ]);
+        const existing = parseFactorySymbolFromStack(result.stack);
+        return { contractHash, existing };
+      } catch {
+        return { contractHash, existing: null as string | null };
+      }
+    })
+  );
+
+  const match = checks.find(
+    (c) => c.existing && c.existing.toUpperCase() === normalized
+  );
+  if (match) {
+    return {
+      available: false,
+      reason: `Symbol ${normalized} is already in use by ${match.contractHash}.`,
+    };
+  }
+
+  return { available: true };
 }
 
 /**

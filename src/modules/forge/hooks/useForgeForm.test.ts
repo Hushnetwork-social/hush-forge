@@ -5,6 +5,7 @@ import { useForgeForm } from "./useForgeForm";
 // Mock dependencies
 vi.mock("../forge-service", () => ({
   fetchCreationFee: vi.fn(),
+  checkSymbolAvailability: vi.fn(),
   submitForge: vi.fn(),
 }));
 
@@ -17,7 +18,11 @@ vi.mock("../neo-dapi-adapter", () => ({
   },
 }));
 
-import { fetchCreationFee as mockFetchFee, submitForge as mockSubmitForge } from "../forge-service";
+import {
+  checkSymbolAvailability as mockCheckSymbolAvailability,
+  fetchCreationFee as mockFetchFee,
+  submitForge as mockSubmitForge,
+} from "../forge-service";
 import { WalletRejectedError } from "../neo-dapi-adapter";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +52,7 @@ async function renderWithFeeLoaded(
 describe("useForgeForm", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(mockCheckSymbolAvailability).mockResolvedValue({ available: true });
   });
 
   // -------------------------------------------------------------------------
@@ -278,6 +284,30 @@ describe("useForgeForm", () => {
     expect(result.current.errors).toEqual({});
   });
 
+  it("duplicate symbol fails before wallet invoke", async () => {
+    vi.mocked(mockCheckSymbolAvailability).mockResolvedValue({
+      available: false,
+      reason: "Symbol HUSH is already in use by 0xabc.",
+    });
+    const { result } = await renderWithFeeLoaded();
+
+    await act(async () => {
+      result.current.setName("HushToken");
+      result.current.setSymbol("HUSH");
+      result.current.setSupply("10000000");
+      result.current.setDecimals("8");
+    });
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.errors.symbol).toBe(
+      "Symbol HUSH is already in use by 0xabc."
+    );
+    expect(vi.mocked(mockSubmitForge)).not.toHaveBeenCalled();
+  });
+
   // -------------------------------------------------------------------------
   // Submit orchestration
   // -------------------------------------------------------------------------
@@ -324,5 +354,31 @@ describe("useForgeForm", () => {
     );
     expect(result.current.submittedTxHash).toBeNull();
     expect(result.current.submitting).toBe(false);
+  });
+
+  it("shows friendly symbol error when chain rejects duplicate symbol", async () => {
+    vi.mocked(mockSubmitForge).mockRejectedValue({
+      type: "RPC_ERROR",
+      description: "Symbol already exists",
+    });
+    const { result } = await renderWithFeeLoaded();
+
+    await act(async () => {
+      result.current.setName("HushToken");
+      result.current.setSymbol("HUSH");
+      result.current.setSupply("10000000");
+      result.current.setDecimals("8");
+    });
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.errors.symbol).toBe(
+      "Symbol HUSH is already in use. Choose a different symbol."
+    );
+    expect(result.current.submitError).toBe(
+      "Symbol HUSH is already in use. Choose a different symbol."
+    );
   });
 });

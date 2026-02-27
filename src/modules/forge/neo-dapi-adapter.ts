@@ -117,7 +117,6 @@ let _dapi: NeoDapi | null = null;
 // RPC URL derived from the wallet's selected network after connect().
 // Empty until a wallet connects — all RPC calls require a connected wallet.
 let _activeRpcUrl: string = "";
-let _activeNetwork: string = "";
 
 /** Well-known public RPC nodes for standard Neo N3 networks. */
 const NETWORK_RPC_MAP: Record<string, string> = {
@@ -171,7 +170,6 @@ export async function connect(type: WalletType): Promise<string> {
   // chain reads always hit the same node as NeoLine/OneGate/Neon.
   try {
     const { defaultNetwork } = await dapi.getNetworks();
-    _activeNetwork = defaultNetwork;
     const known = NETWORK_RPC_MAP[defaultNetwork];
     if (known) {
       _activeRpcUrl = known;
@@ -202,7 +200,6 @@ export function disconnect(): void {
   _walletType = "disconnected";
   _dapi = null;
   _activeRpcUrl = "";
-  _activeNetwork = "";
   if (typeof localStorage !== "undefined") {
     localStorage.removeItem(WALLET_STORAGE_KEY);
   }
@@ -748,6 +745,68 @@ export async function invokeLockToken(
       ],
       signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
       description: "Lock token permanently — this cannot be undone",
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+/**
+ * Calls applyTokenChanges on the factory to execute staged lifecycle changes
+ * in a single transaction.
+ *
+ * Sentinel values:
+ * - imageUrl = ""        -> unchanged
+ * - burnRate = -1        -> unchanged
+ * - creatorFeeRate = -1  -> unchanged
+ * - newMode = ""         -> unchanged
+ * - newMaxSupply = -1    -> unchanged
+ * - mintAmount = 0       -> unchanged
+ * - lockToken = false    -> unchanged
+ */
+export async function invokeApplyTokenChanges(
+  factoryHash: string,
+  tokenHash: string,
+  params: {
+    imageUrl: string;
+    burnRate: number;
+    creatorFeeRate: number;
+    newMode: string;
+    modeParams: string[];
+    newMaxSupply: bigint;
+    mintTo: string | null;
+    mintAmount: bigint;
+    lockToken: boolean;
+  }
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  try {
+    const mintToValue = params.mintTo
+      ? addressToScriptHash(params.mintTo)
+      : "0x0000000000000000000000000000000000000000";
+
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation: "applyTokenChanges",
+      args: [
+        { type: "Hash160", value: tokenHash },
+        { type: "String", value: params.imageUrl },
+        { type: "Integer", value: params.burnRate.toString() },
+        { type: "Integer", value: params.creatorFeeRate.toString() },
+        { type: "String", value: params.newMode },
+        {
+          type: "Array",
+          value: params.modeParams.map((p) => ({ type: "String", value: p })),
+        },
+        { type: "Integer", value: params.newMaxSupply.toString() },
+        { type: "Hash160", value: mintToValue },
+        { type: "Integer", value: params.mintAmount.toString() },
+        { type: "Boolean", value: params.lockToken },
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description: "Apply staged token changes",
     });
     return result.txid;
   } catch (err) {

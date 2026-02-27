@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForgeForm } from "../hooks/useForgeForm";
+import { useTokenStore } from "../token-store";
 
 interface Props {
   address: string | null;
@@ -16,6 +17,15 @@ export function ForgeOverlay({
   onClose,
   onTxSubmitted,
 }: Props) {
+  const tokens = useTokenStore((s) => s.tokens);
+  const existingSymbols = useMemo(
+    () =>
+      tokens
+        .map((t) => t.symbol.toUpperCase())
+        .filter((symbolText) => symbolText.length > 0),
+    [tokens]
+  );
+
   const {
     name,
     setName,
@@ -39,7 +49,7 @@ export function ForgeOverlay({
     submittedTxHash,
     submitError,
     submit,
-  } = useForgeForm(address, gasBalance);
+  } = useForgeForm(address, gasBalance, existingSymbols);
 
   const [showHostingHints, setShowHostingHints] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);

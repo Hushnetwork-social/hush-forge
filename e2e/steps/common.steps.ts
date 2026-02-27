@@ -54,7 +54,7 @@ export async function openForgeOverlay(page: Page, address: string): Promise<voi
   // Wait for the factory deployment check to complete — the button stays disabled
   // while useFactoryDeployment is in "checking" state (async RPC call).
   const forgeBtn = page.getByRole("button", { name: "Forge Token" });
-  await expect(forgeBtn).not.toBeDisabled({ timeout: 20_000 });
+  await expect(forgeBtn).not.toBeDisabled({ timeout: 10_000 });
   await forgeBtn.click();
   await expect(page.getByRole("dialog", { name: "Forge a Token" })).toBeVisible();
 }
@@ -67,7 +67,7 @@ export async function openForgeOverlay(page: Page, address: string): Promise<voi
  * (e.g. insufficient GAS balance).
  */
 export async function waitForForgeReady(page: Page): Promise<void> {
-  await expect(page.getByRole("button", { name: /FORGE/ })).not.toBeDisabled({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: /FORGE/ })).not.toBeDisabled({ timeout: 10_000 });
 }
 
 /**

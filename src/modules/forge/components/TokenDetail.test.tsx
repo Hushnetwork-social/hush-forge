@@ -89,6 +89,33 @@ describe("TokenDetail", () => {
     expect(screen.getByText("TOKEN_ADMIN_PANEL")).toBeInTheDocument();
   });
 
+  it("shows admin update hint overlay for own token", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ isOwnToken: true }));
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+    expect(screen.getByRole("dialog", { name: "Admin update options" })).toBeInTheDocument();
+  });
+
+  it("closes admin update hint overlay on OK", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ isOwnToken: true }));
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
+  });
+
+  it("closes admin update hint overlay on click anywhere", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ isOwnToken: true }));
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("admin-update-hint-overlay"));
+    expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
+  });
+
+  it("closes admin update hint overlay on Escape", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ isOwnToken: true }));
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
+  });
+
   it("does not render admin panel for visitor", () => {
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
     expect(screen.queryByText("TOKEN_ADMIN_PANEL")).not.toBeInTheDocument();

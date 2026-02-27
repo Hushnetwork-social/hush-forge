@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTokenDetail } from "../hooks/useTokenDetail";
 import { useTokenTransfers } from "../hooks/useTokenTransfers";
@@ -86,6 +86,17 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
   const walletAddress = useWalletStore((s) => s.address);
   const { transfers, supported } = useTokenTransfers(contractHash, walletAddress);
   const [copied, setCopied] = useState(false);
+  const [dismissedHintFor, setDismissedHintFor] = useState<string | null>(null);
+  const showAdminHint = isOwnToken && dismissedHintFor !== contractHash;
+
+  useEffect(() => {
+    if (!showAdminHint) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setDismissedHintFor(contractHash);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showAdminHint, contractHash]);
 
   function copyHash() {
     navigator.clipboard
@@ -106,6 +117,47 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
+      {showAdminHint && (
+        <div
+          data-testid="admin-update-hint-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          onClick={() => setDismissedHintFor(contractHash)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Admin update options"
+            className="w-full max-w-lg rounded-xl p-4 space-y-3"
+            style={{ background: "var(--forge-bg-card)", border: "1px solid var(--forge-border-medium)" }}
+          >
+            <h2 className="text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>
+              Admin Update Options
+            </h2>
+            <p className="text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+              You can submit each token change individually, but each operation spends GAS.
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+              You can also stage multiple changes and apply them together in one operation, which can reduce GAS costs.
+            </p>
+            <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+              Press <strong style={{ color: "var(--forge-text-primary)" }}>OK</strong>, click anywhere, or press{" "}
+              <strong style={{ color: "var(--forge-text-primary)" }}>Esc</strong> to continue.
+            </p>
+            <div className="pt-1">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))", color: "var(--forge-text-primary)" }}
+                onClick={() => setDismissedHintFor(contractHash)}
+              >
+                OK
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <Link href="/tokens" className="text-sm mb-6 inline-block hover:opacity-80 transition-opacity" style={{ color: "var(--forge-text-muted)" }}>
         Back to Tokens
       </Link>

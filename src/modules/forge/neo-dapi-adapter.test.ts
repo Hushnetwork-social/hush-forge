@@ -185,6 +185,20 @@ describe("invokeForge", () => {
     expect(txid).toBe("0xtestTxId");
   });
 
+  it("invokeForge includes explicit empty signer allow-lists", async () => {
+    const instance = makeMockDapi();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
+    await connect("NeoLine");
+
+    await invokeForge("0xfactory", 10_000_000n, forgeParams);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as { signers: { allowedContracts?: unknown[]; allowedGroups?: unknown[] }[] };
+    expect(call.signers[0].allowedContracts).toEqual([]);
+    expect(call.signers[0].allowedGroups).toEqual([]);
+  });
+
   it("sends data array with 7 elements including creatorFeeRate", async () => {
     const capturedArgs: unknown[] = [];
     const instance = makeMockDapi({

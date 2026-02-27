@@ -390,7 +390,8 @@ export async function invokeForge(
         ],
       },
     ],
-    signers: [{ account: fromHash, scopes: "CalledByEntry" as const }],
+    // NeoLine private-net path can serialize signers incorrectly in some builds
+    // (RPC_ERROR JSON parse). Let wallet use default signer for forge transfer.
     description: `Forge token: ${params.name} (${params.symbol})`,
   };
 

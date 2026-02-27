@@ -62,6 +62,7 @@ interface NeoDapi {
   getNetworks(): Promise<{ networks: string[]; defaultNetwork: string }>;
   getBalance(params: { params: { address: string }[] }): Promise<{ address: string; balances: NeoDapiBalance[] }[]>;
   invoke(params: {
+    network?: string;
     scriptHash: string;
     operation: string;
     args: unknown[];
@@ -116,6 +117,7 @@ let _dapi: NeoDapi | null = null;
 // RPC URL derived from the wallet's selected network after connect().
 // Empty until a wallet connects — all RPC calls require a connected wallet.
 let _activeRpcUrl: string = "";
+let _activeNetwork: string = "";
 
 /** Well-known public RPC nodes for standard Neo N3 networks. */
 const NETWORK_RPC_MAP: Record<string, string> = {
@@ -169,6 +171,7 @@ export async function connect(type: WalletType): Promise<string> {
   // chain reads always hit the same node as NeoLine/OneGate/Neon.
   try {
     const { defaultNetwork } = await dapi.getNetworks();
+    _activeNetwork = defaultNetwork;
     const known = NETWORK_RPC_MAP[defaultNetwork];
     if (known) {
       _activeRpcUrl = known;
@@ -199,6 +202,7 @@ export function disconnect(): void {
   _walletType = "disconnected";
   _dapi = null;
   _activeRpcUrl = "";
+  _activeNetwork = "";
   if (typeof localStorage !== "undefined") {
     localStorage.removeItem(WALLET_STORAGE_KEY);
   }
@@ -371,6 +375,7 @@ export async function invokeForge(
   const fromHash = addressToScriptHash(_connectedAddress!);
 
   const invokeArgs = {
+    ...(_activeNetwork ? { network: _activeNetwork } : {}),
     scriptHash: "0xd2a4cff31913016155e38e474a2c06d08be276cf", // GAS hash
     operation: "transfer",
     args: [

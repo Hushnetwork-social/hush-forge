@@ -170,6 +170,19 @@ export async function getApplicationLog(
   }
 }
 
+/**
+ * Returns the raw mempool transaction hashes.
+ * If the node does not support or temporarily fails this call, returns [].
+ */
+export async function getRawMemPool(): Promise<string[]> {
+  try {
+    const hashes = await rpcCall<string[]>("getrawmempool", []);
+    return Array.isArray(hashes) ? hashes : [];
+  } catch {
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // NEP-17 transfer history
 // ---------------------------------------------------------------------------

@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import TokensPage from "./page";
 
-// ── Mock all hooks and stores ──────────────────────────────────────────────
-
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
@@ -16,10 +14,6 @@ vi.mock("@/modules/forge/hooks/useFactoryDeployment", () => ({
   useFactoryDeployment: vi.fn(),
 }));
 
-vi.mock("@/modules/forge/hooks/useTokenPolling", () => ({
-  useTokenPolling: vi.fn(),
-}));
-
 vi.mock("@/modules/forge/token-store", () => ({
   useTokenStore: vi.fn(),
 }));
@@ -27,8 +21,6 @@ vi.mock("@/modules/forge/token-store", () => ({
 vi.mock("@/modules/forge/wallet-store", () => ({
   useWalletStore: vi.fn(),
 }));
-
-// ── Mock all components ────────────────────────────────────────────────────
 
 vi.mock("@/components/layout/ForgeHeader", () => ({
   ForgeHeader: ({ onConnectClick }: { onConnectClick: () => void }) => (
@@ -61,32 +53,8 @@ vi.mock("@/modules/forge/components/ForgeOverlay", () => ({
   ),
 }));
 
-vi.mock("@/modules/forge/components/WaitingOverlay", () => ({
-  WaitingOverlay: ({ message }: { message: string }) => (
-    <div role="status" aria-label="Waiting for transaction">
-      {message}
-    </div>
-  ),
-}));
-
-vi.mock("@/modules/forge/components/ForgeToaster", () => ({
-  ForgeSuccessToast: ({ onDismiss }: { onDismiss: () => void }) => (
-    <div data-testid="success-toast">
-      <button onClick={onDismiss}>Dismiss</button>
-    </div>
-  ),
-  ForgeErrorToast: ({
-    message,
-    onDismiss,
-  }: {
-    message: string;
-    onDismiss: () => void;
-  }) => (
-    <div data-testid="error-toast">
-      {message}
-      <button onClick={onDismiss}>Dismiss</button>
-    </div>
-  ),
+vi.mock("@/modules/forge/components/PendingTxProvider", () => ({
+  usePendingTx: vi.fn(),
 }));
 
 vi.mock("@/modules/forge/components/WalletConnectModal", () => ({
@@ -97,16 +65,14 @@ vi.mock("@/modules/forge/components/WalletConnectModal", () => ({
   ),
 }));
 
-// ── Test fixtures ──────────────────────────────────────────────────────────
-
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 import { useFactoryDeployment } from "@/modules/forge/hooks/useFactoryDeployment";
 import type { FactoryDeployStatus } from "@/modules/forge/hooks/useFactoryDeployment";
-import { useTokenPolling } from "@/modules/forge/hooks/useTokenPolling";
 import { useTokenStore } from "@/modules/forge/token-store";
 import type { TokenStore } from "@/modules/forge/token-store";
 import { useWalletStore } from "@/modules/forge/wallet-store";
 import type { WalletStore } from "@/modules/forge/wallet-store";
+import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
 
 function setupMocks({
   address = null as string | null,
@@ -139,10 +105,9 @@ function setupMocks({
     recheck: vi.fn(),
   });
 
-  vi.mocked(useTokenPolling).mockReturnValue({
-    status: "confirming",
-    contractHash: null,
-    error: null,
+  vi.mocked(usePendingTx).mockReturnValue({
+    setPendingTx: vi.fn(),
+    clearPendingTx: vi.fn(),
   });
 
   vi.mocked(useTokenStore).mockImplementation(
@@ -165,8 +130,6 @@ function setupMocks({
   );
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
-
 describe("TokensPage", () => {
   beforeEach(() => {
     setupMocks();
@@ -180,67 +143,92 @@ describe("TokensPage", () => {
 
   it("ForgeOverlay is not visible on load", () => {
     render(<TokensPage />);
-    expect(screen.queryByRole("dialog", { name: "Forge a Token" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Forge a Token" })
+    ).not.toBeInTheDocument();
   });
 
   it("Forge Token button is shown when wallet is connected", () => {
     setupMocks({ address: "NwMe", connectionStatus: "connected" });
     render(<TokensPage />);
-    expect(screen.getByText("🔥 Forge Token")).toBeInTheDocument();
+    expect(screen.getByText("Forge Token")).toBeInTheDocument();
   });
 
   it("Forge Token button is not shown when wallet is disconnected", () => {
     render(<TokensPage />);
-    expect(screen.queryByText("🔥 Forge Token")).not.toBeInTheDocument();
+    expect(screen.queryByText("Forge Token")).not.toBeInTheDocument();
   });
 
   it("Forge Token button is disabled when factory is not deployed", () => {
-    setupMocks({ address: "NwMe", connectionStatus: "connected", factoryStatus: "not-deployed" });
+    setupMocks({
+      address: "NwMe",
+      connectionStatus: "connected",
+      factoryStatus: "not-deployed",
+    });
     render(<TokensPage />);
-    expect(screen.getByText("🔥 Forge Token")).toBeDisabled();
+    expect(screen.getByText("Forge Token")).toBeDisabled();
   });
 
   it("Forge Token button is disabled while factory is checking", () => {
-    setupMocks({ address: "NwMe", connectionStatus: "connected", factoryStatus: "checking" });
+    setupMocks({
+      address: "NwMe",
+      connectionStatus: "connected",
+      factoryStatus: "checking",
+    });
     render(<TokensPage />);
-    expect(screen.getByText("🔥 Forge Token")).toBeDisabled();
+    expect(screen.getByText("Forge Token")).toBeDisabled();
   });
 
   it("Forge Token button is enabled when factory is deployed", () => {
-    setupMocks({ address: "NwMe", connectionStatus: "connected", factoryStatus: "deployed" });
+    setupMocks({
+      address: "NwMe",
+      connectionStatus: "connected",
+      factoryStatus: "deployed",
+    });
     render(<TokensPage />);
-    expect(screen.getByText("🔥 Forge Token")).not.toBeDisabled();
+    expect(screen.getByText("Forge Token")).not.toBeDisabled();
   });
 
   it("clicking Forge Token shows the ForgeOverlay", () => {
     setupMocks({ address: "NwMe", connectionStatus: "connected" });
     render(<TokensPage />);
-    fireEvent.click(screen.getByText("🔥 Forge Token"));
-    expect(screen.getByRole("dialog", { name: "Forge a Token" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Forge Token"));
+    expect(
+      screen.getByRole("dialog", { name: "Forge a Token" })
+    ).toBeInTheDocument();
   });
 
   it("ForgeOverlay Cancel returns to dashboard", () => {
     setupMocks({ address: "NwMe", connectionStatus: "connected" });
     render(<TokensPage />);
-    fireEvent.click(screen.getByText("🔥 Forge Token"));
+    fireEvent.click(screen.getByText("Forge Token"));
     fireEvent.click(screen.getByText("Cancel"));
-    expect(screen.queryByRole("dialog", { name: "Forge a Token" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Forge a Token" })
+    ).not.toBeInTheDocument();
   });
 
-  it("WaitingOverlay appears after wallet signs", () => {
+  it("submete tx pendente para o provider global após assinatura", () => {
     setupMocks({ address: "NwMe", connectionStatus: "connected" });
+    const setPendingTx = vi.fn();
+    vi.mocked(usePendingTx).mockReturnValue({
+      setPendingTx,
+      clearPendingTx: vi.fn(),
+    });
     render(<TokensPage />);
-    fireEvent.click(screen.getByText("🔥 Forge Token"));
+    fireEvent.click(screen.getByText("Forge Token"));
     fireEvent.click(screen.getByText("FORGE"));
-    expect(
-      screen.getByRole("status", { name: "Waiting for transaction" })
-    ).toBeInTheDocument();
-    expect(screen.getByText("Forging your token…")).toBeInTheDocument();
+    expect(setPendingTx).toHaveBeenCalledWith({
+      txHash: "0xtxhash",
+      message: "Waiting for forge transaction confirmation...",
+    });
   });
 
   it("WalletConnectModal opens from header Connect Wallet click", () => {
     render(<TokensPage />);
     fireEvent.click(screen.getByText("Connect Wallet"));
-    expect(screen.getByRole("dialog", { name: "Connect Wallet" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Connect Wallet" })
+    ).toBeInTheDocument();
   });
 });

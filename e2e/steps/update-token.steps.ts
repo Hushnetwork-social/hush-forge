@@ -8,6 +8,21 @@ import { connectWallet } from "./common.steps";
 
 const { Given, When, Then } = createBdd(test);
 
+async function dismissAdminHintIfVisible(
+  page: import("@playwright/test").Page
+): Promise<void> {
+  const overlay = page.getByTestId("admin-update-hint-overlay");
+  if (await overlay.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    const ok = page.getByRole("button", { name: "OK" });
+    if (await ok.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await ok.click();
+    } else {
+      await page.keyboard.press("Escape").catch(() => {});
+    }
+    await expect(overlay).toHaveCount(0, { timeout: 5_000 });
+  }
+}
+
 async function forgeOwnTokenAndOpenDetail(
   page: import("@playwright/test").Page,
   address: string
@@ -22,6 +37,7 @@ async function forgeOwnTokenAndOpenDetail(
   if (await ok.isVisible({ timeout: 2_000 }).catch(() => false)) {
     await ok.click();
   }
+  await dismissAdminHintIfVisible(page);
 
   await expect(page.getByText("TOKEN ADMINISTRATION")).toBeVisible({ timeout: 10_000 });
 }
@@ -35,6 +51,7 @@ Given(
 
 
 When("the user updates the image URL field in the Identity tab", async ({ page }) => {
+  await dismissAdminHintIfVisible(page);
   await page.getByRole("tab", { name: "Identity" }).click();
   const input = page.getByRole("textbox", { name: "Image URL" });
   await input.fill("https://example.com/new-image.png");

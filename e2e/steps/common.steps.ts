@@ -110,11 +110,11 @@ Given("the Forge overlay is open with a valid form", async ({ page, mockDapi }) 
   await fillValidForgeForm(page);
 });
 
-Given("the WaitingOverlay is active", async ({ page, mockDapi }) => {
+Given("a pending transaction toast is visible", async ({ page, mockDapi }) => {
   await openForgeOverlay(page, mockDapi.address);
   await waitForForgeReady(page);
   await fillValidForgeForm(page);
-  // Override invoke() to return a fake txid instantly — the WaitingOverlay only
+  // Override invoke() to return a fake txid instantly - the pending toast only
   // needs the txHash to be set, not an actual confirmed on-chain TX.
   // This avoids waiting 30 s for a real TX, which is unnecessary for accessibility tests.
   await page.evaluate(() => {
@@ -126,7 +126,7 @@ Given("the WaitingOverlay is active", async ({ page, mockDapi }) => {
   });
   await page.getByRole("button", { name: /FORGE/ }).click();
   await expect(
-    page.getByRole("status", { name: "Waiting for transaction" })
+    page.getByRole("status", { name: "Pending transaction status" })
   ).toBeVisible({ timeout: 10_000 });
 });
 

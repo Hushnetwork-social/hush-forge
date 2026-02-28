@@ -27,17 +27,17 @@ Then("pressing Escape closes the overlay", async ({ page }) => {
   ).not.toBeVisible({ timeout: 3_000 });
 });
 
-Then("the overlay has role status and is polite", async ({ page }) => {
-  const overlay = page.getByRole("status", { name: "Waiting for transaction" });
-  await expect(overlay).toBeVisible();
-  const role = await overlay.getAttribute("role");
+Then("the pending toast has role status and is polite", async ({ page }) => {
+  const toast = page.getByRole("status", { name: "Pending transaction status" });
+  await expect(toast).toBeVisible();
+  const role = await toast.getAttribute("role");
   expect(role).toBe("status");
 });
 
-Then("the overlay has an accessible label", async ({ page }) => {
-  const overlay = page.getByRole("status", { name: "Waiting for transaction" });
-  await expect(overlay).toBeVisible();
-  const label = await overlay.getAttribute("aria-label");
+Then("the pending toast has an accessible label", async ({ page }) => {
+  const toast = page.getByRole("status", { name: "Pending transaction status" });
+  await expect(toast).toBeVisible();
+  const label = await toast.getAttribute("aria-label");
   expect(label).toBeTruthy();
 });
 

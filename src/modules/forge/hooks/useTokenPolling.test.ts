@@ -61,7 +61,11 @@ describe("useTokenPolling", () => {
   it("starts polling when txHash is provided", () => {
     vi.mocked(mockPoll).mockReturnValue(new Promise(() => {})); // never resolves
     renderHook(() => useTokenPolling("0xtx123"));
-    expect(vi.mocked(mockPoll)).toHaveBeenCalledWith("0xtx123", expect.any(Function));
+    expect(vi.mocked(mockPoll)).toHaveBeenCalledWith(
+      "0xtx123",
+      expect.any(Function),
+      { timeoutMs: 0 }
+    );
   });
 
   it("sets status to 'confirmed' and contractHash on success", async () => {
@@ -82,7 +86,7 @@ describe("useTokenPolling", () => {
 
     await waitFor(() => expect(result.current.status).toBe("timeout"));
 
-    expect(result.current.error).toContain("not confirmed");
+    expect(result.current.error).toContain("still pending");
     expect(result.current.contractHash).toBeNull();
   });
 
@@ -107,7 +111,7 @@ describe("useTokenPolling", () => {
 
     const { result, unmount } = renderHook(() => useTokenPolling("0xtx"));
 
-    expect(result.current.status).toBe("confirming");
+    expect(result.current.status).toBe("pending");
     unmount();
 
     // Resolve after unmount — should not throw or warn

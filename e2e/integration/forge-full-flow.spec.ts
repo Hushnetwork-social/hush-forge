@@ -608,6 +608,57 @@ test.describe("Forge Full Integration Flow", () => {
     await page.waitForTimeout(5_000);
   }
 
+  async function connectWalletIfNeededOnCurrentPage(): Promise<void> {
+    const addressPrefix = "NV1Q1d";
+    const isConnected = async (): Promise<boolean> =>
+      page.evaluate(
+        (prefix: string) => document.body.textContent?.includes(prefix) ?? false,
+        addressPrefix
+      );
+
+    if (await isConnected()) return;
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const connectBtn = page.getByRole("button", { name: /Connect Wallet/i }).first();
+      const needsConnect = await connectBtn.isVisible({ timeout: 3_000 }).catch(() => false);
+      if (!needsConnect && (await isConnected())) return;
+      if (!needsConnect) {
+        await page.waitForTimeout(1_000);
+        if (await isConnected()) return;
+      } else {
+        try {
+          await signInNeoLine(
+            context,
+            async () => {
+              await connectBtn.click();
+              const neoLineBtn = page.getByRole("button", { name: /NeoLine/i }).first();
+              if (await neoLineBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+                await neoLineBtn.click();
+              }
+            },
+            30_000
+          );
+        } catch {
+          console.log(
+            `[connect] Attempt ${attempt}: no NeoLine popup (possible silent reconnect).`
+          );
+        }
+      }
+
+      const connectedAfterAttempt = await page
+        .waitForFunction(
+          (prefix: string) => document.body.textContent?.includes(prefix) ?? false,
+          addressPrefix,
+          { timeout: 15_000 }
+        )
+        .then(() => true)
+        .catch(() => false);
+      if (connectedAfterAttempt) return;
+    }
+
+    throw new Error("Wallet did not reconnect on token detail page after refresh.");
+  }
+
   async function forgeTokenViaUi(symbol: string, name = "PoC Token"): Promise<string> {
     await expect(page.getByRole("button", { name: "Forge Token" })).toBeEnabled({ timeout: 30_000 });
     await page.getByRole("button", { name: "Forge Token" }).click();
@@ -619,7 +670,18 @@ test.describe("Forge Full Integration Flow", () => {
     const forgeBtn = page.getByRole("button", { name: /FORGE/ });
     await expect(forgeBtn).toBeEnabled({ timeout: 20_000 });
     await signInNeoLine(context, async () => forgeBtn.click(), 60_000);
-    await page.waitForURL(/\/tokens\/0x/, { timeout: 120_000 });
+    const pendingToast = page.getByRole("status", { name: "Pending transaction status" });
+    const pendingVisible = await pendingToast.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (pendingVisible) {
+      await expect(pendingToast).toHaveCount(0, { timeout: 120_000 });
+    }
+    await page.waitForURL(/\/tokens$/, { timeout: 60_000 });
+    await expect(page.getByText(symbol).first()).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByLabel("Your token").first()).toBeVisible({ timeout: 120_000 });
+    const tokenCard = page.getByRole("article").filter({ hasText: symbol }).first();
+    await expect(tokenCard).toBeVisible({ timeout: 60_000 });
+    await tokenCard.click();
+    await page.waitForURL(/\/tokens\/0x/, { timeout: 30_000 });
     const tokenHash = new URL(page.url()).pathname.split("/")[2];
     await dismissAdminHintIfVisible();
     const adminVisible = await page
@@ -1108,97 +1170,37 @@ test.describe("Forge Full Integration Flow", () => {
       );
       console.log("[forge] Forge TX signed.");
 
-      // ── Step 10: WaitingOverlay visible (optional — TX may confirm before check) ──
-      // The forge TX takes ~15s to confirm. If the popup was already open for 15s+,
-      // the TX may have confirmed and the app may have already redirected.
-      const waitingOverlay = page.getByRole("status", {
-        name: "Waiting for transaction",
+            // Step 10: pending toast lifecycle
+      const pendingToast = page.getByRole("status", {
+        name: "Pending transaction status",
       });
-      const waitingVisible = await waitingOverlay.isVisible().catch(() => false);
-      if (waitingVisible) {
-        console.log("[forge] WaitingOverlay visible.");
-        // WaitingOverlay should show a NeoTube tx link
-        const txLink = page.getByRole("link", { name: /↗/ });
-        const txLinkVisible = await txLink.first().isVisible().catch(() => false);
-        if (txLinkVisible) {
-          await expect(txLink.first()).toHaveAttribute("href", /neotube\.io\/transaction\//);
-        }
+      const pendingVisible = await pendingToast.isVisible({ timeout: 10_000 }).catch(() => false);
+      if (pendingVisible) {
+        console.log("[forge] Pending toast visible.");
+        const txLink = page.getByRole("link", { name: /Track transaction on NeoTube/i }).first();
+        await expect(txLink).toHaveAttribute("href", /neotube\.io\/transaction\//);
+        await expect(pendingToast).toHaveCount(0, { timeout: 120_000 });
       } else {
-        console.log("[forge] WaitingOverlay not visible — TX may have confirmed already.");
+        console.log("[forge] Pending toast not visible - TX may have already confirmed.");
       }
 
-      // ── Step 11: Redirect to token detail page ───────────────────────────
-      await page.waitForURL(/\/tokens\/0x/, { timeout: 120_000 });
-      const tokenHash = new URL(page.url()).pathname.split("/")[2];
-      console.log(`[forge] Token created! Contract hash: ${tokenHash}`);
-
-      // Detail page should show the token symbol.
-      // The route was pre-warmed in beforeEach so the webpack bundle is compiled.
-      // If "POC" is still not visible (slow RPC), log a warning — the primary
-      // verification is step 12 (token visible in the /tokens list with Yours badge).
-      const pocVisible = await page.getByText("POC").isVisible({ timeout: 15_000 }).catch(() => false);
-      if (pocVisible) {
-        console.log("[detail] Token detail page shows POC ✓");
-        await page.getByText(tokenHash).isVisible({ timeout: 5_000 }).catch(() => {
-          console.log("[detail] WARNING: contract hash not visible on detail page.");
-        });
-      } else {
-        console.log("[detail] WARNING: POC not visible on detail page — continuing to list check.");
-      }
-
-      // Ensure we are on a creator-owned detail page before admin operations.
-      // In some runs the initial redirect lands before ownership state is refreshed.
-      const adminPanelVisible = await page
-        .getByText("TOKEN ADMINISTRATION")
-        .isVisible({ timeout: 5_000 })
-        .catch(() => false);
-      if (!adminPanelVisible) {
-        console.log("[admin] Panel not visible yet — reopening from token list as owner.");
-        await page.goto(BASE_URL + "/tokens");
-        await page.waitForLoadState("networkidle");
-        await expect(page.getByLabel("Your token").first()).toBeVisible({ timeout: 120_000 });
-        await page.getByLabel("Your token").first().click();
-        await page.waitForURL(/\/tokens\/0x/, { timeout: 30_000 });
-      }
-
-      // Optional admin-path checks are covered by dedicated e2e/contract suites.
-      // Keep this integration test focused on full forge + list visibility on a
-      // real chain and wallet flow.
-
-      // ── Step 12: Back to /tokens — new token shows with Yours badge ───────
-      // Use goBack() (client-side popstate) instead of page.goto() to preserve:
-      //   - Zustand store state (ownTokenHashes already has the new token from addToken())
-      //   - NeoLine injection context (avoids tryAutoReconnect() timing race)
-      //   - Wallet connection state (address remains set)
-      // The forge TX was triggered from /tokens (router.push("/tokens/hash")), so
-      // goBack() returns there via popstate without a full page reload.
-      console.log("[nav] Navigating back to /tokens via goBack()...");
-      const wentBack = await page.goBack({ timeout: 15_000 }).then(() => true).catch(() => false);
-      if (!wentBack || !page.url().endsWith("/tokens")) {
-        console.log(`[nav] goBack() failed or wrong URL (${page.url()}) — falling back to goto().`);
-        await page.goto(BASE_URL + "/tokens");
-        await page.waitForLoadState("networkidle");
-        // After a full reload, give NeoLine time to inject before checking
-        await page.waitForFunction(
-          () => typeof (window as unknown as Record<string, unknown>).NEOLineN3 !== "undefined",
-          { timeout: 30_000 }
-        ).catch(() => { console.log("[nav] NeoLine not injected after 30s."); });
-      }
-      console.log("[nav] Back at /tokens:", page.url());
-
-      // addToken() is called when the TX confirms — it adds the hash to ownTokenHashes.
-      // After goBack() the store is intact, so the Yours badge should appear quickly.
-      // After goto() we need to wait for wallet reconnect + store reload from chain (~30s).
+      // Step 11: stay on /tokens and verify refreshed list
+      await page.waitForURL(/\/tokens$/, { timeout: 60_000 });
       const yoursLabel = page.getByLabel("Your token").first();
       await expect(yoursLabel).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByText("POC").first()).toBeVisible({ timeout: 60_000 });
 
-      // Verify it's our token by symbol
-      await expect(page.getByText("POC").first()).toBeVisible({
-        timeout: 10_000,
-      });
+      // Step 12: open token detail from list and verify owner view
+      const pocCard = page.getByRole("article").filter({ hasText: "POC" }).first();
+      await expect(pocCard).toBeVisible({ timeout: 30_000 });
+      await pocCard.click();
+      await page.waitForURL(/\/tokens\/0x/, { timeout: 30_000 });
+      const tokenHash = new URL(page.url()).pathname.split("/")[2];
+      console.log(`[forge] Token created! Contract hash: ${tokenHash}`);
+      await dismissAdminHintIfVisible();
+      await expect(page.getByText("TOKEN ADMINISTRATION")).toBeVisible({ timeout: 20_000 });
 
-      console.log('[done] PoC complete — "POC" token visible with Yours badge.');
-    }
+      console.log('[done] PoC complete - "POC" token visible in list and detail owner view loaded.');    }
   );
 
   test("staged maxSupply + mint batch is blocked in UI", async () => {
@@ -1235,15 +1237,23 @@ test.describe("Forge Full Integration Flow", () => {
       async () => page.getByRole("button", { name: "Lock Token Forever" }).click(),
       60_000
     );
+    const lockPendingToastA = page.getByRole("status", { name: "Pending transaction status" });
+    const lockPendingVisibleA = await lockPendingToastA.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!lockPendingVisibleA) {
+      console.log("[lock] Pending toast not visible - tx may have confirmed quickly.");
+    }
 
     await waitForTokenLocked(tokenHash);
+    await expect(lockPendingToastA).toHaveCount(0, { timeout: 120_000 });
 
     await page.goto(BASE_URL + "/tokens");
     await page.waitForLoadState("networkidle");
     await expect(page.getByLabel("Your token").first()).toBeVisible({ timeout: 60_000 });
     await page.getByLabel("Your token").first().click();
     await page.waitForURL(/\/tokens\/0x/, { timeout: 30_000 });
-    await dismissAdminHintIfVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Admin update options" })
+    ).toHaveCount(0);
 
     await expect(page.getByText(/Permanently Immutable/i)).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("tab", { name: "Identity" })).toHaveCount(0);
@@ -1265,14 +1275,22 @@ test.describe("Forge Full Integration Flow", () => {
       async () => page.getByRole("button", { name: "Lock Token Forever" }).click(),
       60_000
     );
+    const lockPendingToastB = page.getByRole("status", { name: "Pending transaction status" });
+    const lockPendingVisibleB = await lockPendingToastB.isVisible({ timeout: 10_000 }).catch(() => false);
+    if (!lockPendingVisibleB) {
+      console.log("[lock] Pending toast not visible - tx may have confirmed quickly.");
+    }
     await waitForTokenLocked(tokenHash);
+    await expect(lockPendingToastB).toHaveCount(0, { timeout: 120_000 });
 
     await page.goto(BASE_URL + "/tokens");
     await page.waitForLoadState("networkidle");
     await expect(page.getByLabel("Your token").first()).toBeVisible({ timeout: 60_000 });
     await page.getByLabel("Your token").first().click();
     await page.waitForURL(new RegExp(`/tokens/${tokenHash}$`), { timeout: 30_000 });
-    await dismissAdminHintIfVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Admin update options" })
+    ).toHaveCount(0);
 
     await expect(page.getByText(/Permanently Immutable/i)).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("TOKEN ADMINISTRATION")).toHaveCount(0);
@@ -1282,6 +1300,24 @@ test.describe("Forge Full Integration Flow", () => {
     await expect(page.getByRole("button", { name: "Lock Token Forever" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Set Max Supply" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Mint Tokens" })).toHaveCount(0);
+  });
+
+  test("token detail keeps forge metadata after refresh and reconnect", async () => {
+    await connectWalletOnTokensPage();
+    const symbol = uniqueSymbol();
+    const tokenHash = await forgeTokenViaUi(symbol, `Refresh ${symbol}`);
+
+    await page.reload({ waitUntil: "networkidle" });
+    await connectWalletIfNeededOnCurrentPage().catch(() => {
+      console.log("[connect] Reconnect did not complete after refresh; validating metadata anyway.");
+    });
+    await page.waitForURL(new RegExp(`/tokens/${tokenHash}$`), { timeout: 30_000 });
+    await dismissAdminHintIfVisible();
+
+    await expect(page.getByText(symbol).first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Not registered via Forge/i)).toHaveCount(0);
+    await expect(page.getByText(/Creator/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Supply/i)).toBeVisible({ timeout: 60_000 });
   });
 
   test("duplicate symbol shows friendly validation error in forge overlay", async () => {

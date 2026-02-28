@@ -3,6 +3,67 @@
 import { useEffect } from "react";
 import { NEOTUBE_BASE_URL } from "../forge-config";
 
+interface PendingProps {
+  message: string;
+  txHash: string;
+  status: "pending" | "confirming";
+  onDismiss?: () => void;
+}
+
+export function ForgePendingToast({
+  message,
+  txHash,
+  status,
+  onDismiss,
+}: PendingProps) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Pending transaction status"
+      className="fixed bottom-4 right-4 z-50 w-96 rounded-lg p-4 shadow-lg"
+      style={{
+        background: "var(--forge-bg-card)",
+        borderLeft: "4px solid var(--forge-color-accent)",
+        color: "var(--forge-text-primary)",
+      }}
+    >
+      <div className="flex justify-between items-start mb-2">
+        <p className="font-bold">
+          {status === "confirming"
+            ? "Transaction in mempool"
+            : "Transaction submitted"}
+        </p>
+        {onDismiss && (
+          <button
+            aria-label="Dismiss"
+            onClick={onDismiss}
+            className="opacity-60 hover:opacity-100"
+            style={{ color: "var(--forge-text-primary)" }}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p className="text-sm mb-2" style={{ color: "var(--forge-text-muted)" }}>
+        {message}
+      </p>
+      <p className="text-xs mb-2" style={{ color: "var(--forge-text-muted)" }}>
+        You can keep using the app while confirmation is pending.
+      </p>
+      <a
+        href={`${NEOTUBE_BASE_URL}/transaction/${txHash}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs"
+        style={{ color: "var(--forge-color-accent)" }}
+      >
+        Track transaction on NeoTube ↗
+      </a>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Success toast
 // ---------------------------------------------------------------------------

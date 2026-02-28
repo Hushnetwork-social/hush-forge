@@ -44,6 +44,7 @@ function addressToBEHash(address: string): string | null {
 
 export function useTokenDetail(contractHash: string): TokenDetailResult {
   const address = useWalletStore((s) => s.address);
+  const connectionStatus = useWalletStore((s) => s.connectionStatus);
   // ownTokenHashes is populated by loadTokensForAddress() when the user visits /tokens.
   // Using it as the primary isOwnToken signal avoids address-format mismatch issues.
   const ownTokenHashes = useTokenStore((s) => s.ownTokenHashes);
@@ -72,7 +73,7 @@ export function useTokenDetail(contractHash: string): TokenDetailResult {
     return () => {
       cancelled = true;
     };
-  }, [contractHash]);
+  }, [contractHash, address, connectionStatus]);
 
   // Primary: check the token store's set (populated when user browses the list).
   // Fallback: compare creator hash with the connected wallet's address.

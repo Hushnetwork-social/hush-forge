@@ -16,6 +16,7 @@ import { invokeForge as dapiInvokeForge } from "./neo-dapi-adapter";
 import {
   getAllFactoryTokenHashes,
   getApplicationLog,
+  getRawMemPool,
   getTokenBalance,
   invokeFunction,
 } from "./neo-rpc-client";
@@ -23,7 +24,6 @@ import type {
   ApplicationLog,
   ForgeParams,
   RpcStackItem,
-  TokenCreatedEvent,
   TxStatus,
 } from "./types";
 
@@ -45,6 +45,10 @@ export class TxTimeoutError extends Error {
     super(`Transaction confirmation timeout: ${txHash}`);
     this.name = "TxTimeoutError";
   }
+}
+
+export interface TxConfirmationResult {
+  contractHash: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,21 +218,39 @@ export async function submitForge(
  */
 export function pollForConfirmation(
   txHash: string,
-  onProgress?: (status: TxStatus) => void
-): Promise<TokenCreatedEvent> {
-  console.log("[forge] pollForConfirmation started — txHash:", txHash, "timeout:", TX_POLLING_TIMEOUT_MS, "ms");
-  const deadline = Date.now() + TX_POLLING_TIMEOUT_MS;
+  onProgress?: (status: TxStatus) => void,
+  options?: { timeoutMs?: number }
+): Promise<TxConfirmationResult> {
+  const timeoutMs = options?.timeoutMs ?? TX_POLLING_TIMEOUT_MS;
+  const hasDeadline = timeoutMs > 0;
+  const deadline = hasDeadline ? Date.now() + timeoutMs : Number.POSITIVE_INFINITY;
+  console.log(
+    "[forge] pollForConfirmation started — txHash:",
+    txHash,
+    "timeout:",
+    hasDeadline ? `${timeoutMs} ms` : "none"
+  );
 
-  return new Promise<TokenCreatedEvent>((resolve, reject) => {
+  return new Promise<TxConfirmationResult>((resolve, reject) => {
     async function check() {
       console.log("[forge] polling getApplicationLog for:", txHash);
       try {
         const log = await getApplicationLog(txHash);
 
         if (log === null) {
-          // TX not yet indexed — still pending
-          console.log("[forge] TX not yet indexed — retrying in", TX_POLLING_INTERVAL_MS, "ms");
-          onProgress?.("confirming");
+          const mempool = (await getRawMemPool()) ?? [];
+          const inMempool = mempool.some(
+            (hash) => hash.toLowerCase() === txHash.toLowerCase()
+          );
+          // TX not yet indexed — track whether it is in mempool or still propagating.
+          console.log(
+            "[forge] TX not yet indexed — inMempool:",
+            inMempool,
+            "retrying in",
+            TX_POLLING_INTERVAL_MS,
+            "ms"
+          );
+          onProgress?.(inMempool ? "confirming" : "pending");
           if (Date.now() >= deadline) {
             console.error("[forge] polling timeout for:", txHash);
             reject(new TxTimeoutError(txHash));
@@ -246,12 +268,20 @@ export function pollForConfirmation(
           return;
         }
 
-        console.log("[forge] TX confirmed! Parsing TokenCreated event...");
+        console.log("[forge] TX confirmed! Finalizing confirmation state...");
         onProgress?.("confirmed");
-        resolve(parseTokenCreatedEvent(log));
+        let contractHash: string | null = null;
+        try {
+          contractHash = parseTokenCreatedEvent(log).contractHash;
+        } catch {
+          // Non-forge operations (mint/update/lock/etc.) don't emit TokenCreated.
+          // Confirmation is still valid when vmstate = HALT.
+        }
+        resolve({ contractHash });
       } catch (err) {
         // RPC error during polling — treat as still pending unless timed out
         console.warn("[forge] polling RPC error:", err);
+        onProgress?.("pending");
         if (Date.now() >= deadline) {
           reject(new TxTimeoutError(txHash));
           return;

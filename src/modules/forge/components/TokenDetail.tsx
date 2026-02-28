@@ -85,12 +85,16 @@ function ModeBadge({ mode }: { mode: string }) {
 }
 
 export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
-  const { token, loading, error, isOwnToken } = useTokenDetail(contractHash);
+  const { token, loading, error, isOwnToken, isUpgradeable } = useTokenDetail(contractHash);
   const walletAddress = useWalletStore((s) => s.address);
   const { transfers, supported } = useTokenTransfers(contractHash, walletAddress);
   const [copied, setCopied] = useState(false);
   const [dismissedHintFor, setDismissedHintFor] = useState<string | null>(null);
-  const showAdminHint = isOwnToken && dismissedHintFor !== contractHash;
+  const showAdminHint =
+    isOwnToken &&
+    isUpgradeable &&
+    !(token?.locked ?? false) &&
+    dismissedHintFor !== contractHash;
 
   useEffect(() => {
     if (!showAdminHint) return;

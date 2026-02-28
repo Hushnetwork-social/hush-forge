@@ -21,6 +21,7 @@ import {
 } from "../forge-config";
 import {
   getApplicationLog,
+  getRawMemPool,
   invokeFunction,
   isContractDeployed,
   addressToHash160,
@@ -48,6 +49,14 @@ interface UseFactoryDeployment {
   recheck: () => void;
 }
 
+type PendingFactoryTx = {
+  kind: "deploy" | "initialize";
+  txid: string;
+  factoryHash?: string;
+};
+
+const FACTORY_PENDING_TX_KEY = "forge.factory.pendingTx";
+
 export function useFactoryDeployment(
   /** Connected wallet address â€” starts checking once this is set */
   address: string | null
@@ -66,16 +75,40 @@ export function useFactoryDeployment(
 
     let cancelled = false;
 
-    const hash = getRuntimeFactoryHash();
-    if (!hash) {
-      // No hash configured and nothing in localStorage â€” factory has never been deployed.
-      setStatus("not-deployed");
-      return;
-    }
-
-    setStatus("checking");
-
     (async () => {
+      const pending = loadPendingFactoryTx();
+      if (pending) {
+        setStatus(pending.kind === "deploy" ? "deploying" : "initializing");
+        try {
+          await pollDeploymentConfirmed(pending.txid, {
+            timeoutMs: 0,
+            onProgress: (s) => {
+              if (cancelled) return;
+              setStatus(s === "confirming"
+                ? pending.kind === "deploy" ? "deploying" : "initializing"
+                : pending.kind === "deploy" ? "deploying" : "initializing");
+            },
+          });
+          clearPendingFactoryTx();
+          if (cancelled) return;
+          recheck();
+        } catch (err) {
+          clearPendingFactoryTx();
+          if (cancelled) return;
+          setDeployError(formatDeployError(err));
+          setStatus("deploy-error");
+        }
+        return;
+      }
+
+      const hash = getRuntimeFactoryHash();
+      if (!hash) {
+        // No hash configured and nothing in localStorage â€” factory has never been deployed.
+        setStatus("not-deployed");
+        return;
+      }
+
+      setStatus("checking");
       const deployed = await isContractDeployed(hash);
       if (cancelled) return;
 
@@ -114,7 +147,9 @@ export function useFactoryDeployment(
       try {
         const txid = await dapiDeployFactory();
         console.log("[factory] deploy tx submitted:", txid);
-        await pollDeploymentConfirmed(txid);
+        savePendingFactoryTx({ kind: "deploy", txid });
+        await pollDeploymentConfirmed(txid, { timeoutMs: 0 });
+        clearPendingFactoryTx();
 
         console.log("[factory] deploy tx confirmed â€” reading app log for hash...");
         // Primary: read the actual contract hash from ContractManagement's Deploy notification.
@@ -202,10 +237,13 @@ export function useFactoryDeployment(
       try {
         const initTxid = await dapiInitializeFactory(deployedHash);
         console.log("[factory] setNefAndManifest tx submitted:", initTxid);
-        await pollDeploymentConfirmed(initTxid);
+        savePendingFactoryTx({ kind: "initialize", txid: initTxid, factoryHash: deployedHash });
+        await pollDeploymentConfirmed(initTxid, { timeoutMs: 0 });
+        clearPendingFactoryTx();
         console.log("[factory] initialized â€” ready to forge tokens");
         setStatus("deployed");
       } catch (initErr) {
+        clearPendingFactoryTx();
         // Factory is deployed but initialization failed (e.g. NeoLine state lag, user cancel).
         // Show "Initialize Factory" button so the user can retry without redeploying.
         console.error("[factory] init failed:", initErr);
@@ -213,6 +251,7 @@ export function useFactoryDeployment(
         setStatus("not-initialized");
       }
     } catch (err) {
+      clearPendingFactoryTx();
       console.error("[factory] deploy failed:", err);
       setDeployError(formatDeployError(err));
       setStatus("deploy-error");
@@ -228,12 +267,14 @@ export function useFactoryDeployment(
     try {
       const initTxid = await dapiInitializeFactory(hash);
       console.log("[factory] setNefAndManifest tx submitted:", initTxid);
-
-      await pollDeploymentConfirmed(initTxid);
+      savePendingFactoryTx({ kind: "initialize", txid: initTxid, factoryHash: hash });
+      await pollDeploymentConfirmed(initTxid, { timeoutMs: 0 });
+      clearPendingFactoryTx();
       console.log("[factory] initialized â€” ready to forge tokens");
 
       setStatus("deployed");
     } catch (err) {
+      clearPendingFactoryTx();
       console.error("[factory] initialize failed:", err);
       setDeployError(formatDeployError(err));
       setStatus("deploy-error");
@@ -368,14 +409,23 @@ function formatDeployError(err: unknown): string {
 // Internal polling helper
 // ---------------------------------------------------------------------------
 
-function pollDeploymentConfirmed(txid: string): Promise<void> {
-  const deadline = Date.now() + TX_POLLING_TIMEOUT_MS;
+function pollDeploymentConfirmed(
+  txid: string,
+  options?: { timeoutMs?: number; onProgress?: (status: "pending" | "confirming") => void }
+): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? TX_POLLING_TIMEOUT_MS;
+  const deadline = timeoutMs > 0 ? Date.now() + timeoutMs : Number.POSITIVE_INFINITY;
 
   return new Promise((resolve, reject) => {
     async function check() {
       try {
         const log = await getApplicationLog(txid);
         if (log === null) {
+          const mempool = await getRawMemPool();
+          const inMempool = mempool.some(
+            (hash) => hash.toLowerCase() === txid.toLowerCase()
+          );
+          options?.onProgress?.(inMempool ? "confirming" : "pending");
           if (Date.now() >= deadline) { reject(new Error("Deployment timed out")); return; }
           setTimeout(check, TX_POLLING_INTERVAL_MS);
           return;
@@ -393,5 +443,34 @@ function pollDeploymentConfirmed(txid: string): Promise<void> {
     }
     check();
   });
+}
+
+function loadPendingFactoryTx(): PendingFactoryTx | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(FACTORY_PENDING_TX_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as PendingFactoryTx;
+    if (
+      (parsed.kind === "deploy" || parsed.kind === "initialize") &&
+      typeof parsed.txid === "string" &&
+      parsed.txid.length > 0
+    ) {
+      return parsed;
+    }
+  } catch {
+    // ignore malformed persisted values
+  }
+  return null;
+}
+
+function savePendingFactoryTx(value: PendingFactoryTx): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(FACTORY_PENDING_TX_KEY, JSON.stringify(value));
+}
+
+function clearPendingFactoryTx(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(FACTORY_PENDING_TX_KEY);
 }
 

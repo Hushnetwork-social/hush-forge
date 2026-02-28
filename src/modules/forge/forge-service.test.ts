@@ -24,6 +24,7 @@ vi.mock("./neo-rpc-client", () => ({
   getAllFactoryTokenHashes: vi.fn(),
   invokeFunction: vi.fn(),
   getApplicationLog: vi.fn(),
+  getRawMemPool: vi.fn(),
   getTokenBalance: vi.fn(),
 }));
 
@@ -35,6 +36,7 @@ import {
   getAllFactoryTokenHashes as mockGetAllFactoryTokenHashes,
   invokeFunction as mockInvokeFunction,
   getApplicationLog as mockGetApplicationLog,
+  getRawMemPool as mockGetRawMemPool,
   getTokenBalance as mockGetTokenBalance,
 } from "./neo-rpc-client";
 import "./neo-dapi-adapter"; // mock only — no named imports needed
@@ -101,6 +103,7 @@ describe("fetchCreationFee", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(mockGetRuntimeFactoryHash).mockReturnValue("0xfactory");
+    vi.mocked(mockGetRawMemPool).mockResolvedValue([]);
   });
 
   it("returns fee in datoshi and displayGas", async () => {
@@ -150,6 +153,7 @@ describe("checkGasBalance", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(mockGetRuntimeFactoryHash).mockReturnValue("0xfactory");
+    vi.mocked(mockGetRawMemPool).mockResolvedValue([]);
   });
 
   it("returns sufficient=true when balance exceeds fee + 10% buffer", async () => {
@@ -244,7 +248,7 @@ describe("pollForConfirmation", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("resolves with TokenCreatedEvent when found on the third poll", async () => {
+  it("resolves with contractHash when TokenCreated appears on the third poll", async () => {
     // First two polls return null (pending), third returns the log
     const hashBytes = new Uint8Array(20).fill(1); // 20 bytes of 0x01
     const base64 = btoa(String.fromCharCode(...hashBytes));
@@ -261,10 +265,29 @@ describe("pollForConfirmation", () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const event = await promise;
-    expect(event.symbol).toBe("HUSH");
-    expect(event.mode).toBe("community");
-    expect(event.supply).toBe(21_000_000n);
+    expect(event.contractHash).toMatch(/^0x[0-9a-f]{40}$/);
     expect(vi.mocked(mockGetApplicationLog)).toHaveBeenCalledTimes(3);
+  });
+
+  it("resolves confirmed even when HALT log has no TokenCreated event", async () => {
+    vi.mocked(mockGetApplicationLog).mockResolvedValue({
+      txid: "0xtx",
+      executions: [
+        {
+          trigger: "Application",
+          vmstate: "HALT",
+          gasconsumed: "100000",
+          stack: [],
+          notifications: [],
+        },
+      ],
+    });
+
+    vi.useFakeTimers();
+    const promise = pollForConfirmation("0xtx");
+    await vi.advanceTimersByTimeAsync(50);
+    const event = await promise;
+    expect(event.contractHash).toBeNull();
   });
 
   it("throws TxTimeoutError after timeout (500ms with mocked config)", async () => {
@@ -303,6 +326,7 @@ describe("pollForConfirmation", () => {
     vi.mocked(mockGetApplicationLog)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(buildTokenCreatedLog(base64));
+    vi.mocked(mockGetRawMemPool).mockResolvedValueOnce(["0xtx"]);
 
     vi.useFakeTimers();
     const promise = pollForConfirmation("0xtx", onProgress);

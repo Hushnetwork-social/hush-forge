@@ -6,10 +6,10 @@ Feature: Accessibility
     Then keyboard focus is trapped inside the Forge overlay
     And pressing Escape closes the overlay
 
-  Scenario: WaitingOverlay announces status to screen readers
-    Given the WaitingOverlay is active
-    Then the overlay has role status and is polite
-    And the overlay has an accessible label
+  Scenario: Pending transaction toast announces status to screen readers
+    Given a pending transaction toast is visible
+    Then the pending toast has role status and is polite
+    And the pending toast has an accessible label
 
   Scenario: All icon-only buttons have accessible labels
     Given the user navigates to /tokens

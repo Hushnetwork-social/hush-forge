@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useFactoryAdminAccess } from "@/modules/forge/hooks/useFactoryAdminAccess";
 import { useWalletStore } from "@/modules/forge/wallet-store";
 
 function truncateAddress(address: string): string {
@@ -36,6 +37,7 @@ export function ForgeHeader({ onConnectClick }: Props) {
   const address = useWalletStore((s) => s.address);
   const connectionStatus = useWalletStore((s) => s.connectionStatus);
   const disconnect = useWalletStore((s) => s.disconnect);
+  const adminAccess = useFactoryAdminAccess(address);
 
   return (
     <header
@@ -56,6 +58,18 @@ export function ForgeHeader({ onConnectClick }: Props) {
       <div className="flex items-center gap-2">
         {address ? (
           <>
+            {adminAccess.access.navVisible && (
+              <Link
+                href="/admin/factory"
+                className="rounded px-3 py-1 text-sm font-semibold"
+                style={{
+                  color: "var(--forge-color-primary)",
+                  border: "1px solid var(--forge-border-medium)",
+                }}
+              >
+                Admin
+              </Link>
+            )}
             <span
               className="text-sm font-mono px-3 py-1 rounded"
               style={{

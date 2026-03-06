@@ -4,6 +4,7 @@
  * RPC URL is resolved dynamically from the connected wallet's network via getActiveRpcUrl().
  */
 
+import { wallet } from "@cityofzion/neon-js";
 import { getActiveRpcUrl } from "./neo-dapi-adapter";
 import type { ApplicationLog, InvokeResult, RpcStackItem } from "./types";
 import { NeoRpcError } from "./types";
@@ -41,6 +42,24 @@ export function addressToHash160(addressOrHash: string): string {
   // bytes[1..20] = script hash big-endian → reverse to little-endian for RPC
   const hashBytes = bytes.slice(1, 21).reverse();
   return "0x" + hashBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Converts a little-endian script hash into a Neo N3 address for display and
+ * RPC methods that require the base58 address form.
+ * If the input is already an address it is returned as-is.
+ */
+export function hash160ToAddress(hashOrAddress: string): string {
+  if (/^N/.test(hashOrAddress)) return hashOrAddress;
+  const normalized = hashOrAddress.startsWith("0x")
+    ? hashOrAddress.slice(2)
+    : hashOrAddress;
+
+  if (!/^[0-9a-fA-F]{40}$/.test(normalized)) {
+    throw new Error("Invalid UInt160 hash");
+  }
+
+  return wallet.getAddressFromScriptHash(normalized);
 }
 
 // ---------------------------------------------------------------------------

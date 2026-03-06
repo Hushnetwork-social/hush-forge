@@ -54,6 +54,9 @@ export const WALLET_ADDRESS_STORAGE_KEY = "forge_wallet_address";
 /** localStorage key for the deployed factory contract hash (set after in-browser deployment). */
 export const FACTORY_HASH_STORAGE_KEY = "forge_factory_hash";
 
+/** Browser event dispatched when the runtime factory hash changes. */
+export const FACTORY_HASH_UPDATED_EVENT = "forge:factory-hash-updated";
+
 /**
  * Returns the factory contract hash at runtime.
  * Priority: NEXT_PUBLIC_ env var â†’ localStorage (set after in-browser deploy) â†’ ""
@@ -72,6 +75,11 @@ export function getRuntimeFactoryHash(): string {
 export function saveFactoryHash(hash: string): void {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(FACTORY_HASH_STORAGE_KEY, hash);
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent<string>(FACTORY_HASH_UPDATED_EVENT, { detail: hash })
+    );
   }
 }
 

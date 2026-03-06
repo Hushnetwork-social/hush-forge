@@ -1,0 +1,15 @@
+Manual FEAT-079 upgrade test artifact
+
+Use these files in /admin/factory -> Upgrade Template:
+
+- NEF: public/contracts/TokenTemplate.nef
+- Manifest: public/contracts/TokenTemplate-v2-test.manifest.json
+
+Why this works:
+- The NEF stays the same.
+- The manifest metadata changes from Version 1.0.0 to 2.0.0-test.
+- TokenFactory computes a new template hash from NEF + manifest, so the admin page should show:
+  - template version incremented by 1 on-chain
+  - a different template hash
+
+This is for manual testing only. It is not a production template release artifact.

@@ -324,6 +324,41 @@ async function openAdminPage(page: Page): Promise<void> {
   });
 }
 
+async function deployFactoryThroughUi(
+  page: Page,
+  context: BrowserContext
+): Promise<void> {
+  await expect(
+    page.getByRole("button", { name: "Deploy TokenFactory" })
+  ).toBeVisible({ timeout: 30_000 });
+
+  await signInNeoLine(context, async () => {
+    await page.getByRole("button", { name: "Deploy TokenFactory" }).click();
+  });
+
+  await expect(
+    page.getByText(/Initializing TokenFactory with TokenTemplate/i)
+  ).toBeVisible({ timeout: 120_000 });
+
+  const existingPopup = context
+    .pages()
+    .find(
+      (candidate) =>
+        candidate !== page &&
+        !candidate.isClosed() &&
+        candidate.url().startsWith(`chrome-extension://${NEOLINE_ID}/`)
+    );
+
+  const initPopup =
+    existingPopup ??
+    (await context.waitForEvent("page", { timeout: 120_000 }));
+  await signExistingNeoLinePopup(initPopup);
+
+  await expect(
+    page.getByRole("button", { name: "Deploy TokenFactory" })
+  ).toHaveCount(0, { timeout: 120_000 });
+}
+
 async function readSummaryValue(page: Page, label: string): Promise<string> {
   const value = await page.evaluate((requestedLabel) => {
     const dts = Array.from(document.querySelectorAll("dt"));
@@ -524,5 +559,46 @@ test.describe("FEAT-079 Factory Governance Integration", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+test.describe("FEAT-079 Factory Deployment Reactivity", () => {
+  let profileCopyDir: string;
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeAll(() => {
+    if (NEOLINE_PASSWORD === undefined) {
+      throw new Error(
+        "NEOLINE_PASSWORD env var is not set.\n" +
+          "Add it to e2e/integration/.env.integration or export it before running integration tests."
+      );
+    }
+  });
+
+  test.beforeEach(async () => {
+    resetChain();
+    await waitForChain();
+    await waitForFunding(CLIENT1_ADDRESS);
+
+    profileCopyDir = createProfileCopy();
+    ({ context, page } = await launchWithNeoLine(profileCopyDir));
+  });
+
+  test.afterEach(async () => {
+    await context.close().catch(() => {});
+    removeProfileCopy(profileCopyDir);
+  });
+
+  test("deploying from the tokens page reveals Admin without a browser refresh", async () => {
+    await connectWalletOnTokensPage(page, context);
+
+    await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
+    await deployFactoryThroughUi(page, context);
+
+    await expect(page.getByRole("link", { name: "Admin" })).toBeVisible({
+      timeout: 120_000,
+    });
+    await expect(page.getByRole("button", { name: "Forge Token" })).toBeEnabled();
   });
 });

@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getRuntimeFactoryHash } from "../forge-config";
+import {
+  FACTORY_HASH_STORAGE_KEY,
+  FACTORY_HASH_UPDATED_EVENT,
+  getRuntimeFactoryHash,
+} from "../forge-config";
 import { getFactoryAdminAccess } from "../factory-governance-logic";
 import { fetchFactoryConfig } from "../factory-governance-service";
 import type { FactoryAdminAccess, FactoryConfig } from "../types";
@@ -33,12 +37,37 @@ export function useFactoryAdminAccess(
   const [config, setConfig] = useState<FactoryConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [factoryHash, setFactoryHash] = useState(() => getRuntimeFactoryHash());
 
-  const factoryHash = useMemo(() => getRuntimeFactoryHash(), []);
   const access = useMemo(
     () => getFactoryAdminAccess(connectedAddress, config?.owner ?? null),
     [connectedAddress, config?.owner]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncFactoryHash = () => {
+      setFactoryHash(getRuntimeFactoryHash());
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === FACTORY_HASH_STORAGE_KEY) {
+        syncFactoryHash();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(FACTORY_HASH_UPDATED_EVENT, syncFactoryHash);
+    syncFactoryHash();
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(FACTORY_HASH_UPDATED_EVENT, syncFactoryHash);
+    };
+  }, []);
 
   useEffect(() => {
     if (!connectedAddress || !factoryHash) {

@@ -241,6 +241,8 @@ export function useFactoryDeployment(
         await pollDeploymentConfirmed(initTxid, { timeoutMs: 0 });
         clearPendingFactoryTx();
         console.log("[factory] initialized â€” ready to forge tokens");
+        saveFactoryHash(deployedHash);
+        setFactoryHash(deployedHash);
         setStatus("deployed");
       } catch (initErr) {
         clearPendingFactoryTx();
@@ -271,6 +273,8 @@ export function useFactoryDeployment(
       await pollDeploymentConfirmed(initTxid, { timeoutMs: 0 });
       clearPendingFactoryTx();
       console.log("[factory] initialized â€” ready to forge tokens");
+      saveFactoryHash(hash);
+      setFactoryHash(hash);
 
       setStatus("deployed");
     } catch (err) {

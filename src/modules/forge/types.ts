@@ -59,6 +59,31 @@ export interface WalletState {
 }
 
 // ---------------------------------------------------------------------------
+// Factory governance data
+// ---------------------------------------------------------------------------
+
+export interface FactoryConfig {
+  creationFee: bigint;
+  operationFee: bigint;
+  paused: boolean;
+  owner: string;
+  templateScriptHash: string;
+  templateVersion: bigint;
+  templateNefStored: boolean;
+  templateManifestStored: boolean;
+}
+
+export interface ClaimableFactoryAsset {
+  contractHash: string;
+  symbol: string;
+  name: string;
+  amount: bigint;
+  decimals: number | null;
+  displayAmount: string;
+  partialClaimSupported: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Transaction lifecycle
 // ---------------------------------------------------------------------------
 

@@ -54,6 +54,17 @@ interface JsonRpcResponse<T> {
   error?: { code: number; message: string };
 }
 
+interface Nep17BalanceEntry {
+  assethash: string;
+  amount: string;
+  lastupdatedblock: number;
+}
+
+export interface Nep17BalancesResult {
+  address: string;
+  balance: Nep17BalanceEntry[];
+}
+
 async function rpcCall<T>(
   method: string,
   params: unknown[],
@@ -212,6 +223,16 @@ export async function getNep17Transfers(
   address: string
 ): Promise<Nep17TransferResult> {
   return rpcCall<Nep17TransferResult>("getnep17transfers", [address]);
+}
+
+/**
+ * Fetches NEP-17 balances for any address directly from the RPC node.
+ * This is used for TokenFactory claim discovery where no wallet dAPI context exists.
+ */
+export async function getNep17Balances(
+  address: string
+): Promise<Nep17BalancesResult> {
+  return rpcCall<Nep17BalancesResult>("getnep17balances", [address]);
 }
 
 // ---------------------------------------------------------------------------

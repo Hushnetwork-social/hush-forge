@@ -8,7 +8,7 @@ vi.mock("./neo-dapi-adapter", () => ({
 }));
 
 // Import after mocking
-const { invokeFunction, getApplicationLog, getBlockCount, getTokenBalance, getNep17Transfers } =
+const { invokeFunction, getApplicationLog, getBlockCount, getTokenBalance, getNep17Transfers, getNep17Balances } =
   await import("./neo-rpc-client");
 
 // ---------------------------------------------------------------------------
@@ -277,5 +277,39 @@ describe("getNep17Transfers", () => {
   it("throws NeoRpcError on network error", async () => {
     mockFetchNetworkError();
     await expect(getNep17Transfers("NwAddress")).rejects.toThrow(/unreachable/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getNep17Balances
+// ---------------------------------------------------------------------------
+
+describe("getNep17Balances", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("returns balance entries for any address on success", async () => {
+    mockFetch({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        address: "Nfactory",
+        balance: [
+          {
+            assethash: "0xgas",
+            amount: "250000000",
+            lastupdatedblock: 10,
+          },
+        ],
+      },
+    });
+
+    const result = await getNep17Balances("Nfactory");
+    expect(result.balance).toHaveLength(1);
+    expect(result.balance[0].amount).toBe("250000000");
+  });
+
+  it("throws NeoRpcError on network error", async () => {
+    mockFetchNetworkError();
+    await expect(getNep17Balances("Nfactory")).rejects.toThrow(/unreachable/i);
   });
 });

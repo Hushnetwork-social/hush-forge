@@ -73,6 +73,11 @@ interface NeoDapi {
   AddNEP17(params: { scriptHash: string; symbol: string; decimals: number }): Promise<void>;
 }
 
+interface NeoDapiInvokeArg {
+  type: "Hash160" | "Integer" | "String" | "Boolean" | "Array" | "ByteArray";
+  value: unknown;
+}
+
 declare global {
   interface Window {
     NEOLine?: { Neo: new () => NeoDapi };
@@ -350,6 +355,29 @@ function isWalletRejection(err: unknown): boolean {
     if (msg.includes("cancel") || msg.includes("reject")) return true;
   }
   return false;
+}
+
+async function invokeConnectedOperation(
+  factoryHash: string,
+  operation: string,
+  args: NeoDapiInvokeArg[],
+  description: string
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: factoryHash,
+      operation,
+      args,
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
 }
 
 /**
@@ -813,4 +841,84 @@ export async function invokeApplyTokenChanges(
     if (isWalletRejection(err)) throw new WalletRejectedError();
     throw err;
   }
+}
+
+export async function invokeSetCreationFee(
+  factoryHash: string,
+  feeInDatoshi: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    factoryHash,
+    "setCreationFee",
+    [{ type: "Integer", value: feeInDatoshi.toString() }],
+    `Set creation fee to ${feeInDatoshi} datoshi`
+  );
+}
+
+export async function invokeSetOperationFee(
+  factoryHash: string,
+  feeInDatoshi: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    factoryHash,
+    "setOperationFee",
+    [{ type: "Integer", value: feeInDatoshi.toString() }],
+    `Set operation fee to ${feeInDatoshi} datoshi`
+  );
+}
+
+export async function invokeSetPaused(
+  factoryHash: string,
+  paused: boolean
+): Promise<string> {
+  return invokeConnectedOperation(
+    factoryHash,
+    "setPaused",
+    [{ type: "Boolean", value: paused }],
+    paused ? "Pause TokenFactory" : "Unpause TokenFactory"
+  );
+}
+
+export async function invokeUpgradeTemplate(
+  factoryHash: string,
+  nefBase64: string,
+  manifestText: string
+): Promise<string> {
+  return invokeConnectedOperation(
+    factoryHash,
+    "upgradeTemplate",
+    [
+      { type: "ByteArray", value: nefBase64 },
+      { type: "String", value: manifestText },
+    ],
+    "Upgrade TokenFactory template for future deployments"
+  );
+}
+
+export async function invokeClaimAll(
+  factoryHash: string,
+  assetHash: string
+): Promise<string> {
+  return invokeConnectedOperation(
+    factoryHash,
+    "claimAll",
+    [{ type: "Hash160", value: assetHash }],
+    "Claim full TokenFactory asset balance"
+  );
+}
+
+export async function invokeClaim(
+  factoryHash: string,
+  assetHash: string,
+  amount: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    factoryHash,
+    "claim",
+    [
+      { type: "Hash160", value: assetHash },
+      { type: "Integer", value: amount.toString() },
+    ],
+    `Claim ${amount} raw units from TokenFactory`
+  );
 }

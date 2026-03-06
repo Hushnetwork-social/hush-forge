@@ -83,6 +83,31 @@ export interface ClaimableFactoryAsset {
   partialClaimSupported: boolean;
 }
 
+export interface FactoryAdminAccess {
+  connectedAddress: string | null;
+  connectedHash: string | null;
+  ownerHash: string | null;
+  isOwner: boolean;
+  navVisible: boolean;
+  routeAuthorized: boolean;
+}
+
+export type GovernanceErrorCategory =
+  | "wallet_rejected"
+  | "wallet_unavailable"
+  | "authorization"
+  | "insufficient_funds"
+  | "invalid_input"
+  | "rpc_failure"
+  | "onchain_failure"
+  | "unknown";
+
+export interface GovernanceErrorInfo {
+  category: GovernanceErrorCategory;
+  message: string;
+  technicalDetails: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Transaction lifecycle
 // ---------------------------------------------------------------------------

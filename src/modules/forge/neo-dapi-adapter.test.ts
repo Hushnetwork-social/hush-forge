@@ -13,6 +13,12 @@ import {
   invokeChangeMode,
   invokeLockToken,
   invokeApplyTokenChanges,
+  invokeSetCreationFee,
+  invokeSetOperationFee,
+  invokeSetPaused,
+  invokeUpgradeTemplate,
+  invokeClaimAll,
+  invokeClaim,
   WalletRejectedError,
 } from "./neo-dapi-adapter";
 
@@ -391,6 +397,127 @@ describe("lifecycle invoke functions", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { signers: { scopes: string }[] };
     expect(call.signers[0].scopes).toBe("Global");
+  });
+});
+
+describe("factory governance invoke functions", () => {
+  beforeEach(() => {
+    disconnect();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).NEOLineN3;
+  });
+
+  afterEach(() => {
+    disconnect();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).NEOLineN3;
+  });
+
+  async function connectMock() {
+    const instance = makeMockDapi();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
+    await connect("NeoLine");
+    return instance;
+  }
+
+  it("invokeSetCreationFee sends setCreationFee with integer datoshi", async () => {
+    const instance = await connectMock();
+    await invokeSetCreationFee("0xfactory", 125_000_000n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      operation: string;
+      args: { type: string; value: string }[];
+      signers: { scopes: string }[];
+    };
+    expect(call.operation).toBe("setCreationFee");
+    expect(call.args).toEqual([{ type: "Integer", value: "125000000" }]);
+    expect(call.signers[0].scopes).toBe("Global");
+  });
+
+  it("invokeSetOperationFee sends setOperationFee with integer datoshi", async () => {
+    const instance = await connectMock();
+    await invokeSetOperationFee("0xfactory", 50_000_000n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.operation).toBe("setOperationFee");
+    expect(call.args).toEqual([{ type: "Integer", value: "50000000" }]);
+  });
+
+  it("invokeSetPaused sends a boolean flag", async () => {
+    const instance = await connectMock();
+    await invokeSetPaused("0xfactory", true);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      operation: string;
+      args: { type: string; value: boolean }[];
+    };
+    expect(call.operation).toBe("setPaused");
+    expect(call.args).toEqual([{ type: "Boolean", value: true }]);
+  });
+
+  it("invokeUpgradeTemplate sends NEF as ByteArray and manifest as String", async () => {
+    const instance = await connectMock();
+    await invokeUpgradeTemplate("0xfactory", "bmVmLWJhc2U2NA==", "{\"name\":\"Template\"}");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.operation).toBe("upgradeTemplate");
+    expect(call.args).toEqual([
+      { type: "ByteArray", value: "bmVmLWJhc2U2NA==" },
+      { type: "String", value: "{\"name\":\"Template\"}" },
+    ]);
+  });
+
+  it("invokeClaimAll sends asset hash only", async () => {
+    const instance = await connectMock();
+    await invokeClaimAll("0xfactory", "0x1234567890abcdef1234567890abcdef12345678");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.operation).toBe("claimAll");
+    expect(call.args).toEqual([
+      { type: "Hash160", value: "0x1234567890abcdef1234567890abcdef12345678" },
+    ]);
+  });
+
+  it("invokeClaim sends asset hash and integer amount", async () => {
+    const instance = await connectMock();
+    await invokeClaim("0xfactory", "0x1234567890abcdef1234567890abcdef12345678", 42n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.operation).toBe("claim");
+    expect(call.args).toEqual([
+      { type: "Hash160", value: "0x1234567890abcdef1234567890abcdef12345678" },
+      { type: "Integer", value: "42" },
+    ]);
+  });
+
+  it("governance invokes map wallet rejection to WalletRejectedError", async () => {
+    const instance = makeMockDapi({
+      invoke: vi.fn().mockRejectedValue({ type: "CANCELED", message: "" }),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
+    await connect("NeoLine");
+
+    await expect(invokeSetCreationFee("0xfactory", 1n)).rejects.toBeInstanceOf(WalletRejectedError);
   });
 });
 

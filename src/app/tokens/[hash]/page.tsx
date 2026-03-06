@@ -8,8 +8,6 @@ import { WalletConnectModal } from "@/modules/forge/components/WalletConnectModa
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
 
-type PageView = "detail";
-
 export default function TokenDetailPage() {
   const { hash } = useParams<{ hash: string }>();
 
@@ -17,7 +15,6 @@ export default function TokenDetailPage() {
     useWallet();
   const { setPendingTx } = usePendingTx();
 
-  const [view, setView] = useState<PageView>("detail");
   const [showConnectModal, setShowConnectModal] = useState(false);
 
   function handleTxSubmitted(txHash: string, message: string) {
@@ -26,7 +23,6 @@ export default function TokenDetailPage() {
       message,
       targetTokenHash: hash,
     });
-    setView("detail");
   }
 
   return (

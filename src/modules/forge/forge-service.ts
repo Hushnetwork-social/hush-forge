@@ -24,6 +24,7 @@ import type {
   ApplicationLog,
   ForgeParams,
   RpcStackItem,
+  TokenCreatedEvent,
   TxStatus,
 } from "./types";
 

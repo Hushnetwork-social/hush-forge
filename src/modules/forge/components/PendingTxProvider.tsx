@@ -2,7 +2,6 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -40,24 +39,25 @@ export function usePendingTx() {
 export function PendingTxProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  const [pending, setPending] = useState<PendingTxState | null>(null);
-  const [visible, setVisible] = useState(true);
+  const [pending, setPending] = useState<PendingTxState | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as PendingTxState;
+      if (typeof parsed.txHash !== "string" || parsed.txHash.length === 0) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+  });
+  const [visible, setVisible] = useState(() => pending !== null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const polling = useTokenPolling(pending?.txHash ?? null);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as PendingTxState;
-      if (typeof parsed.txHash !== "string" || parsed.txHash.length === 0) return;
-      setPending(parsed);
-      setVisible(true);
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, []);
 
   useEffect(() => {
     if (!pending) {
@@ -76,12 +76,14 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
       if (isTokensList || isSameTokenDetail) {
         window.location.reload();
       }
-      setPending(null);
+      queueMicrotask(() => setPending(null));
       return;
     }
     if (polling.status === "faulted") {
-      setErrorMessage(polling.error ?? "Transaction failed.");
-      setPending(null);
+      queueMicrotask(() => {
+        setErrorMessage(polling.error ?? "Transaction failed.");
+        setPending(null);
+      });
     }
   }, [pathname, pending, polling.contractHash, polling.error, polling.status]);
 

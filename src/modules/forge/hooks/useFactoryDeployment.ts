@@ -91,7 +91,7 @@ export function useFactoryDeployment(
           });
           clearPendingFactoryTx();
           if (cancelled) return;
-          recheck();
+          setRecheckToken((token) => token + 1);
         } catch (err) {
           clearPendingFactoryTx();
           if (cancelled) return;

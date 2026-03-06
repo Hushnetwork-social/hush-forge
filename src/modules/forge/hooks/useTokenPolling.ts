@@ -30,37 +30,61 @@ export function useTokenPolling(
   txHash: string | null,
   options?: PollingOptions
 ): TokenPollingResult {
-  const [status, setStatus] = useState<TxStatus>("pending");
-  const [contractHash, setContractHash] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<TokenPollingResult>({
+    status: "pending",
+    contractHash: null,
+    error: null,
+  });
 
   useEffect(() => {
     if (!txHash) return;
 
     let cancelled = false;
-    setStatus("pending");
-    setContractHash(null);
-    setError(null);
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setState({
+        status: "pending",
+        contractHash: null,
+        error: null,
+      });
+    });
 
-    pollForConfirmation(txHash, (s) => {
-      if (!cancelled) setStatus(s);
-    }, { timeoutMs: options?.timeoutMs ?? 0 })
+    pollForConfirmation(
+      txHash,
+      (status) => {
+        if (cancelled) return;
+        setState((current) => ({ ...current, status }));
+      },
+      { timeoutMs: options?.timeoutMs ?? 0 }
+    )
       .then((event) => {
         if (cancelled) return;
-        setStatus("confirmed");
-        setContractHash(event.contractHash ?? null);
+        setState({
+          status: "confirmed",
+          contractHash: event.contractHash ?? null,
+          error: null,
+        });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         if (err instanceof TxTimeoutError) {
-          setStatus("timeout");
-          setError("Transaction is still pending confirmation.");
+          setState({
+            status: "timeout",
+            contractHash: null,
+            error: "Transaction is still pending confirmation.",
+          });
         } else if (err instanceof TxFaultedError) {
-          setStatus("faulted");
-          setError(`Transaction faulted: ${err.txHash}`);
+          setState({
+            status: "faulted",
+            contractHash: null,
+            error: `Transaction faulted: ${err.txHash}`,
+          });
         } else {
-          setStatus("faulted");
-          setError(err instanceof Error ? err.message : String(err));
+          setState({
+            status: "faulted",
+            contractHash: null,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       });
 
@@ -69,5 +93,5 @@ export function useTokenPolling(
     };
   }, [txHash, options?.timeoutMs]);
 
-  return { status, contractHash, error };
+  return state;
 }

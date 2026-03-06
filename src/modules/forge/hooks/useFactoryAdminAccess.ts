@@ -40,8 +40,23 @@ export function useFactoryAdminAccess(
   const [factoryHash, setFactoryHash] = useState(() => getRuntimeFactoryHash());
 
   const access = useMemo(
-    () => getFactoryAdminAccess(connectedAddress, config?.owner ?? null),
-    [connectedAddress, config?.owner]
+    () => {
+      const baseAccess = getFactoryAdminAccess(connectedAddress, config?.owner ?? null);
+      const isActivated = Boolean(
+        config?.templateNefStored && config?.templateManifestStored
+      );
+
+      return {
+        ...baseAccess,
+        navVisible: baseAccess.isOwner && isActivated,
+      };
+    },
+    [
+      connectedAddress,
+      config?.owner,
+      config?.templateManifestStored,
+      config?.templateNefStored,
+    ]
   );
 
   useEffect(() => {
@@ -53,19 +68,24 @@ export function useFactoryAdminAccess(
       setFactoryHash(getRuntimeFactoryHash());
     };
 
+    const refreshFromFactoryUpdate = () => {
+      syncFactoryHash();
+      setReloadToken((current) => current + 1);
+    };
+
     const handleStorage = (event: StorageEvent) => {
       if (event.key === null || event.key === FACTORY_HASH_STORAGE_KEY) {
-        syncFactoryHash();
+        refreshFromFactoryUpdate();
       }
     };
 
     window.addEventListener("storage", handleStorage);
-    window.addEventListener(FACTORY_HASH_UPDATED_EVENT, syncFactoryHash);
+    window.addEventListener(FACTORY_HASH_UPDATED_EVENT, refreshFromFactoryUpdate);
     syncFactoryHash();
 
     return () => {
       window.removeEventListener("storage", handleStorage);
-      window.removeEventListener(FACTORY_HASH_UPDATED_EVENT, syncFactoryHash);
+      window.removeEventListener(FACTORY_HASH_UPDATED_EVENT, refreshFromFactoryUpdate);
     };
   }, []);
 

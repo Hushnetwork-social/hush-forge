@@ -56,4 +56,69 @@ describe("useFactoryAdminAccess", () => {
     expect(result.current.access.navVisible).toBe(true);
     expect(result.current.access.routeAuthorized).toBe(true);
   });
+
+  it("keeps Admin hidden until the factory template is initialized", async () => {
+    vi.mocked(fetchFactoryConfig).mockResolvedValue({
+      creationFee: 1n,
+      operationFee: 2n,
+      paused: false,
+      owner: "0xowner",
+      templateScriptHash: "0xtemplate",
+      templateVersion: 1n,
+      templateNefStored: false,
+      templateManifestStored: false,
+    });
+
+    const { result } = renderHook(() => useFactoryAdminAccess("NOwnerWalletAddress"));
+
+    await act(async () => {
+      saveFactoryHash("0xfactory");
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    expect(result.current.access.isOwner).toBe(true);
+    expect(result.current.access.routeAuthorized).toBe(true);
+    expect(result.current.access.navVisible).toBe(false);
+  });
+
+  it("rechecks access when the same factory hash is republished after activation", async () => {
+    vi.mocked(fetchFactoryConfig)
+      .mockResolvedValueOnce({
+        creationFee: 1n,
+        operationFee: 2n,
+        paused: false,
+        owner: "0xowner",
+        templateScriptHash: "0xtemplate",
+        templateVersion: 1n,
+        templateNefStored: false,
+        templateManifestStored: false,
+      })
+      .mockResolvedValueOnce({
+        creationFee: 1n,
+        operationFee: 2n,
+        paused: false,
+        owner: "0xowner",
+        templateScriptHash: "0xtemplate",
+        templateVersion: 1n,
+        templateNefStored: true,
+        templateManifestStored: true,
+      });
+
+    const { result } = renderHook(() => useFactoryAdminAccess("NOwnerWalletAddress"));
+
+    await act(async () => {
+      saveFactoryHash("0xfactory");
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.access.navVisible).toBe(false);
+
+    await act(async () => {
+      saveFactoryHash("0xfactory");
+    });
+
+    await waitFor(() => expect(fetchFactoryConfig).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.access.navVisible).toBe(true));
+  });
 });

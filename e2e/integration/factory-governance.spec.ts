@@ -339,6 +339,7 @@ async function deployFactoryThroughUi(
   await expect(
     page.getByText(/Initializing TokenFactory with TokenTemplate/i)
   ).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
 
   const existingPopup = context
     .pages()

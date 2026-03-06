@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FactoryAdminDashboard, type AdminMutationState } from "./FactoryAdminDashboard";
 import type { ClaimableFactoryAsset, FactoryConfig } from "../types";
 
@@ -131,5 +131,61 @@ describe("FactoryAdminDashboard", () => {
     expect(screen.getByText(/Friendly error/)).toBeInTheDocument();
     expect(screen.getByText("Tx: 0xtx")).toBeInTheDocument();
     expect(screen.getByText("Technical details")).toBeInTheDocument();
+  });
+
+  it("blocks template upgrade when the NEF file extension is invalid", async () => {
+    const { onUpgradeTemplate } = renderDashboard();
+
+    const nefInput = screen.getByLabelText("Template NEF file") as HTMLInputElement;
+    const manifestInput = screen.getByLabelText("Template manifest file") as HTMLInputElement;
+
+    fireEvent.change(nefInput, {
+      target: {
+        files: [new File(["nef"], "TokenTemplate.txt", { type: "text/plain" })],
+      },
+    });
+    fireEvent.change(manifestInput, {
+      target: {
+        files: [
+          new File(['{"name":"TokenTemplate"}'], "TokenTemplate.manifest.json", {
+            type: "application/json",
+          }),
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade Template" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Template NEF file must use the .nef extension."
+      )
+    );
+    expect(onUpgradeTemplate).not.toHaveBeenCalled();
+  });
+
+  it("blocks template upgrade when the manifest JSON is invalid", async () => {
+    const { onUpgradeTemplate } = renderDashboard();
+
+    const nefInput = screen.getByLabelText("Template NEF file") as HTMLInputElement;
+    const manifestInput = screen.getByLabelText("Template manifest file") as HTMLInputElement;
+
+    fireEvent.change(nefInput, {
+      target: {
+        files: [new File(["nef"], "TokenTemplate.nef", { type: "application/octet-stream" })],
+      },
+    });
+    fireEvent.change(manifestInput, {
+      target: {
+        files: [new File(['{"broken"'], "TokenTemplate.manifest.json", { type: "application/json" })],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade Template" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("Manifest JSON is invalid.")
+    );
+    expect(onUpgradeTemplate).not.toHaveBeenCalled();
   });
 });

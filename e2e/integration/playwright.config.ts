@@ -62,14 +62,17 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: "http://localhost:3000",
-    // Reuse if already running (dev workflow)
-    reuseExistingServer: true,
+    // Integration runs need a fresh Next.js process so NEXT_PUBLIC_* overrides
+    // are not polluted by any developer server that may already be using
+    // a stale .env.local factory hash.
+    reuseExistingServer: false,
     timeout: 30_000,
     // Extra memory for Next.js SWC webpack workers — prevents "Jest worker
     // exceeded retry limit" OOM crashes when compiling dynamic routes under
     // the memory pressure of concurrent Docker + Edge + compilation.
     env: {
       NODE_OPTIONS: "--max-old-space-size=4096",
+      NEXT_PUBLIC_FACTORY_CONTRACT_HASH: "0x",
     },
   },
 });

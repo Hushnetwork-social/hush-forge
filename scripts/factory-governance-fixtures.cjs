@@ -124,9 +124,23 @@ function extractTokenCreatedHash(log, factoryHash) {
   return null;
 }
 
+function decodeLittleEndianBigInt(base64Value) {
+  const bytes = Buffer.from(base64Value, "base64");
+  if (bytes.length === 0) return 0n;
+
+  let result = 0n;
+  for (let index = bytes.length - 1; index >= 0; index -= 1) {
+    result = (result << 8n) + BigInt(bytes[index]);
+  }
+  return result;
+}
+
 function readIntegerStack(result) {
   const value = result?.stack?.[0]?.value;
-  if (typeof value === "string" && value.length > 0) return BigInt(value);
+  if (typeof value === "string" && value.length > 0) {
+    if (/^-?\d+$/.test(value)) return BigInt(value);
+    return decodeLittleEndianBigInt(value);
+  }
   if (typeof value === "number") return BigInt(value);
   return 0n;
 }

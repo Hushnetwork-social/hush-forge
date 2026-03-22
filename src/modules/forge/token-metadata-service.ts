@@ -102,6 +102,36 @@ function parseStackItemAsBigInt(item: RpcStackItem | undefined): bigint {
   return 0n;
 }
 
+function parseStackItemAsNumber(item: RpcStackItem | undefined): number | undefined {
+  if (!item) return undefined;
+
+  if (item.type === "Integer") {
+    try {
+      return Number(BigInt(String(item.value)));
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (item.type === "ByteString") {
+    try {
+      const bytes = Uint8Array.from(atob(item.value as string), (c) =>
+        c.charCodeAt(0)
+      );
+      if (bytes.length === 0) return 0;
+      let result = 0n;
+      for (let i = bytes.length - 1; i >= 0; i--) {
+        result = (result << 8n) | BigInt(bytes[i]);
+      }
+      return Number(result);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
 function peek(stack: RpcStackItem[]): RpcStackItem | undefined {
   return stack[0];
 }
@@ -142,6 +172,31 @@ function parseFactoryToken(
   } catch {
     return null;
   }
+}
+
+type TokenEconomics = Pick<TokenInfo, "burnRate" | "creatorFeeRate" | "platformFeeRate">;
+
+async function readTokenEconomics(contractHash: string): Promise<TokenEconomics> {
+  const [burnSettled, creatorFeeSettled, platformFeeSettled] = await Promise.allSettled([
+    invokeFunction(contractHash, "getBurnRate", []),
+    invokeFunction(contractHash, "getCreatorFeeRate", []),
+    invokeFunction(contractHash, "getPlatformFeeRate", []),
+  ]);
+
+  return {
+    burnRate:
+      burnSettled.status === "fulfilled"
+        ? parseStackItemAsNumber(peek(burnSettled.value.stack))
+        : undefined,
+    creatorFeeRate:
+      creatorFeeSettled.status === "fulfilled"
+        ? parseStackItemAsNumber(peek(creatorFeeSettled.value.stack))
+        : undefined,
+    platformFeeRate:
+      platformFeeSettled.status === "fulfilled"
+        ? parseStackItemAsNumber(peek(platformFeeSettled.value.stack))
+        : undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +244,7 @@ export async function resolveTokenMetadata(
   // calls from loading. Decimals must survive even if totalSupply() fails.
   // TokenTemplate exposes getName() (camelCase) — NOT the standard name() method.
   let contractData: Partial<TokenInfo> | null = null;
+  let tokenEconomics: TokenEconomics | null = null;
   try {
     const [symSettled, nameSettled, decSettled, supSettled] = await Promise.allSettled([
       invokeFunction(contractHash, "symbol", []),
@@ -230,6 +286,14 @@ export async function resolveTokenMetadata(
     console.warn("[metadata] direct contract calls failed for", contractHash, ":", String(err));
   }
 
+  if (factoryData) {
+    try {
+      tokenEconomics = await readTokenEconomics(contractHash);
+    } catch (err) {
+      console.warn("[metadata] token economics calls failed for", contractHash, ":", String(err));
+    }
+  }
+
   // Step 3: Merge — factory takes priority
   if (!factoryData && !contractData) {
     return {
@@ -252,16 +316,20 @@ export async function resolveTokenMetadata(
     // Factory does not store name — use getName() result from direct call, fallback to symbol
     name: contractData?.name ?? symbol,
     creator: factoryData?.creator ?? null,
-    // Factory supply is authoritative (stored at creation time)
-    supply: factoryData?.supply ?? contractData?.supply ?? 0n,
+    // totalSupply() is the live on-chain source of truth; factory supply may lag after burns.
+    supply: contractData?.supply ?? factoryData?.supply ?? 0n,
     // Factory does not store decimals — must come from direct contract call
     decimals: contractData?.decimals ?? 0,
     mode: factoryData?.mode ?? null,
     tier: factoryData?.tier ?? null,
     createdAt: factoryData?.createdAt ?? null,
     imageUrl: factoryData?.imageUrl,
-    burnRate: factoryData?.burnRate ?? 0,
+    burnRate:
+      tokenEconomics?.burnRate ??
+      (factoryData ? factoryData.burnRate ?? 0 : undefined),
     maxSupply: factoryData?.maxSupply ?? "0",
     locked: factoryData?.locked ?? false,
+    creatorFeeRate: tokenEconomics?.creatorFeeRate,
+    platformFeeRate: tokenEconomics?.platformFeeRate,
   };
 }

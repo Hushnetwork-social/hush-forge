@@ -7,6 +7,8 @@ import type {
   RpcStackItem,
 } from "./types";
 
+const GAS_CONTRACT_HASH = "0xd2a4cff31913016155e38e474a2c06d08be276cf";
+
 function expectStackItem(values: RpcStackItem[], index: number): RpcStackItem {
   const item = values[index];
   if (!item) throw new Error(`Missing stack item at index ${index}`);
@@ -114,4 +116,14 @@ export async function fetchClaimableFactoryAssets(
   );
 
   return assets;
+}
+
+export function getClaimableFactoryGasAsset(
+  assets: ClaimableFactoryAsset[]
+): ClaimableFactoryAsset | null {
+  return (
+    assets.find(
+      (asset) => asset.contractHash.toLowerCase() === GAS_CONTRACT_HASH
+    ) ?? null
+  );
 }

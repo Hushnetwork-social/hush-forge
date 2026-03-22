@@ -25,6 +25,7 @@ export interface TokenInfo {
   locked?: boolean; // true if token is permanently locked
   mintable?: boolean; // false for fixed supply tokens (hides supply admin tab)
   creatorFeeRate?: number; // per-transfer GAS fee in datoshi
+  platformFeeRate?: number; // per-transfer GAS fee in datoshi
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */

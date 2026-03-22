@@ -84,6 +84,13 @@ export interface ClaimableFactoryAsset {
   partialClaimSupported: boolean;
 }
 
+export interface ClaimableFactoryGasSummary {
+  asset: ClaimableFactoryAsset | null;
+  amount: bigint;
+  displayAmount: string;
+  available: boolean;
+}
+
 export interface FactoryAdminAccess {
   connectedAddress: string | null;
   connectedHash: string | null;
@@ -107,6 +114,26 @@ export interface GovernanceErrorInfo {
   category: GovernanceErrorCategory;
   message: string;
   technicalDetails: string | null;
+}
+
+export interface TokenEconomicsView {
+  burnRateBps: number;
+  burnRateDisplay: string;
+  creatorFeeDatoshi: bigint;
+  creatorFeeDisplay: string;
+  platformFeeDatoshi: bigint;
+  platformFeeDisplay: string;
+  networkFeeDisclaimer: string;
+}
+
+export interface BurnConfirmationSummary {
+  amountRaw: bigint | null;
+  amountDisplay: string;
+  creatorFeeDatoshi: bigint;
+  creatorFeeDisplay: string;
+  platformFeeDatoshi: bigint;
+  platformFeeDisplay: string;
+  networkFeeDisclaimer: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ import {
   invokeSetCreatorFee,
   invokeChangeMode,
   invokeLockToken,
+  invokeBurn,
   invokeApplyTokenChanges,
   invokeSetCreationFee,
   invokeSetOperationFee,
@@ -363,6 +364,23 @@ describe("lifecycle invoke functions", () => {
     );
   });
 
+  it("invokeBurn calls the token contract with burn and Global scope", async () => {
+    const instance = await connectMock();
+    await invokeBurn("0xtoken", 125n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string }[];
+      signers: { scopes: string }[];
+    };
+    expect(call.scriptHash).toBe("0xtoken");
+    expect(call.operation).toBe("burn");
+    expect(call.args).toEqual([{ type: "Integer", value: "125" }]);
+    expect(call.signers[0].scopes).toBe("Global");
+  });
+
   it("invokeApplyTokenChanges sends batch payload with sentinel and changed values", async () => {
     const instance = await connectMock();
     await invokeApplyTokenChanges("0xfactory", "0xtoken", {
@@ -518,6 +536,17 @@ describe("factory governance invoke functions", () => {
     await connect("NeoLine");
 
     await expect(invokeSetCreationFee("0xfactory", 1n)).rejects.toBeInstanceOf(WalletRejectedError);
+  });
+
+  it("invokeBurn maps wallet rejection to WalletRejectedError", async () => {
+    const instance = makeMockDapi({
+      invoke: vi.fn().mockRejectedValue({ type: "CANCELED", message: "" }),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
+    await connect("NeoLine");
+
+    await expect(invokeBurn("0xtoken", 1n)).rejects.toBeInstanceOf(WalletRejectedError);
   });
 });
 

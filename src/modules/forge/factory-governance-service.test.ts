@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   fetchClaimableFactoryAssets,
   getClaimableFactoryGasAsset,
+  getClaimableFactoryGasSummary,
   parseFactoryConfig,
 } from "./factory-governance-service";
 
@@ -159,5 +160,33 @@ describe("getClaimableFactoryGasAsset", () => {
     ]);
 
     expect(result).toBeNull();
+  });
+});
+
+describe("getClaimableFactoryGasSummary", () => {
+  it("maps the GAS asset into a summary object", () => {
+    const summary = getClaimableFactoryGasSummary([
+      {
+        contractHash: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
+        symbol: "GAS",
+        name: "GasToken",
+        amount: 250_000_000n,
+        decimals: 8,
+        displayAmount: "2.50000000",
+        partialClaimSupported: true,
+      },
+    ]);
+
+    expect(summary.available).toBe(true);
+    expect(summary.amount).toBe(250_000_000n);
+    expect(summary.displayAmount).toBe("2.50000000 GAS");
+  });
+
+  it("returns a zero summary when no GAS asset exists", () => {
+    const summary = getClaimableFactoryGasSummary([]);
+
+    expect(summary.available).toBe(false);
+    expect(summary.amount).toBe(0n);
+    expect(summary.displayAmount).toBe("0 GAS");
   });
 });

@@ -358,7 +358,7 @@ function isWalletRejection(err: unknown): boolean {
 }
 
 async function invokeConnectedOperation(
-  factoryHash: string,
+  scriptHash: string,
   operation: string,
   args: NeoDapiInvokeArg[],
   description: string
@@ -367,7 +367,7 @@ async function invokeConnectedOperation(
 
   try {
     const result = await _dapi.invoke({
-      scriptHash: factoryHash,
+      scriptHash,
       operation,
       args,
       signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
@@ -841,6 +841,18 @@ export async function invokeApplyTokenChanges(
     if (isWalletRejection(err)) throw new WalletRejectedError();
     throw err;
   }
+}
+
+export async function invokeBurn(
+  tokenHash: string,
+  amount: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    tokenHash,
+    "burn",
+    [{ type: "Integer", value: amount.toString() }],
+    `Burn ${amount} raw token units`
+  );
 }
 
 export async function invokeSetCreationFee(

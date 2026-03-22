@@ -47,6 +47,7 @@ function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
 function makeDetailResult(overrides: Partial<TokenDetailResult> = {}): TokenDetailResult {
   return {
     token: makeToken(),
+    economics: null,
     loading: false,
     error: null,
     isOwnToken: false,

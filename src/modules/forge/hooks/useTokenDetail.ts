@@ -15,12 +15,14 @@
 import { useEffect, useState } from "react";
 import { resolveTokenMetadata } from "../token-metadata-service";
 import { addressToHash160 } from "../neo-rpc-client";
+import { getTokenEconomicsView } from "../token-economics-logic";
 import { useWalletStore } from "../wallet-store";
 import { useTokenStore } from "../token-store";
-import type { TokenInfo } from "../types";
+import type { TokenEconomicsView, TokenInfo } from "../types";
 
 export interface TokenDetailResult {
   token: TokenInfo | null;
+  economics: TokenEconomicsView | null;
   loading: boolean;
   error: string | null;
   isOwnToken: boolean;
@@ -86,6 +88,7 @@ export function useTokenDetail(contractHash: string): TokenDetailResult {
 
   return {
     token,
+    economics: getTokenEconomicsView(token),
     loading,
     error,
     isOwnToken,

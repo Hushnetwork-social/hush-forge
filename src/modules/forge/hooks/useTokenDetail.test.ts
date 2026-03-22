@@ -66,6 +66,7 @@ describe("useTokenDetail", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.token).toEqual(token);
+    expect(result.current.economics?.burnRateDisplay).toBe("0.00%");
     expect(result.current.error).toBeNull();
   });
 
@@ -125,5 +126,15 @@ describe("useTokenDetail", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.isUpgradeable).toBe(false);
+  });
+
+  it("returns null economics for non-factory tokens", async () => {
+    vi.mocked(mockResolve).mockResolvedValue(makeToken("0xabc", null));
+
+    const { result } = renderHook(() => useTokenDetail("0xabc"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.economics).toBeNull();
   });
 });

@@ -24,11 +24,6 @@ const ZERO_CONFIG_TRANSFER_AMOUNT = 1_000n;
 declare global {
   interface Window {
     __feat093TransferPromise?: Promise<{ txid: string }>;
-    NEOLine?: { Neo: new () => { invoke(params: unknown): Promise<{ txid: string }> } };
-    NEOLineN3?: {
-      Init?: new () => { invoke(params: unknown): Promise<{ txid: string }> };
-      Neo?: new () => { invoke(params: unknown): Promise<{ txid: string }> };
-    };
   }
 }
 
@@ -380,8 +375,17 @@ async function invokeTokenTransfer(
   await signInNeoLine(context, async () => {
     await page.evaluate(
       ({ scriptHash, from, to, rawAmount }) => {
+        const walletWindow = window as Window & {
+          NEOLine?: { Neo: new () => { invoke(params: unknown): Promise<{ txid: string }> } };
+          NEOLineN3?: {
+            Init?: new () => { invoke(params: unknown): Promise<{ txid: string }> };
+            Neo?: new () => { invoke(params: unknown): Promise<{ txid: string }> };
+          };
+        };
         const DapiCtor =
-          window.NEOLineN3?.Init ?? window.NEOLineN3?.Neo ?? window.NEOLine?.Neo;
+          walletWindow.NEOLineN3?.Init ??
+          walletWindow.NEOLineN3?.Neo ??
+          walletWindow.NEOLine?.Neo;
         if (!DapiCtor) {
           throw new Error("NeoLine dAPI is unavailable on the page");
         }

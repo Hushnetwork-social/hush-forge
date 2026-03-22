@@ -12,6 +12,7 @@ import { getRuntimeFactoryHash, NEOTUBE_BASE_URL } from "../forge-config";
 import { BurnBadge } from "./BurnBadge";
 import { LockBadge } from "./LockBadge";
 import { TokenAdminPanel } from "./TokenAdminPanel";
+import { TokenEconomicsPanel } from "./TokenEconomicsPanel";
 
 interface Props {
   contractHash: string;
@@ -85,7 +86,8 @@ function ModeBadge({ mode }: { mode: string }) {
 }
 
 export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
-  const { token, loading, error, isOwnToken, isUpgradeable } = useTokenDetail(contractHash);
+  const { token, economics, loading, error, isOwnToken, isUpgradeable } =
+    useTokenDetail(contractHash);
   const walletAddress = useWalletStore((s) => s.address);
   const { transfers, supported } = useTokenTransfers(contractHash, walletAddress);
   const [copied, setCopied] = useState(false);
@@ -232,6 +234,8 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
             {token.creator && <StatCard label="Creator" value={truncateHash(token.creator)} />}
             {token.createdAt !== null && <StatCard label="Created" value={formatDate(token.createdAt)} />}
           </dl>
+
+          {economics && <TokenEconomicsPanel economics={economics} />}
 
           {!token.creator && <p className="text-xs px-1" style={{ color: "var(--forge-text-muted)" }}>Not registered via Forge</p>}
 

@@ -49,10 +49,13 @@ export default function TokensPage() {
     }
   }, [balances, loadWalletHeldTokens]);
 
-  function handleTxSubmitted(txHash: string) {
+  function handleTxSubmitted(
+    txHash: string,
+    message = "Waiting for forge transaction confirmation..."
+  ) {
     setPendingTx({
       txHash,
-      message: "Waiting for forge transaction confirmation...",
+      message,
     });
     setView("dashboard");
   }
@@ -73,6 +76,7 @@ export default function TokensPage() {
             errorMessage={errorMessage}
             onConnectClick={() => setShowConnectModal(true)}
             onDisconnect={disconnect}
+            onTxSubmitted={handleTxSubmitted}
           />
 
           <FactoryDeployBanner

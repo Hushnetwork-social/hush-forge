@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import type { WalletBalance } from "../types";
+import { useEffect, useState } from "react";
+import { isFactoryToken } from "../token-economics-logic";
 import { useTokenStore } from "../token-store";
+import type { TokenInfo, WalletBalance } from "../types";
+import { BurnTokenDialog } from "./BurnTokenDialog";
 import { TokenIcon } from "./TokenIcon";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
@@ -13,15 +15,11 @@ interface Props {
   balances: WalletBalance[];
   onConnectClick: () => void;
   onDisconnect: () => void;
+  onTxSubmitted: (txHash: string, message: string) => void;
   errorMessage?: string | null;
 }
 
-/** Max decimal digits shown before appending "…" */
 const MAX_FRAC_DIGITS = 5;
-
-// ---------------------------------------------------------------------------
-// Balance formatting (unchanged)
-// ---------------------------------------------------------------------------
 
 function formatBalance(
   amount: bigint,
@@ -36,24 +34,20 @@ function formatBalance(
   const fracPart = amount % factor;
   const fracFull = fracPart.toString().padStart(decimals, "0");
 
-  if (fracFull.split("").every((c) => c === "0")) {
+  if (fracFull.split("").every((char) => char === "0")) {
     return { integer: intPart.toLocaleString(), frac: null };
   }
 
   if (decimals > MAX_FRAC_DIGITS) {
     return {
       integer: intPart.toLocaleString(),
-      frac: `.${fracFull.slice(0, MAX_FRAC_DIGITS)}…`,
+      frac: `.${fracFull.slice(0, MAX_FRAC_DIGITS)}...`,
     };
   }
 
   const trimmed = fracFull.replace(/0+$/, "");
   return { integer: intPart.toLocaleString(), frac: `.${trimmed}` };
 }
-
-// ---------------------------------------------------------------------------
-// Carousel slide
-// ---------------------------------------------------------------------------
 
 function BalanceSlide({
   balance,
@@ -68,10 +62,13 @@ function BalanceSlide({
   const displayName = name && name !== balance.symbol ? name : null;
 
   return (
-    <div className="flex items-center justify-between flex-1 min-w-0 px-2">
-      {/* Left: icon + symbol + name */}
-      <div className="flex items-center gap-2 min-w-0">
-        <TokenIcon contractHash={balance.contractHash} size={36} imageUrl={imageUrl} />
+    <div className="flex min-w-0 flex-1 items-center justify-between px-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <TokenIcon
+          contractHash={balance.contractHash}
+          size={36}
+          imageUrl={imageUrl}
+        />
         <div className="min-w-0">
           <p
             className="text-2xl font-bold leading-none"
@@ -79,9 +76,8 @@ function BalanceSlide({
           >
             {balance.symbol}
           </p>
-          {/* Always rendered — keeps height identical whether or not there's a name */}
           <p
-            className="text-xs mt-1 truncate"
+            className="mt-1 truncate text-xs"
             style={{ color: "var(--forge-text-muted)", minHeight: "1rem" }}
           >
             {displayName ?? ""}
@@ -89,8 +85,7 @@ function BalanceSlide({
         </div>
       </div>
 
-      {/* Right: balance + price placeholder (always two lines for fixed height) */}
-      <div className="text-right flex-shrink-0 ml-4">
+      <div className="ml-4 flex-shrink-0 text-right">
         <div>
           <span
             className="text-2xl font-bold"
@@ -107,22 +102,17 @@ function BalanceSlide({
             </span>
           )}
         </div>
-        {/* Price placeholder — always rendered, same height as name row */}
         <p
-          className="text-xs mt-1"
+          className="mt-1 text-xs"
           style={{ color: "var(--forge-text-muted)", minHeight: "1rem" }}
           aria-label="Price in USD"
         >
-          $ —
+          $ -
         </p>
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Arrow button
-// ---------------------------------------------------------------------------
 
 function ArrowButton({
   direction,
@@ -138,7 +128,7 @@ function ArrowButton({
       aria-label={direction === "left" ? "Previous token" : "Next token"}
       onClick={onClick}
       disabled={disabled}
-      className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full transition-opacity"
+      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-opacity"
       style={{
         background: disabled ? "transparent" : "rgba(255,255,255,0.06)",
         color: disabled
@@ -149,14 +139,10 @@ function ArrowButton({
         lineHeight: 1,
       }}
     >
-      {direction === "left" ? "‹" : "›"}
+      {direction === "left" ? "<" : ">"}
     </button>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Dot indicators
-// ---------------------------------------------------------------------------
 
 function DotIndicators({
   count,
@@ -165,22 +151,23 @@ function DotIndicators({
 }: {
   count: number;
   current: number;
-  onDotClick: (i: number) => void;
+  onDotClick: (index: number) => void;
 }) {
   if (count <= 1) return null;
+
   return (
-    <div className="flex justify-center gap-1.5 mt-3">
-      {Array.from({ length: count }).map((_, i) => (
+    <div className="mt-3 flex justify-center gap-1.5">
+      {Array.from({ length: count }).map((_, index) => (
         <button
-          key={i}
-          aria-label={`Go to token ${i + 1}`}
-          onClick={() => onDotClick(i)}
+          key={index}
+          aria-label={`Go to token ${index + 1}`}
+          onClick={() => onDotClick(index)}
           className="rounded-full transition-all"
           style={{
-            width: i === current ? 16 : 6,
+            width: index === current ? 16 : 6,
             height: 6,
             background:
-              i === current
+              index === current
                 ? "var(--forge-color-primary)"
                 : "var(--forge-border-subtle)",
             border: "none",
@@ -193,35 +180,50 @@ function DotIndicators({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export function WalletPanel({
   connectionStatus,
   address,
   balances,
   onConnectClick,
   errorMessage,
+  onTxSubmitted,
 }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [burnOpen, setBurnOpen] = useState(false);
 
-  // Look up token metadata from the loaded token store
-  const tokens = useTokenStore((s) => s.tokens);
-  const nameByHash = new Map(tokens.map((t) => [t.contractHash, t.name]));
-  const imageUrlByHash = new Map(tokens.map((t) => [t.contractHash, t.imageUrl]));
+  const tokens = useTokenStore((state) => state.tokens);
+  const nameByHash = new Map(tokens.map((token) => [token.contractHash, token.name]));
+  const imageUrlByHash = new Map(
+    tokens.map((token) => [token.contractHash, token.imageUrl])
+  );
+  const tokenByHash = new Map<string, TokenInfo>(
+    tokens.map((token) => [token.contractHash, token])
+  );
 
-  // Clamp index when balances array changes
   const safeIndex = Math.min(currentIndex, Math.max(0, balances.length - 1));
+  const current = balances[safeIndex] ?? null;
+  const currentToken =
+    current === null ? null : (tokenByHash.get(current.contractHash) ?? null);
+  const burnAvailable =
+    current !== null &&
+    currentToken !== null &&
+    isFactoryToken(currentToken) &&
+    current.amount > 0n;
+
+  useEffect(() => {
+    if (!burnAvailable && burnOpen) {
+      setBurnOpen(false);
+    }
+  }, [burnAvailable, burnOpen]);
 
   function prev() {
-    setCurrentIndex((i) => Math.max(0, i - 1));
-  }
-  function next() {
-    setCurrentIndex((i) => Math.min(balances.length - 1, i + 1));
+    setCurrentIndex((index) => Math.max(0, index - 1));
   }
 
-  // Disconnected / error state
+  function next() {
+    setCurrentIndex((index) => Math.min(balances.length - 1, index + 1));
+  }
+
   if (connectionStatus === "disconnected" || connectionStatus === "error") {
     return (
       <div
@@ -237,7 +239,7 @@ export function WalletPanel({
           </p>
         )}
         <p
-          className="mb-4 text-sm text-center"
+          className="mb-4 text-center text-sm"
           style={{ color: "var(--forge-text-muted)" }}
         >
           Connect your Neo wallet to see your portfolio
@@ -256,82 +258,98 @@ export function WalletPanel({
     );
   }
 
-  // Connecting
   if (connectionStatus === "connecting") {
     return (
       <div
-        className="rounded-xl p-5 flex items-center justify-center"
+        className="flex items-center justify-center rounded-xl p-5"
         style={{
           background: "var(--forge-bg-card)",
           border: "1px solid var(--forge-border-medium)",
         }}
       >
-        <span style={{ color: "var(--forge-text-muted)" }}>Connecting…</span>
+        <span style={{ color: "var(--forge-text-muted)" }}>Connecting...</span>
       </div>
     );
   }
 
-  // Connected
-  const current = balances[safeIndex] ?? null;
-
   return (
-    <div
-      className="rounded-xl px-4 pt-3 pb-4"
-      style={{
-        background: "var(--forge-bg-card)",
-        border: "1px solid var(--forge-border-medium)",
-      }}
-    >
-      {/* Wallet label */}
-      <p
-        className="text-xs mb-3"
-        style={{ color: "var(--forge-text-muted)" }}
+    <>
+      <div
+        className="rounded-xl px-4 pb-4 pt-3"
+        style={{
+          background: "var(--forge-bg-card)",
+          border: "1px solid var(--forge-border-medium)",
+        }}
       >
-        {address
-          ? `${address.slice(0, 6)}…${address.slice(-4)}`
-          : "Wallet"}
-      </p>
-
-      {balances.length === 0 ? (
-        <p
-          className="text-sm text-center py-2"
-          style={{ color: "var(--forge-text-muted)" }}
-        >
-          No tokens found
+        <p className="mb-3 text-xs" style={{ color: "var(--forge-text-muted)" }}>
+          {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Wallet"}
         </p>
-      ) : (
-        <>
-          {/* Carousel row */}
-          <div className="flex items-center gap-1">
-            <ArrowButton
-              direction="left"
-              disabled={safeIndex === 0}
-              onClick={prev}
-            />
 
-            {current && (
-              <BalanceSlide
-                balance={current}
-                name={nameByHash.get(current.contractHash) ?? null}
-                imageUrl={imageUrlByHash.get(current.contractHash)}
+        {balances.length === 0 ? (
+          <p
+            className="py-2 text-center text-sm"
+            style={{ color: "var(--forge-text-muted)" }}
+          >
+            No tokens found
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-1">
+              <ArrowButton
+                direction="left"
+                disabled={safeIndex === 0}
+                onClick={prev}
               />
-            )}
 
-            <ArrowButton
-              direction="right"
-              disabled={safeIndex === balances.length - 1}
-              onClick={next}
+              {current && (
+                <BalanceSlide
+                  balance={current}
+                  name={nameByHash.get(current.contractHash) ?? null}
+                  imageUrl={imageUrlByHash.get(current.contractHash)}
+                />
+              )}
+
+              <ArrowButton
+                direction="right"
+                disabled={safeIndex === balances.length - 1}
+                onClick={next}
+              />
+            </div>
+
+            <DotIndicators
+              count={balances.length}
+              current={safeIndex}
+              onDotClick={setCurrentIndex}
             />
-          </div>
 
-          {/* Dot indicators */}
-          <DotIndicators
-            count={balances.length}
-            current={safeIndex}
-            onDotClick={setCurrentIndex}
-          />
-        </>
+            {burnAvailable && current && currentToken && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setBurnOpen(true)}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",
+                    color: "var(--forge-text-primary)",
+                  }}
+                >
+                  Burn
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {burnOpen && current && currentToken && (
+        <BurnTokenDialog
+          token={currentToken}
+          balance={current}
+          onClose={() => setBurnOpen(false)}
+          onTxSubmitted={onTxSubmitted}
+        />
       )}
-    </div>
+    </>
   );
 }

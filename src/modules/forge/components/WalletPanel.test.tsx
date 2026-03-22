@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useTokenStore } from "../token-store";
+import type { TokenInfo, WalletBalance } from "../types";
 import { WalletPanel } from "./WalletPanel";
-import type { WalletBalance } from "../types";
 
 vi.mock("../forge-config", () => ({
   FACTORY_CONTRACT_HASH: "0xfactory",
@@ -14,6 +15,10 @@ vi.mock("../neo-rpc-client", () => ({
 
 vi.mock("../token-metadata-service", () => ({
   resolveTokenMetadata: vi.fn(),
+}));
+
+vi.mock("../neo-dapi-adapter", () => ({
+  invokeBurn: vi.fn(),
 }));
 
 function makeBalance(
@@ -30,14 +35,41 @@ function makeBalance(
   };
 }
 
+function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
+  return {
+    contractHash: "0xhush",
+    symbol: "HUSH",
+    name: "Hush",
+    creator: "0xcreator",
+    supply: 1_000_000_000n,
+    decimals: 8,
+    mode: "community",
+    tier: 0,
+    createdAt: 1_000_000,
+    burnRate: 100,
+    creatorFeeRate: 1_500_000,
+    platformFeeRate: 2_500_000,
+    ...overrides,
+  };
+}
+
 const baseProps = {
   onConnectClick: vi.fn(),
   onDisconnect: vi.fn(),
+  onTxSubmitted: vi.fn(),
 };
 
 describe("WalletPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useTokenStore.setState({
+      tokens: [],
+      ownTokenHashes: new Set(),
+      activeTab: "all",
+      searchQuery: "",
+      loadingStatus: "idle",
+      errorMessage: null,
+    });
   });
 
   it("shows connect button when disconnected", () => {
@@ -76,7 +108,9 @@ describe("WalletPanel", () => {
         balances={[]}
       />
     );
-    expect(screen.queryByRole("button", { name: /NwXx/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /NwXx/ })
+    ).not.toBeInTheDocument();
   });
 
   it("shows first token in carousel when connected", () => {
@@ -92,7 +126,6 @@ describe("WalletPanel", () => {
       />
     );
     expect(screen.getByText("NEO")).toBeInTheDocument();
-    // GAS is not visible yet (carousel shows one at a time)
     expect(screen.queryByText("GAS")).not.toBeInTheDocument();
   });
 
@@ -177,7 +210,7 @@ describe("WalletPanel", () => {
       />
     );
     expect(screen.getByText("9,999,989")).toBeInTheDocument();
-    expect(screen.getByText(".86121…")).toBeInTheDocument();
+    expect(screen.getByText(".86121...")).toBeInTheDocument();
   });
 
   it("hides decimal part when balance is a whole number", () => {
@@ -190,7 +223,9 @@ describe("WalletPanel", () => {
       />
     );
     expect(screen.getByText("1,000")).toBeInTheDocument();
-    expect(screen.queryByText(/\./)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText((_, element) => element?.textContent?.startsWith(".") ?? false)
+    ).not.toBeInTheDocument();
   });
 
   it("shows USD price placeholder for every token", () => {
@@ -203,7 +238,7 @@ describe("WalletPanel", () => {
       />
     );
     expect(screen.getByLabelText("Price in USD")).toBeInTheDocument();
-    expect(screen.getByText("$ —")).toBeInTheDocument();
+    expect(screen.getByText("$ -")).toBeInTheDocument();
   });
 
   it("shows connecting spinner while connecting", () => {
@@ -215,7 +250,7 @@ describe("WalletPanel", () => {
         balances={[]}
       />
     );
-    expect(screen.getByText("Connecting…")).toBeInTheDocument();
+    expect(screen.getByText("Connecting...")).toBeInTheDocument();
   });
 
   it("shows no tokens message when connected with empty balances", () => {
@@ -228,5 +263,85 @@ describe("WalletPanel", () => {
       />
     );
     expect(screen.getByText("No tokens found")).toBeInTheDocument();
+  });
+
+  it("shows burn action for a selected factory-created token with balance", () => {
+    useTokenStore.setState({
+      tokens: [makeToken()],
+    });
+
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[
+          {
+            contractHash: "0xhush",
+            symbol: "HUSH",
+            amount: 1_500_000_000n,
+            decimals: 8,
+            displayAmount: "15.00000000",
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Burn" })).toBeInTheDocument();
+  });
+
+  it("does not show burn action for native or non-factory tokens", () => {
+    useTokenStore.setState({
+      tokens: [
+        makeToken({
+          contractHash: "0xneo",
+          symbol: "NEO",
+          creator: null,
+          isNative: true,
+        }),
+      ],
+    });
+
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[makeBalance("NEO", 100_00000000n)]}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "Burn" })).not.toBeInTheDocument();
+  });
+
+  it("opens and closes the burn dialog from the wallet strip", () => {
+    useTokenStore.setState({
+      tokens: [makeToken()],
+    });
+
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NwAddr"
+        balances={[
+          {
+            contractHash: "0xhush",
+            symbol: "HUSH",
+            amount: 1_500_000_000n,
+            decimals: 8,
+            displayAmount: "15.00000000",
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Burn" }));
+    expect(screen.getByRole("dialog", { name: "Burn HUSH" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.queryByRole("dialog", { name: "Burn HUSH" })
+    ).not.toBeInTheDocument();
   });
 });

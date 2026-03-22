@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { TokenDetail } from "./TokenDetail";
 import { useTokenDetail } from "../hooks/useTokenDetail";
 import type { TokenDetailResult } from "../hooks/useTokenDetail";
-import type { TokenInfo } from "../types";
+import type { TokenEconomicsView, TokenInfo } from "../types";
 
 vi.mock("../hooks/useTokenDetail", () => ({
   useTokenDetail: vi.fn(),
@@ -52,6 +52,22 @@ function makeDetailResult(overrides: Partial<TokenDetailResult> = {}): TokenDeta
     error: null,
     isOwnToken: false,
     isUpgradeable: false,
+    ...overrides,
+  };
+}
+
+function makeEconomics(
+  overrides: Partial<TokenEconomicsView> = {}
+): TokenEconomicsView {
+  return {
+    burnRateBps: 0,
+    burnRateDisplay: "0.00%",
+    creatorFeeDatoshi: 0n,
+    creatorFeeDisplay: "0 GAS",
+    platformFeeDatoshi: 0n,
+    platformFeeDisplay: "0 GAS",
+    networkFeeDisclaimer:
+      "Network GAS fees are charged separately by the Neo chain and are not part of token taxes.",
     ...overrides,
   };
 }
@@ -192,5 +208,22 @@ describe("TokenDetail", () => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ token: null, error: "Token not found" }));
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
     expect(screen.getByText("Token not found")).toBeInTheDocument();
+  });
+
+  it("renders the public token economics panel for non-owner visitors", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({
+        isOwnToken: false,
+        economics: makeEconomics(),
+      })
+    );
+
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Token Economics" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("0.00%")).toBeInTheDocument();
+    expect(screen.getAllByText("0 GAS")).toHaveLength(2);
   });
 });

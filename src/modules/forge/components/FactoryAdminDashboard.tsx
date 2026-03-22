@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { getClaimableFactoryGasSummary } from "../factory-governance-service";
 import {
   isGovernanceMutationLocked,
   validateGovernanceFeeInput,
@@ -119,6 +120,10 @@ export function FactoryAdminDashboard({
   const creationFeeValidation = useMemo(
     () => validateGovernanceFeeInput(creationFeeInput, config.creationFee),
     [creationFeeInput, config.creationFee]
+  );
+  const claimableGasSummary = useMemo(
+    () => getClaimableFactoryGasSummary(assets),
+    [assets]
   );
   const operationFeeValidation = useMemo(
     () => validateGovernanceFeeInput(operationFeeInput, config.operationFee),
@@ -393,6 +398,27 @@ export function FactoryAdminDashboard({
                   Retry
                 </button>
               )}
+            </div>
+
+            <div
+              className="mb-4 rounded-xl p-4"
+              style={{
+                background: "var(--forge-bg-primary)",
+                border: "1px solid var(--forge-border-subtle)",
+              }}
+            >
+              <p
+                className="text-xs uppercase"
+                style={{ color: "var(--forge-text-muted)" }}
+              >
+                Total Claimable GAS
+              </p>
+              <p
+                className="mt-2 text-lg font-semibold"
+                style={{ color: "var(--forge-text-primary)" }}
+              >
+                {assetsLoading ? "Loading..." : claimableGasSummary.displayAmount}
+              </p>
             </div>
 
             {assetsLoading ? (

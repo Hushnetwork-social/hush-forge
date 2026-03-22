@@ -5,10 +5,13 @@ const { wallet, sc, tx, u, rpc: rpcModule } = require("@cityofzion/neon-js");
 
 const RPC_URL = process.env.NEXT_PUBLIC_NEO_RPC_URL || "http://localhost:10332";
 const NETWORK_MAGIC = 5195086;
-const OWNER_WIF =
-  process.env.E2E_TEST_ACCOUNT_WIF ||
+const DEFAULT_TEST_WIF =
   "L3cNMQUSrvUrHx1MzacwHiUeCWzqK2MLt5fPvJj9mz6L2rzYZpok";
 const GAS_HASH = "0xd2a4cff31913016155e38e474a2c06d08be276cf";
+
+function getAccountFromEnv() {
+  return new wallet.Account(process.env.E2E_TEST_ACCOUNT_WIF || DEFAULT_TEST_WIF);
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,6 +20,13 @@ function sleep(ms) {
 function normalizeHashOrAddress(value) {
   if (/^0x[0-9a-fA-F]{40}$/.test(value)) return value.toLowerCase();
   return new wallet.Account(value).scriptHash;
+}
+
+function toRpcHash160Param(value) {
+  return {
+    type: "Hash160",
+    value: normalizeHashOrAddress(value),
+  };
 }
 
 async function rpcCall(method, params) {
@@ -75,8 +85,72 @@ async function sendInvocation(account, scriptHex) {
   return client.sendRawTransaction(txn);
 }
 
+async function invokeRead(scriptHash, operation, args = []) {
+  return rpcCall("invokefunction", [scriptHash, operation, args, []]);
+}
+
+function decodeHashStackItem(item) {
+  if (!item || typeof item !== "object") return null;
+  if (typeof item.value === "string") {
+    if (/^0x[0-9a-fA-F]{40}$/.test(item.value)) return item.value.toLowerCase();
+    if (/^[0-9a-fA-F]{40}$/.test(item.value)) return `0x${item.value.toLowerCase()}`;
+
+    try {
+      const bytes = Buffer.from(item.value, "base64");
+      if (bytes.length === 20) {
+        return `0x${Buffer.from(bytes).reverse().toString("hex")}`;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function extractTokenCreatedHash(log, factoryHash) {
+  const targetHash = normalizeHashOrAddress(factoryHash);
+  for (const execution of log.executions ?? []) {
+    if (execution.trigger !== "Application") continue;
+    for (const notification of execution.notifications ?? []) {
+      if (normalizeHashOrAddress(notification.contract) !== targetHash) continue;
+      if (notification.eventname !== "TokenCreated") continue;
+      const values = Array.isArray(notification.state?.value)
+        ? notification.state.value
+        : [];
+      const tokenHash = decodeHashStackItem(values[0]);
+      if (tokenHash) return tokenHash;
+    }
+  }
+  return null;
+}
+
+function readIntegerStack(result) {
+  const value = result?.stack?.[0]?.value;
+  if (typeof value === "string" && value.length > 0) return BigInt(value);
+  if (typeof value === "number") return BigInt(value);
+  return 0n;
+}
+
+async function getCurrentCreationFee(factoryHash) {
+  const result = await invokeRead(factoryHash, "getMinFee");
+  return readIntegerStack(result);
+}
+
+async function getLatestCreatorToken(factoryHash, creatorAddress) {
+  const result = await invokeRead(factoryHash, "getTokensByCreator", [
+    toRpcHash160Param(creatorAddress),
+    { type: "Integer", value: "0" },
+    { type: "Integer", value: "50" },
+  ]);
+  const values = Array.isArray(result?.stack?.[0]?.value)
+    ? result.stack[0].value
+    : [];
+  const latest = values[values.length - 1];
+  return decodeHashStackItem(latest);
+}
+
 async function setOwner(factoryHash, newOwner) {
-  const account = new wallet.Account(OWNER_WIF);
+  const account = getAccountFromEnv();
   const script = sc.createScript({
     scriptHash: factoryHash,
     operation: "setOwner",
@@ -88,7 +162,7 @@ async function setOwner(factoryHash, newOwner) {
 }
 
 async function fundFactory(factoryHash, amount) {
-  const account = new wallet.Account(OWNER_WIF);
+  const account = getAccountFromEnv();
   const script = sc.createScript({
     scriptHash: GAS_HASH,
     operation: "transfer",
@@ -104,21 +178,132 @@ async function fundFactory(factoryHash, amount) {
   console.log(`FUND_FACTORY_TX=${txid}`);
 }
 
+async function createToken(factoryHash, name, symbol, supply, decimals, creatorFeeRate) {
+  const account = getAccountFromEnv();
+  const creationFee = await getCurrentCreationFee(factoryHash);
+  const tokenData = sc.ContractParam.array(
+    sc.ContractParam.string(name),
+    sc.ContractParam.string(symbol),
+    sc.ContractParam.integer(String(supply)),
+    sc.ContractParam.integer(String(decimals)),
+    sc.ContractParam.string("community"),
+    sc.ContractParam.string(""),
+    sc.ContractParam.integer(String(creatorFeeRate))
+  );
+
+  const script = sc.createScript({
+    scriptHash: GAS_HASH,
+    operation: "transfer",
+    args: [
+      sc.ContractParam.hash160(account.scriptHash),
+      sc.ContractParam.hash160(factoryHash),
+      sc.ContractParam.integer(creationFee.toString()),
+      tokenData,
+    ],
+  });
+
+  const txid = await sendInvocation(account, script);
+  const log = await waitForTx(txid);
+  const tokenHash =
+    extractTokenCreatedHash(log, factoryHash) ??
+    (await getLatestCreatorToken(factoryHash, account.address));
+
+  if (!tokenHash) {
+    throw new Error("Could not determine token hash after creation");
+  }
+
+  console.log(`CREATE_TOKEN_TX=${txid}`);
+  console.log(`TOKEN_HASH=${tokenHash}`);
+}
+
+async function setPlatformFee(factoryHash, newRate, offset = "0", batchSize = "50") {
+  const account = getAccountFromEnv();
+  const script = sc.createScript({
+    scriptHash: factoryHash,
+    operation: "setAllTokensPlatformFee",
+    args: [
+      sc.ContractParam.integer(String(newRate)),
+      sc.ContractParam.integer(String(offset)),
+      sc.ContractParam.integer(String(batchSize)),
+    ],
+  });
+  const txid = await sendInvocation(account, script);
+  await waitForTx(txid);
+  console.log(`SET_PLATFORM_FEE_TX=${txid}`);
+}
+
+async function setBurnRate(factoryHash, tokenHash, bps) {
+  const account = getAccountFromEnv();
+  const script = sc.createScript({
+    scriptHash: factoryHash,
+    operation: "setTokenBurnRate",
+    args: [
+      sc.ContractParam.hash160(tokenHash),
+      sc.ContractParam.integer(String(bps)),
+    ],
+  });
+  const txid = await sendInvocation(account, script);
+  await waitForTx(txid);
+  console.log(`SET_BURN_RATE_TX=${txid}`);
+}
+
+async function mintTokens(factoryHash, tokenHash, recipient, amount) {
+  const account = getAccountFromEnv();
+  const script = sc.createScript({
+    scriptHash: factoryHash,
+    operation: "mintTokens",
+    args: [
+      sc.ContractParam.hash160(tokenHash),
+      sc.ContractParam.hash160(normalizeHashOrAddress(recipient)),
+      sc.ContractParam.integer(String(amount)),
+    ],
+  });
+  const txid = await sendInvocation(account, script);
+  await waitForTx(txid);
+  console.log(`MINT_TOKENS_TX=${txid}`);
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
+
   if (command === "set-owner" && args.length === 2) {
     await setOwner(args[0], args[1]);
     return;
   }
+
   if (command === "fund-factory" && args.length === 2) {
     await fundFactory(args[0], args[1]);
+    return;
+  }
+
+  if (command === "create-token" && args.length === 6) {
+    await createToken(args[0], args[1], args[2], args[3], args[4], args[5]);
+    return;
+  }
+
+  if (command === "set-platform-fee" && args.length >= 2 && args.length <= 4) {
+    await setPlatformFee(args[0], args[1], args[2], args[3]);
+    return;
+  }
+
+  if (command === "set-burn-rate" && args.length === 3) {
+    await setBurnRate(args[0], args[1], args[2]);
+    return;
+  }
+
+  if (command === "mint-tokens" && args.length === 4) {
+    await mintTokens(args[0], args[1], args[2], args[3]);
     return;
   }
 
   console.error(
     "Usage:\n" +
       "  node scripts/factory-governance-fixtures.cjs set-owner <factoryHash> <newOwnerHashOrAddress>\n" +
-      "  node scripts/factory-governance-fixtures.cjs fund-factory <factoryHash> <amountDatoshi>"
+      "  node scripts/factory-governance-fixtures.cjs fund-factory <factoryHash> <amountDatoshi>\n" +
+      "  node scripts/factory-governance-fixtures.cjs create-token <factoryHash> <name> <symbol> <supply> <decimals> <creatorFeeRateDatoshi>\n" +
+      "  node scripts/factory-governance-fixtures.cjs set-platform-fee <factoryHash> <newRateDatoshi> [offset] [batchSize]\n" +
+      "  node scripts/factory-governance-fixtures.cjs set-burn-rate <factoryHash> <tokenHash> <basisPoints>\n" +
+      "  node scripts/factory-governance-fixtures.cjs mint-tokens <factoryHash> <tokenHash> <recipientHashOrAddress> <amountRaw>"
   );
   process.exit(1);
 }

@@ -6,7 +6,8 @@
  * 2. Try token contract directly — has symbol, name, decimals, totalSupply
  * 3. If both fail — return minimal stub (contractHash only, all others null/default)
  *
- * Factory data takes priority for fields present in both sources.
+ * Factory registry data fills identity/ownership fields, while live token getters
+ * remain authoritative for mutable economics and supply values.
  */
 
 import { getRuntimeFactoryHash } from "./forge-config";
@@ -233,7 +234,6 @@ export async function resolveTokenMetadata(
     const result = await invokeFunction(getRuntimeFactoryHash(), "getToken", [
       { type: "Hash160", value: contractHash },
     ]);
-    console.log("[metadata] factory GetToken stack[0]:", JSON.stringify(result.stack[0]));
     factoryData = parseFactoryToken(contractHash, result.stack);
   } catch (err) {
     console.warn("[metadata] factory GetToken failed for", contractHash, ":", String(err));

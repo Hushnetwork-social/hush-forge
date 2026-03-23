@@ -6,6 +6,7 @@
  * orchestrate these calls and update state accordingly.
  */
 
+import * as Neon from "@cityofzion/neon-js";
 import {
   getRuntimeFactoryHash,
   GAS_CONTRACT_HASH,
@@ -14,14 +15,20 @@ import {
 } from "./forge-config";
 import { invokeForge as dapiInvokeForge } from "./neo-dapi-adapter";
 import {
+  addressToHash160,
+  calculateNetworkFee,
   getAllFactoryTokenHashes,
   getApplicationLog,
+  getBlockCount,
   getRawMemPool,
   getTokenBalance,
   invokeFunction,
+  invokeScript,
 } from "./neo-rpc-client";
+import { formatDatoshiAsGas } from "./token-economics-logic";
 import type {
   ApplicationLog,
+  CreationCostQuote,
   ForgeParams,
   RpcStackItem,
   TokenCreatedEvent,
@@ -57,10 +64,59 @@ export interface TxConfirmationResult {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_FEE_DATOSHI = 1_500_000_000n; // 15 GAS fallback
+const DUMMY_FEE_ESTIMATION_PUBLIC_KEY =
+  "02607a38b8010a8f401c25dd01df1b74af1827dd16b821fc07451f2ef7f02da60f";
 
 export interface CreationFee {
   datoshi: bigint;
   displayGas: string;
+}
+
+function buildForgeTransferData(
+  params: ForgeParams
+): ReturnType<typeof Neon.sc.ContractParam.array> {
+  return Neon.sc.ContractParam.array(
+    Neon.sc.ContractParam.string(params.name),
+    Neon.sc.ContractParam.string(params.symbol),
+    Neon.sc.ContractParam.integer(params.supply.toString()),
+    Neon.sc.ContractParam.integer(params.decimals.toString()),
+    Neon.sc.ContractParam.string(params.mode),
+    Neon.sc.ContractParam.string(params.imageUrl ?? ""),
+    Neon.sc.ContractParam.integer(String(params.creatorFeeRate ?? 0))
+  );
+}
+
+function buildForgeCreationScript(
+  fromAccount: string,
+  factoryHash: string,
+  feeAmount: bigint,
+  params: ForgeParams
+): string {
+  const builder = new Neon.sc.ScriptBuilder();
+  builder.emitContractCall({
+    scriptHash: GAS_CONTRACT_HASH,
+    operation: "transfer",
+    callFlags: Neon.sc.CallFlags.All,
+    args: [
+      Neon.sc.ContractParam.hash160(fromAccount),
+      Neon.sc.ContractParam.hash160(factoryHash),
+      Neon.sc.ContractParam.integer(feeAmount.toString()),
+      buildForgeTransferData(params),
+    ],
+  });
+  return builder.build();
+}
+
+function addTenPercentBuffer(value: bigint): bigint {
+  return value + value / 10n;
+}
+
+function parseGasConsumed(raw: string): bigint {
+  try {
+    return BigInt(raw);
+  } catch {
+    throw new Error(`Unexpected gasconsumed value: ${raw}`);
+  }
 }
 
 /**
@@ -89,8 +145,86 @@ export async function fetchCreationFee(): Promise<CreationFee> {
 }
 
 function formatFee(datoshi: bigint): CreationFee {
-  const whole = datoshi / 100_000_000n;
-  return { datoshi, displayGas: whole.toString() };
+  return {
+    datoshi,
+    displayGas: formatDatoshiAsGas(datoshi).replace(" GAS", ""),
+  };
+}
+
+/**
+ * Builds an off-chain creation-cost quote for the exact forge transaction.
+ * This mirrors the current GAS.transfer(...) creation payload without
+ * submitting anything or requesting a wallet signature.
+ */
+export async function quoteCreationCost(
+  address: string,
+  params: ForgeParams,
+  feeAmount: bigint
+): Promise<CreationCostQuote> {
+  const factoryHash = getRuntimeFactoryHash();
+  if (!factoryHash) {
+    throw new Error(
+      "Factory contract hash is not configured. Deploy the factory first or set NEXT_PUBLIC_FACTORY_CONTRACT_HASH."
+    );
+  }
+
+  const fromAccount = addressToHash160(address);
+  const script = buildForgeCreationScript(
+    fromAccount,
+    factoryHash,
+    feeAmount,
+    params
+  );
+  const signer = { account: fromAccount, scopes: "CalledByEntry" as const };
+
+  const [dryRun, currentHeight] = await Promise.all([
+    invokeScript(script, [signer]),
+    getBlockCount(),
+  ]);
+
+  const estimatedSystemFeeDatoshi = addTenPercentBuffer(
+    parseGasConsumed(dryRun.gasconsumed)
+  );
+
+  const tx = new Neon.tx.Transaction({
+    script: Neon.u.HexString.fromHex(script),
+    validUntilBlock: currentHeight + 5760,
+    signers: [
+      {
+        account: Neon.u.HexString.fromHex(fromAccount),
+        scopes: Neon.tx.WitnessScope.CalledByEntry,
+      },
+    ],
+  });
+  tx.systemFee = Neon.u.BigInteger.fromDecimal(
+    estimatedSystemFeeDatoshi.toString(),
+    0
+  );
+  tx.networkFee = Neon.u.BigInteger.fromNumber(0);
+
+  // `calculatenetworkfee` only needs a syntactically valid witness so it can
+  // size the transaction correctly; it does not need the user's real key.
+  tx.addWitness(
+    new Neon.tx.Witness({
+      invocationScript: "",
+      verificationScript: Neon.wallet.getVerificationScriptFromPublicKey(
+        DUMMY_FEE_ESTIMATION_PUBLIC_KEY
+      ),
+    })
+  );
+
+  const estimatedNetworkFeeDatoshi = await calculateNetworkFee(tx);
+  const estimatedChainFeeDatoshi =
+    estimatedSystemFeeDatoshi + estimatedNetworkFeeDatoshi;
+
+  return {
+    factoryFeeDatoshi: feeAmount,
+    estimatedSystemFeeDatoshi,
+    estimatedNetworkFeeDatoshi,
+    estimatedChainFeeDatoshi,
+    estimatedTotalWalletOutflowDatoshi:
+      feeAmount + estimatedChainFeeDatoshi,
+  };
 }
 
 // ---------------------------------------------------------------------------

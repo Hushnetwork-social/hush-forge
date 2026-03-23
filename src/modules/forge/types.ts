@@ -137,6 +137,14 @@ export interface BurnConfirmationSummary {
   networkFeeDisclaimer: string;
 }
 
+export interface CreationCostQuote {
+  factoryFeeDatoshi: bigint;
+  estimatedSystemFeeDatoshi: bigint;
+  estimatedNetworkFeeDatoshi: bigint;
+  estimatedChainFeeDatoshi: bigint;
+  estimatedTotalWalletOutflowDatoshi: bigint;
+}
+
 export interface TransferQuote {
   grossAmountRaw: bigint;
   recipientAmountRaw: bigint;
@@ -218,6 +226,13 @@ export interface TokenCreatedEvent {
 export interface RpcStackItem {
   type: string;
   value: unknown;
+}
+
+export interface RpcSigner {
+  account: string;
+  scopes: "None" | "CalledByEntry" | "CustomContracts" | "CustomGroups" | "Global";
+  allowedContracts?: string[];
+  allowedGroups?: string[];
 }
 
 export interface RpcExecution {

@@ -51,11 +51,21 @@ function makeFormResult(
     creationFeeDatoshi: 1_500_000_000n,
     creationFeeDisplay: "15",
     feeLoading: false,
+    creationCostQuote: {
+      factoryFeeDatoshi: 1_500_000_000n,
+      estimatedSystemFeeDatoshi: 1_157_121_145n,
+      estimatedNetworkFeeDatoshi: 1_275_520n,
+      estimatedChainFeeDatoshi: 1_158_396_665n,
+      estimatedTotalWalletOutflowDatoshi: 2_658_396_665n,
+    },
+    creationCostLoading: false,
+    creationCostError: null,
     gasCheckResult: {
       sufficient: true,
-      actual: 2_000_000_000n,
-      required: 1_650_000_000n,
+      actual: 3_000_000_000n,
+      required: 2_658_396_665n,
     },
+    canSubmit: true,
     submitting: false,
     submittedTxHash: null,
     submitError: null,
@@ -81,6 +91,8 @@ describe("ForgeOverlay", () => {
     expect(
       screen.getByRole("button", { name: /FORGE/i })
     ).toBeInTheDocument();
+    expect(screen.getByText("TokenFactory fee")).toBeInTheDocument();
+    expect(screen.getByText("Estimated total wallet outflow")).toBeInTheDocument();
   });
 
   it("FORGE button is disabled when GAS is insufficient", () => {
@@ -89,8 +101,9 @@ describe("ForgeOverlay", () => {
         gasCheckResult: {
           sufficient: false,
           actual: 500_000_000n,
-          required: 1_650_000_000n,
+          required: 2_658_396_665n,
         },
+        canSubmit: false,
       })
     );
     render(
@@ -102,6 +115,23 @@ describe("ForgeOverlay", () => {
       />
     );
     expect(screen.getByRole("button", { name: /FORGE/i })).toBeDisabled();
+  });
+
+  it("shows the NeoLine breakdown disclaimer from Forge's side", () => {
+    render(
+      <ForgeOverlay
+        address="NwMe"
+        gasBalance={3_000_000_000n}
+        onClose={vi.fn()}
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText(/NeoLine confirmation may show only the chain-fee portion/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText("11.58396665 GAS")).toBeInTheDocument();
+    expect(screen.getByText("26.58396665 GAS")).toBeInTheDocument();
   });
 
   it("shows spinner text when submitting", () => {

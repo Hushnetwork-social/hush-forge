@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForgeForm } from "../hooks/useForgeForm";
+import { formatDatoshiAsGas } from "../token-economics-logic";
 import { useTokenStore } from "../token-store";
 
 interface Props {
@@ -44,7 +45,11 @@ export function ForgeOverlay({
     validateForm,
     creationFeeDisplay,
     feeLoading,
+    creationCostQuote,
+    creationCostLoading,
+    creationCostError,
     gasCheckResult,
+    canSubmit,
     submitting,
     submittedTxHash,
     submitError,
@@ -74,8 +79,9 @@ export function ForgeOverlay({
   }, [submitting, onClose]);
 
   const gasInsufficient = gasCheckResult !== null && !gasCheckResult.sufficient;
-  const hasErrors = Object.keys(errors).length > 0;
-  const forgeDisabled = submitting || gasInsufficient || feeLoading || hasErrors;
+  const forgeDisabled = !canSubmit;
+  const requiredGasDisplay =
+    gasCheckResult === null ? null : formatDatoshiAsGas(gasCheckResult.required);
 
   return (
     <div
@@ -90,7 +96,7 @@ export function ForgeOverlay({
     >
       <div
         ref={cardRef}
-        className="w-full max-w-lg rounded-2xl p-6 mx-4"
+        className="w-full max-w-5xl rounded-2xl p-6 md:p-8 mx-4 max-h-[calc(100vh-4rem)] overflow-y-auto"
         style={{
           background: "var(--forge-bg-card)",
           border: "1px solid rgba(255,107,53,0.3)",
@@ -126,205 +132,259 @@ export function ForgeOverlay({
           </div>
         )}
 
-        <div className="flex flex-col gap-4">
-          <div>
-            <label htmlFor="token-name" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-              Token Name
-            </label>
-            <input
-              id="token-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={validateForm}
-              disabled={submitting}
-              className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
-              style={{
-                background: "var(--forge-bg-primary)",
-                border: `1px solid ${errors.name ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
-                color: "var(--forge-text-primary)",
-              }}
-            />
-            {errors.name && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.name}</p>}
-          </div>
-
-          <div>
-            <label htmlFor="token-symbol" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-              Symbol <span className="text-xs">(A-Z only, 2-10)</span>
-            </label>
-            <input
-              id="token-symbol"
-              type="text"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              onBlur={validateForm}
-              maxLength={10}
-              disabled={submitting}
-              className="w-full rounded-lg px-3 py-2 text-sm uppercase disabled:opacity-50"
-              style={{
-                background: "var(--forge-bg-primary)",
-                border: `1px solid ${errors.symbol ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
-                color: "var(--forge-text-primary)",
-              }}
-            />
-            {errors.symbol && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.symbol}</p>}
-          </div>
-
-          <div>
-            <label htmlFor="token-supply" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-              Total Supply
-            </label>
-            <input
-              id="token-supply"
-              type="text"
-              value={supply}
-              onChange={(e) => setSupply(e.target.value)}
-              onBlur={validateForm}
-              disabled={submitting}
-              className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
-              style={{
-                background: "var(--forge-bg-primary)",
-                border: `1px solid ${errors.supply ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
-                color: "var(--forge-text-primary)",
-              }}
-            />
-            {errors.supply && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.supply}</p>}
-          </div>
-
-          <div>
-            <label htmlFor="token-decimals" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-              Decimals <span className="text-xs">(0 - 18)</span>
-            </label>
-            <input
-              id="token-decimals"
-              type="text"
-              value={decimals}
-              onChange={(e) => setDecimals(e.target.value)}
-              onBlur={validateForm}
-              disabled={submitting}
-              className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
-              style={{
-                background: "var(--forge-bg-primary)",
-                border: `1px solid ${errors.decimals ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
-                color: "var(--forge-text-primary)",
-              }}
-            />
-            {errors.decimals && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.decimals}</p>}
-          </div>
-
-          <div>
-            <label className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-              Mode
-            </label>
-            <div className="flex flex-col gap-1">
-              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--forge-text-primary)" }}>
-                <input type="radio" name="mode" defaultChecked readOnly />
-                Community
-              </label>
-              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--forge-text-muted)" }}>
-                <input type="radio" name="mode" disabled />
-                Crowdfund <span className="text-xs">- coming soon</span>
-              </label>
-              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--forge-text-muted)" }}>
-                <input type="radio" name="mode" disabled />
-                Speculative <span className="text-xs">- coming soon</span>
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="token-creator-fee" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-              Creator Transfer Fee (GAS) <span className="text-xs">(0 - 0.05)</span>
-            </label>
-            <input
-              id="token-creator-fee"
-              type="number"
-              min="0"
-              max="0.05"
-              step="0.001"
-              value={creatorFee}
-              onChange={(e) => setCreatorFee(e.target.value)}
-              onBlur={validateForm}
-              disabled={submitting}
-              className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
-              style={{
-                background: "var(--forge-bg-primary)",
-                border: `1px solid ${errors.creatorFee ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
-                color: "var(--forge-text-primary)",
-              }}
-            />
-            <p className="text-xs mt-1" style={{ color: "var(--forge-text-muted)" }}>
-              Optional per-transfer creator fee. Max: 0.05 GAS. Default: 0.
-            </p>
-            {errors.creatorFee && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.creatorFee}</p>}
-          </div>
-
-          <div>
-            <label htmlFor="token-image-url" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
-              Token Image URL <span className="text-xs">(optional)</span>
-            </label>
-            <input
-              id="token-image-url"
-              type="text"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              disabled={submitting}
-              placeholder="https://..."
-              className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
-              style={{
-                background: "var(--forge-bg-primary)",
-                border: `1px solid ${errors.imageUrl ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
-                color: "var(--forge-text-primary)",
-              }}
-            />
-            {errors.imageUrl && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.imageUrl}</p>}
-
-            {imageUrl.trim() && (
-              <div className="flex items-center gap-2 mt-2 p-2 rounded-lg text-xs" style={{ background: "var(--forge-bg-primary)" }}>
-                {imagePreview === "loading" && <span style={{ color: "var(--forge-text-muted)" }}>Checking image...</span>}
-                {imagePreview === "ok" && (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imageUrl.trim()} alt="Token icon preview" className="rounded-full flex-shrink-0" style={{ width: 48, height: 48, objectFit: "cover" }} />
-                    <span style={{ color: "var(--forge-success)" }}>Image loaded</span>
-                  </>
-                )}
-                {imagePreview === "error" && <span style={{ color: "var(--forge-error)" }}>Could not load image - check the URL</span>}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(22rem,1fr)]">
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label htmlFor="token-name" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Token Name
+                </label>
+                <input
+                  id="token-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onBlur={validateForm}
+                  disabled={submitting}
+                  className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+                  style={{
+                    background: "var(--forge-bg-primary)",
+                    border: `1px solid ${errors.name ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+                    color: "var(--forge-text-primary)",
+                  }}
+                />
+                {errors.name && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.name}</p>}
               </div>
-            )}
 
-            <button
-              type="button"
-              onClick={() => setShowHostingHints((v) => !v)}
-              className="text-xs mt-2 transition-opacity hover:opacity-80"
-              style={{ color: "var(--forge-color-primary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-            >
-              Where to host your image? {showHostingHints ? "^" : "v"}
-            </button>
+              <div>
+                <label htmlFor="token-symbol" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Symbol <span className="text-xs">(A-Z only, 2-10)</span>
+                </label>
+                <input
+                  id="token-symbol"
+                  type="text"
+                  value={symbol}
+                  onChange={(e) => setSymbol(e.target.value)}
+                  onBlur={validateForm}
+                  maxLength={10}
+                  disabled={submitting}
+                  className="w-full rounded-lg px-3 py-2 text-sm uppercase disabled:opacity-50"
+                  style={{
+                    background: "var(--forge-bg-primary)",
+                    border: `1px solid ${errors.symbol ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+                    color: "var(--forge-text-primary)",
+                  }}
+                />
+                {errors.symbol && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.symbol}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="token-supply" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Total Supply
+                </label>
+                <input
+                  id="token-supply"
+                  type="text"
+                  value={supply}
+                  onChange={(e) => setSupply(e.target.value)}
+                  onBlur={validateForm}
+                  disabled={submitting}
+                  className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+                  style={{
+                    background: "var(--forge-bg-primary)",
+                    border: `1px solid ${errors.supply ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+                    color: "var(--forge-text-primary)",
+                  }}
+                />
+                {errors.supply && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.supply}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="token-decimals" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Decimals <span className="text-xs">(0 - 18)</span>
+                </label>
+                <input
+                  id="token-decimals"
+                  type="text"
+                  value={decimals}
+                  onChange={(e) => setDecimals(e.target.value)}
+                  onBlur={validateForm}
+                  disabled={submitting}
+                  className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+                  style={{
+                    background: "var(--forge-bg-primary)",
+                    border: `1px solid ${errors.decimals ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+                    color: "var(--forge-text-primary)",
+                  }}
+                />
+                {errors.decimals && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.decimals}</p>}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-sm mb-2 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Mode
+                </label>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <label className="flex items-center gap-2 text-sm" style={{ color: "var(--forge-text-primary)" }}>
+                    <input type="radio" name="mode" defaultChecked readOnly />
+                    Community
+                  </label>
+                  <label className="flex items-center gap-2 text-sm" style={{ color: "var(--forge-text-muted)" }}>
+                    <input type="radio" name="mode" disabled />
+                    Crowdfund <span className="text-xs">- coming soon</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm" style={{ color: "var(--forge-text-muted)" }}>
+                    <input type="radio" name="mode" disabled />
+                    Speculative <span className="text-xs">- coming soon</span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-lg p-3 text-sm" style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-subtle)" }}>
-            <div className="flex justify-between">
-              <span style={{ color: "var(--forge-text-muted)" }}>Creation fee</span>
-              <span style={{ color: "var(--forge-text-primary)" }}>{feeLoading ? "Loading..." : `~${creationFeeDisplay} GAS`}</span>
+          <div className="flex flex-col gap-4 lg:sticky lg:top-0 lg:self-start">
+            <div>
+              <label htmlFor="token-creator-fee" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
+                Creator Transfer Fee (GAS) <span className="text-xs">(0 - 0.05)</span>
+              </label>
+              <input
+                id="token-creator-fee"
+                type="number"
+                min="0"
+                max="0.05"
+                step="0.001"
+                value={creatorFee}
+                onChange={(e) => setCreatorFee(e.target.value)}
+                onBlur={validateForm}
+                disabled={submitting}
+                className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+                style={{
+                  background: "var(--forge-bg-primary)",
+                  border: `1px solid ${errors.creatorFee ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+                  color: "var(--forge-text-primary)",
+                }}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--forge-text-muted)" }}>
+                Optional per-transfer creator fee. Max: 0.05 GAS. Default: 0.
+              </p>
+              {errors.creatorFee && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.creatorFee}</p>}
             </div>
-            {gasCheckResult !== null && (
-              <div className="flex justify-between mt-1">
-                <span style={{ color: "var(--forge-text-muted)" }}>Your GAS balance</span>
-                <span style={{ color: gasCheckResult.sufficient ? "var(--forge-success)" : "var(--forge-error)" }}>
-                  {(Number(gasCheckResult.actual) / 1e8).toFixed(2)} {gasCheckResult.sufficient ? "OK" : "X"}
+
+            <div>
+              <label htmlFor="token-image-url" className="text-sm mb-1 block" style={{ color: "var(--forge-text-muted)" }}>
+                Token Image URL <span className="text-xs">(optional)</span>
+              </label>
+              <input
+                id="token-image-url"
+                type="text"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                disabled={submitting}
+                placeholder="https://..."
+                className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+                style={{
+                  background: "var(--forge-bg-primary)",
+                  border: `1px solid ${errors.imageUrl ? "var(--forge-error)" : "var(--forge-border-medium)"}`,
+                  color: "var(--forge-text-primary)",
+                }}
+              />
+              {errors.imageUrl && <p className="text-xs mt-1" style={{ color: "var(--forge-error)" }}>{errors.imageUrl}</p>}
+
+              {imageUrl.trim() && (
+                <div className="flex items-center gap-2 mt-2 p-2 rounded-lg text-xs" style={{ background: "var(--forge-bg-primary)" }}>
+                  {imagePreview === "loading" && <span style={{ color: "var(--forge-text-muted)" }}>Checking image...</span>}
+                  {imagePreview === "ok" && (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imageUrl.trim()} alt="Token icon preview" className="rounded-full flex-shrink-0" style={{ width: 48, height: 48, objectFit: "cover" }} />
+                      <span style={{ color: "var(--forge-success)" }}>Image loaded</span>
+                    </>
+                  )}
+                  {imagePreview === "error" && <span style={{ color: "var(--forge-error)" }}>Could not load image - check the URL</span>}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowHostingHints((v) => !v)}
+                className="text-xs mt-2 transition-opacity hover:opacity-80"
+                style={{ color: "var(--forge-color-primary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                Where to host your image? {showHostingHints ? "^" : "v"}
+              </button>
+            </div>
+
+            <div
+              className="rounded-lg p-4 text-sm"
+              style={{
+                background: "var(--forge-bg-primary)",
+                border: "1px solid var(--forge-border-subtle)",
+              }}
+            >
+              <div className="flex justify-between">
+                <span style={{ color: "var(--forge-text-muted)" }}>TokenFactory fee</span>
+                <span style={{ color: "var(--forge-text-primary)" }}>
+                  {feeLoading ? "Loading..." : `${creationFeeDisplay} GAS`}
                 </span>
               </div>
-            )}
-            {gasInsufficient && (
-              <p className="mt-2 text-xs" style={{ color: "var(--forge-error)" }}>
-                Insufficient GAS. Need at least {creationFeeDisplay} GAS + network fees.
+              <div className="flex justify-between mt-1">
+                <span style={{ color: "var(--forge-text-muted)" }}>Estimated chain fee</span>
+                <span style={{ color: "var(--forge-text-primary)" }}>
+                  {creationCostLoading
+                    ? "Calculating..."
+                    : creationCostQuote
+                      ? formatDatoshiAsGas(
+                          creationCostQuote.estimatedChainFeeDatoshi
+                        )
+                      : "Fill the required fields"}
+                </span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span style={{ color: "var(--forge-text-muted)" }}>Estimated total wallet outflow</span>
+                <span style={{ color: "var(--forge-text-primary)" }}>
+                  {creationCostLoading
+                    ? "Calculating..."
+                    : creationCostQuote
+                      ? formatDatoshiAsGas(
+                          creationCostQuote.estimatedTotalWalletOutflowDatoshi
+                        )
+                      : "Fill the required fields"}
+                </span>
+              </div>
+              {gasCheckResult !== null && (
+                <div className="flex justify-between mt-1">
+                  <span style={{ color: "var(--forge-text-muted)" }}>Your GAS balance</span>
+                  <span style={{ color: gasCheckResult.sufficient ? "var(--forge-success)" : "var(--forge-error)" }}>
+                    {(Number(gasCheckResult.actual) / 1e8).toFixed(2)} {gasCheckResult.sufficient ? "OK" : "X"}
+                  </span>
+                </div>
+              )}
+              <p
+                className="mt-3 text-xs leading-relaxed"
+                style={{ color: "var(--forge-text-muted)" }}
+              >
+                NeoLine confirmation may show only the chain-fee portion or a
+                different breakdown. Forge&apos;s estimate includes both the
+                TokenFactory fee and the estimated chain fee for this one
+                transaction.
               </p>
-            )}
+              {creationCostError && (
+                <p className="mt-2 text-xs" style={{ color: "var(--forge-error)" }}>
+                  {creationCostError}
+                </p>
+              )}
+              {gasInsufficient && (
+                <p className="mt-2 text-xs" style={{ color: "var(--forge-error)" }}>
+                  Insufficient GAS. Need at least{" "}
+                  {requiredGasDisplay ?? `${creationFeeDisplay} GAS`} before
+                  opening the wallet.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-3 mt-5">
+        <div className="flex flex-col-reverse gap-3 mt-6 sm:flex-row">
           <button
             onClick={submit}
             disabled={forgeDisabled}
@@ -339,7 +399,7 @@ export function ForgeOverlay({
           <button
             onClick={() => !submitting && onClose()}
             disabled={submitting}
-            className="px-5 py-3 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-5 py-3 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed sm:min-w-32"
             style={{
               border: "1px solid var(--forge-border-medium)",
               color: "var(--forge-text-primary)",

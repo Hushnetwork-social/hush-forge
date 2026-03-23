@@ -1150,13 +1150,21 @@ test.describe("Forge Full Integration Flow", () => {
 
       // Wait for the creation fee to load (FORGE button is disabled while loading)
       const forgeBtn = page.getByRole("button", { name: /FORGE/ });
-      await expect(forgeBtn).not.toBeDisabled({ timeout: 20_000 });
+      await expect(overlay.getByText("TokenFactory fee")).toBeVisible({ timeout: 20_000 });
+      await expect(forgeBtn).toBeDisabled();
 
       // ── Step 8: Fill the form ─────────────────────────────────────────────
       await page.getByLabel("Token Name").fill("PoC Token");
       await page.getByLabel(/^Symbol/).fill("POC");
       await page.getByLabel("Total Supply").fill("1000000");
       await page.getByLabel(/^Decimals/).fill("8");
+      await expect(overlay.getByText("Estimated total wallet outflow")).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(
+        overlay.getByText(/NeoLine confirmation may show only the chain-fee portion/i)
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(forgeBtn).not.toBeDisabled({ timeout: 20_000 });
       console.log("[form] Form filled.");
 
       // ── Step 9: Click FORGE → NeoLine popup #3 ───────────────────────────

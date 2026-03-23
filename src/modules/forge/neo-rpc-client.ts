@@ -4,9 +4,14 @@
  * RPC URL is resolved dynamically from the connected wallet's network via getActiveRpcUrl().
  */
 
-import { wallet } from "@cityofzion/neon-js";
+import * as Neon from "@cityofzion/neon-js";
 import { getActiveRpcUrl } from "./neo-dapi-adapter";
-import type { ApplicationLog, InvokeResult, RpcStackItem } from "./types";
+import type {
+  ApplicationLog,
+  InvokeResult,
+  RpcSigner,
+  RpcStackItem,
+} from "./types";
 import { NeoRpcError } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -59,7 +64,7 @@ export function hash160ToAddress(hashOrAddress: string): string {
     throw new Error("Invalid UInt160 hash");
   }
 
-  return wallet.getAddressFromScriptHash(normalized);
+  return Neon.wallet.getAddressFromScriptHash(normalized);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +82,18 @@ interface Nep17BalanceEntry {
   assethash: string;
   amount: string;
   lastupdatedblock: number;
+}
+
+function hexToBase64(value: string): string {
+  const normalized = value.startsWith("0x") ? value.slice(2) : value;
+  if (!/^[0-9a-fA-F]*$/.test(normalized) || normalized.length % 2 !== 0) {
+    throw new Error("Script must be a hex string");
+  }
+  let binary = "";
+  for (let index = 0; index < normalized.length; index += 2) {
+    binary += String.fromCharCode(parseInt(normalized.slice(index, index + 2), 16));
+  }
+  return btoa(binary);
 }
 
 export interface Nep17BalancesResult {
@@ -131,6 +148,14 @@ async function rpcCall<T>(
   }
 }
 
+function toAbsoluteRpcUrl(rpcUrl: string): string {
+  if (/^https?:\/\//i.test(rpcUrl)) return rpcUrl;
+  if (typeof window !== "undefined") {
+    return new URL(rpcUrl, window.location.origin).toString();
+  }
+  throw new NeoRpcError(`Neo RPC error: Please provide an url that starts with http:// or https://`);
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -176,6 +201,60 @@ export async function invokeFunction(
   }
 
   return result;
+}
+
+/**
+ * Dry-runs an arbitrary script against the current RPC node.
+ * Used for off-chain fee estimation before a wallet signature is requested.
+ */
+export async function invokeScript(
+  script: string,
+  signers: RpcSigner[] = []
+): Promise<InvokeResult> {
+  const params: unknown[] = [hexToBase64(script)];
+  if (signers.length > 0) {
+    params.push(signers);
+  }
+
+  const result = await rpcCall<InvokeResult>("invokescript", params);
+
+  if (result.state === "FAULT") {
+    throw new NeoRpcError(
+      `Contract invocation FAULT: ${result.exception ?? "unknown reason"}`
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Estimates the network fee for an unsigned transaction.
+ * Accepts either a neon-js Transaction object or a pre-serialized hex string.
+ */
+export async function calculateNetworkFee(
+  unsignedTransaction: string | InstanceType<typeof Neon.tx.Transaction>
+): Promise<bigint> {
+  if (typeof unsignedTransaction !== "string") {
+    const rpcUrl = getActiveRpcUrl();
+    if (!rpcUrl) {
+      throw new NeoRpcError(
+        "No wallet connected — connect your wallet first to establish the network RPC endpoint"
+      );
+    }
+    try {
+      const client = new Neon.rpc.NeoServerRpcClient(toAbsoluteRpcUrl(rpcUrl));
+      const result = await client.calculateNetworkFee(unsignedTransaction);
+      return BigInt(result);
+    } catch (err) {
+      throw new NeoRpcError(`Neo RPC error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  const result = await rpcCall<string | number>("calculatenetworkfee", [
+    hexToBase64(unsignedTransaction),
+  ]);
+
+  return BigInt(result);
 }
 
 /**

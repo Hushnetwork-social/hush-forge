@@ -1,15 +1,13 @@
+"use client";
+
 /**
- * useTokenDetail — Loads and provides full token metadata for a given contract hash.
- * Uses the factory + RPC fallback chain from TokenMetadataService.
+ * useTokenDetail loads full token metadata for a given contract hash.
  *
- * isOwnToken: first checks the token store's ownTokenHashes set (populated when the
- * user loads the /tokens list). Falls back to direct creator-vs-address comparison,
- * which handles the case where the user navigates directly to a detail page.
- * The fallback converts the base58 address to big-endian hex to match the format
- * returned by decodeHash() in token-metadata-service.
- *
- * isUpgradeable is true when the token was created in "community" mode — community
- * tokens are managed by the factory and can be updated via the UpdateOverlay.
+ * isOwnToken first checks the token store's ownTokenHashes set (populated when
+ * the user loads the /tokens list). It then falls back to direct creator-vs-
+ * address comparison so directly loaded token pages still recognize creator
+ * ownership. For compatibility, the fallback compares both little-endian and
+ * big-endian hash forms derived from the connected wallet address.
  */
 
 import { useEffect, useState } from "react";
@@ -29,26 +27,22 @@ export interface TokenDetailResult {
   isUpgradeable: boolean;
 }
 
-/**
- * Converts a base58 Neo address to big-endian 0x-prefixed hex.
- * token.creator is stored in big-endian hex (by decodeHash() in token-metadata-service);
- * addressToHash160() returns little-endian hex — we reverse here to match.
- * Returns null on any conversion error (e.g. synthetic test-fixture strings).
- */
-function addressToBEHash(address: string): string | null {
+function addressToHashForms(address: string): { le: string | null; be: string | null } {
   try {
-    const le = addressToHash160(address).slice(2); // strip "0x"
-    return "0x" + (le.match(/.{2}/g) ?? []).reverse().join("");
+    const le = addressToHash160(address);
+    const body = le.slice(2);
+    return {
+      le,
+      be: "0x" + (body.match(/.{2}/g) ?? []).reverse().join(""),
+    };
   } catch {
-    return null;
+    return { le: null, be: null };
   }
 }
 
 export function useTokenDetail(contractHash: string): TokenDetailResult {
   const address = useWalletStore((s) => s.address);
   const connectionStatus = useWalletStore((s) => s.connectionStatus);
-  // ownTokenHashes is populated by loadTokensForAddress() when the user visits /tokens.
-  // Using it as the primary isOwnToken signal avoids address-format mismatch issues.
   const ownTokenHashes = useTokenStore((s) => s.ownTokenHashes);
 
   const [token, setToken] = useState<TokenInfo | null>(null);
@@ -59,9 +53,9 @@ export function useTokenDetail(contractHash: string): TokenDetailResult {
     let cancelled = false;
 
     resolveTokenMetadata(contractHash)
-      .then((t) => {
+      .then((resolvedToken) => {
         if (!cancelled) {
-          setToken(t);
+          setToken(resolvedToken);
           setLoading(false);
         }
       })
@@ -77,14 +71,17 @@ export function useTokenDetail(contractHash: string): TokenDetailResult {
     };
   }, [contractHash, address, connectionStatus]);
 
-  // Primary: check the token store's set (populated when user browses the list).
-  // Fallback: compare creator hash with the connected wallet's address.
+  const comparableCreatorHashes = address
+    ? addressToHashForms(address)
+    : { le: null, be: null };
+
   const isOwnToken =
     ownTokenHashes.has(contractHash) ||
     (!!token?.creator &&
       !!address &&
       (token.creator === address ||
-        token.creator === addressToBEHash(address)));
+        token.creator === comparableCreatorHashes.le ||
+        token.creator === comparableCreatorHashes.be));
 
   return {
     token,

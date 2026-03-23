@@ -13,6 +13,8 @@ import {
   invokeChangeMode,
   invokeLockToken,
   invokeBurn,
+  invokeClaimCreatorFee,
+  invokeClaimCreatorFees,
   invokeApplyTokenChanges,
   invokeSetCreationFee,
   invokeSetOperationFee,
@@ -381,6 +383,38 @@ describe("lifecycle invoke functions", () => {
     expect(call.signers[0].scopes).toBe("Global");
   });
 
+  it("invokeClaimCreatorFee calls the token contract with the requested amount", async () => {
+    const instance = await connectMock();
+    await invokeClaimCreatorFee("0xtoken", 200_000n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string }[];
+      signers: { scopes: string }[];
+    };
+    expect(call.scriptHash).toBe("0xtoken");
+    expect(call.operation).toBe("claimCreatorFee");
+    expect(call.args).toEqual([{ type: "Integer", value: "200000" }]);
+    expect(call.signers[0].scopes).toBe("Global");
+  });
+
+  it("invokeClaimCreatorFees calls the token contract claim-all operation", async () => {
+    const instance = await connectMock();
+    await invokeClaimCreatorFees("0xtoken");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: unknown[];
+    };
+    expect(call.scriptHash).toBe("0xtoken");
+    expect(call.operation).toBe("claimCreatorFees");
+    expect(call.args).toEqual([]);
+  });
+
   it("invokeApplyTokenChanges sends batch payload with sentinel and changed values", async () => {
     const instance = await connectMock();
     await invokeApplyTokenChanges("0xfactory", "0xtoken", {
@@ -547,6 +581,19 @@ describe("factory governance invoke functions", () => {
     await connect("NeoLine");
 
     await expect(invokeBurn("0xtoken", 1n)).rejects.toBeInstanceOf(WalletRejectedError);
+  });
+
+  it("invokeClaimCreatorFee maps wallet rejection to WalletRejectedError", async () => {
+    const instance = makeMockDapi({
+      invoke: vi.fn().mockRejectedValue({ type: "CANCELED", message: "" }),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
+    await connect("NeoLine");
+
+    await expect(invokeClaimCreatorFee("0xtoken", 1n)).rejects.toBeInstanceOf(
+      WalletRejectedError
+    );
   });
 });
 

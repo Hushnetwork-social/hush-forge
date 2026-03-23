@@ -245,8 +245,7 @@ async function connectWalletOnTokensPage(
   page: Page,
   context: BrowserContext
 ): Promise<void> {
-  await page.goto(`${BASE_URL}/tokens`);
-  await page.waitForLoadState("networkidle");
+  await gotoWithRetry(page, `${BASE_URL}/tokens`);
 
   const alreadyConnected = await page.evaluate(
     (prefix: string) => document.body.textContent?.includes(prefix) ?? false,
@@ -364,6 +363,16 @@ async function readTotalSupply(tokenHash: string): Promise<bigint> {
   return readIntegerStack(result);
 }
 
+async function readClaimableCreatorFee(tokenHash: string): Promise<bigint> {
+  const result = await rpcCall("invokefunction", [
+    tokenHash,
+    "getClaimableCreatorFee",
+    [],
+    [],
+  ]);
+  return readIntegerStack(result);
+}
+
 async function invokeTokenTransfer(
   page: Page,
   context: BrowserContext,
@@ -456,10 +465,11 @@ function extractTxHashFromNeoTubeHref(href: string | null): string {
   return match[1].toLowerCase();
 }
 
-function createTokenViaClient2(
+function createToken(
   factoryHash: string,
   symbol: string,
-  creatorFeeRate: number
+  creatorFeeRate: number,
+  envOverrides: Record<string, string> = {}
 ): string {
   const output = runFixture(
     [
@@ -471,16 +481,128 @@ function createTokenViaClient2(
       "0",
       String(creatorFeeRate),
     ],
-    { E2E_TEST_ACCOUNT_WIF: CLIENT2_WIF }
+    envOverrides
   );
   return parseFixtureValue(output, "TOKEN_HASH");
 }
 
-function mintHolderBalance(factoryHash: string, tokenHash: string, amount: bigint): void {
+function createTokenViaClient2(
+  factoryHash: string,
+  symbol: string,
+  creatorFeeRate: number
+): string {
+  return createToken(factoryHash, symbol, creatorFeeRate, {
+    E2E_TEST_ACCOUNT_WIF: CLIENT2_WIF,
+  });
+}
+
+function createTokenViaClient1(
+  factoryHash: string,
+  symbol: string,
+  creatorFeeRate: number
+): string {
+  return createToken(factoryHash, symbol, creatorFeeRate);
+}
+
+function mintTokensWithSigner(
+  factoryHash: string,
+  tokenHash: string,
+  recipient: string,
+  amount: bigint,
+  envOverrides: Record<string, string> = {}
+): void {
   runFixture(
-    ["mint-tokens", factoryHash, tokenHash, CLIENT1_ADDRESS, amount.toString()],
-    { E2E_TEST_ACCOUNT_WIF: CLIENT2_WIF }
+    ["mint-tokens", factoryHash, tokenHash, recipient, amount.toString()],
+    envOverrides
   );
+}
+
+function mintHolderBalance(factoryHash: string, tokenHash: string, amount: bigint): void {
+  mintTokensWithSigner(factoryHash, tokenHash, CLIENT1_ADDRESS, amount, {
+    E2E_TEST_ACCOUNT_WIF: CLIENT2_WIF,
+  });
+}
+
+function transferTokenWithSigner(
+  tokenHash: string,
+  recipient: string,
+  amount: bigint,
+  envOverrides: Record<string, string> = {}
+): void {
+  runFixture(["transfer-token", tokenHash, recipient, amount.toString()], envOverrides);
+}
+
+async function openTokenDetailPage(page: Page, tokenHash: string): Promise<void> {
+  await gotoWithRetry(page, `${BASE_URL}/tokens/${tokenHash}`);
+  await dismissAdminHintIfPresent(page);
+}
+
+async function dismissAdminHintIfPresent(page: Page): Promise<void> {
+  const overlay = page.getByTestId("admin-update-hint-overlay");
+  if (await overlay.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await overlay.getByRole("button", { name: "OK" }).click();
+  }
+}
+
+async function waitForPendingTxHash(
+  page: Page,
+  expectedMessage: string
+): Promise<string> {
+  const storageTxHash = await page
+    .waitForFunction(
+      (message) => {
+        const raw = window.localStorage.getItem("forge.pending.tx");
+        if (!raw) return null;
+        try {
+          const parsed = JSON.parse(raw) as { txHash?: string; message?: string };
+          if (
+            typeof parsed.txHash === "string" &&
+            typeof parsed.message === "string" &&
+            parsed.message.includes(message)
+          ) {
+            return parsed.txHash;
+          }
+        } catch {
+          return null;
+        }
+        return null;
+      },
+      expectedMessage,
+      { timeout: 30_000 }
+    )
+    .then((handle) => handle.jsonValue<string | null>())
+    .catch(() => null);
+
+  if (storageTxHash) {
+    return storageTxHash.toLowerCase();
+  }
+
+  const pendingToast = page.getByRole("status", {
+    name: "Pending transaction status",
+  });
+  await expect(pendingToast).toContainText(expectedMessage, { timeout: 30_000 });
+  const txHref = await pendingToast
+    .getByRole("link", { name: /Track transaction on NeoTube/i })
+    .getAttribute("href");
+  return extractTxHashFromNeoTubeHref(txHref);
+}
+
+async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await page.goto(url);
+      await page.waitForLoadState("networkidle");
+      return;
+    } catch (err) {
+      lastError = err;
+      if (!String(err).includes("ERR_ABORTED") || attempt === attempts) {
+        throw err;
+      }
+      await page.waitForTimeout(1_000);
+    }
+  }
+  throw lastError;
 }
 
 test.describe("FEAT-093 Token Taxation Integration", () => {
@@ -531,6 +653,8 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     await connectWalletOnTokensPage(page, context);
 
     const recipientBefore = await readNep17Balance(tokenHash, CLIENT2_ADDRESS);
+    const tokenGasBefore = await readNep17Balance(GAS_HASH, tokenHash);
+    const claimableCreatorFeeBefore = await readClaimableCreatorFee(tokenHash);
     const creatorGasBefore = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
     const factoryGasBefore = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyBefore = await readTotalSupply(tokenHash);
@@ -545,12 +669,16 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     await waitForTx(txid);
 
     const recipientAfter = await readNep17Balance(tokenHash, CLIENT2_ADDRESS);
+    const tokenGasAfter = await readNep17Balance(GAS_HASH, tokenHash);
+    const claimableCreatorFeeAfter = await readClaimableCreatorFee(tokenHash);
     const creatorGasAfter = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
     const factoryGasAfter = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyAfter = await readTotalSupply(tokenHash);
 
     expect(recipientAfter - recipientBefore).toBe(9_800n);
-    expect(creatorGasAfter - creatorGasBefore).toBe(500_000n);
+    expect(tokenGasAfter - tokenGasBefore).toBe(500_000n);
+    expect(claimableCreatorFeeAfter - claimableCreatorFeeBefore).toBe(500_000n);
+    expect(creatorGasAfter - creatorGasBefore).toBe(0n);
     expect(factoryGasAfter - factoryGasBefore).toBe(1_000_000n);
     expect(supplyBefore - supplyAfter).toBe(200n);
   });
@@ -562,6 +690,8 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     await connectWalletOnTokensPage(page, context);
 
     const recipientBefore = await readNep17Balance(tokenHash, CLIENT2_ADDRESS);
+    const tokenGasBefore = await readNep17Balance(GAS_HASH, tokenHash);
+    const claimableCreatorFeeBefore = await readClaimableCreatorFee(tokenHash);
     const creatorGasBefore = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
     const factoryGasBefore = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyBefore = await readTotalSupply(tokenHash);
@@ -576,11 +706,15 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     await waitForTx(txid);
 
     const recipientAfter = await readNep17Balance(tokenHash, CLIENT2_ADDRESS);
+    const tokenGasAfter = await readNep17Balance(GAS_HASH, tokenHash);
+    const claimableCreatorFeeAfter = await readClaimableCreatorFee(tokenHash);
     const creatorGasAfter = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
     const factoryGasAfter = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyAfter = await readTotalSupply(tokenHash);
 
     expect(recipientAfter - recipientBefore).toBe(1_000n);
+    expect(tokenGasAfter - tokenGasBefore).toBe(0n);
+    expect(claimableCreatorFeeAfter - claimableCreatorFeeBefore).toBe(0n);
     expect(creatorGasAfter - creatorGasBefore).toBe(0n);
     expect(factoryGasAfter - factoryGasBefore).toBe(0n);
     expect(supplyAfter - supplyBefore).toBe(0n);
@@ -598,6 +732,8 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     });
 
     const holderBefore = await readNep17Balance(tokenHash, CLIENT1_ADDRESS);
+    const tokenGasBefore = await readNep17Balance(GAS_HASH, tokenHash);
+    const claimableCreatorFeeBefore = await readClaimableCreatorFee(tokenHash);
     const creatorGasBefore = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
     const factoryGasBefore = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyBefore = await readTotalSupply(tokenHash);
@@ -621,28 +757,85 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
       await dialog.getByRole("button", { name: "Burn", exact: true }).click();
     });
 
-    const pendingToast = page.getByRole("status", {
-      name: "Pending transaction status",
-    });
-    await expect(pendingToast).toContainText(
-      "Waiting for BRN93 burn confirmation...",
-      { timeout: 30_000 }
+    const txid = await waitForPendingTxHash(
+      page,
+      "Waiting for BRN93 burn confirmation..."
     );
-
-    const txHref = await pendingToast
-      .getByRole("link", { name: /Track transaction on NeoTube/i })
-      .getAttribute("href");
-    const txid = extractTxHashFromNeoTubeHref(txHref);
     await waitForTx(txid);
 
     const holderAfter = await readNep17Balance(tokenHash, CLIENT1_ADDRESS);
+    const tokenGasAfter = await readNep17Balance(GAS_HASH, tokenHash);
+    const claimableCreatorFeeAfter = await readClaimableCreatorFee(tokenHash);
     const creatorGasAfter = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
     const factoryGasAfter = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyAfter = await readTotalSupply(tokenHash);
 
     expect(holderBefore - holderAfter).toBe(BURN_AMOUNT);
-    expect(creatorGasAfter - creatorGasBefore).toBe(500_000n);
+    expect(tokenGasAfter - tokenGasBefore).toBe(500_000n);
+    expect(claimableCreatorFeeAfter - claimableCreatorFeeBefore).toBe(500_000n);
+    expect(creatorGasAfter - creatorGasBefore).toBe(0n);
     expect(factoryGasAfter - factoryGasBefore).toBe(1_000_000n);
     expect(supplyBefore - supplyAfter).toBe(BURN_AMOUNT);
+  });
+
+  test("NeoLine creator can partially and fully claim accrued creator fees from the token", async () => {
+    const tokenHash = createTokenViaClient1(factoryHash, "CLM93", 500_000);
+    mintTokensWithSigner(factoryHash, tokenHash, CLIENT2_ADDRESS, 100_000n);
+    transferTokenWithSigner(tokenHash, CLIENT1_ADDRESS, TAXED_TRANSFER_AMOUNT, {
+      E2E_TEST_ACCOUNT_WIF: CLIENT2_WIF,
+    });
+
+    expect(await readClaimableCreatorFee(tokenHash)).toBe(500_000n);
+    expect(await readNep17Balance(GAS_HASH, tokenHash)).toBe(500_000n);
+
+    await connectWalletOnTokensPage(page, context);
+    await openTokenDetailPage(page, tokenHash);
+    const creatorClaimSection = page.locator("section").filter({
+      hasText: "CREATOR FEE CLAIMS",
+    }).first();
+
+    await expect(creatorClaimSection).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(creatorClaimSection.getByText("0.005 GAS")).toBeVisible();
+
+    await page.getByLabel("Creator fee claim GAS input").fill("0.002");
+    await signInNeoLine(context, async () => {
+      await page.getByRole("button", { name: "Claim Partial" }).click();
+    });
+
+    const partialClaimTxid = await waitForPendingTxHash(
+      page,
+      "Claiming creator fees for CLM93..."
+    );
+    await waitForTx(partialClaimTxid);
+
+    expect(await readClaimableCreatorFee(tokenHash)).toBe(300_000n);
+    expect(await readNep17Balance(GAS_HASH, tokenHash)).toBe(300_000n);
+
+    await connectWalletOnTokensPage(page, context);
+    await openTokenDetailPage(page, tokenHash);
+    await expect(
+      page.locator("section").filter({ hasText: "CREATOR FEE CLAIMS" }).first().getByText("0.003 GAS")
+    ).toBeVisible();
+
+    await signInNeoLine(context, async () => {
+      await page.getByRole("button", { name: "Claim All" }).click();
+    });
+
+    const claimAllTxid = await waitForPendingTxHash(
+      page,
+      "Claiming creator fees for CLM93..."
+    );
+    await waitForTx(claimAllTxid);
+
+    expect(await readClaimableCreatorFee(tokenHash)).toBe(0n);
+    expect(await readNep17Balance(GAS_HASH, tokenHash)).toBe(0n);
+
+    await connectWalletOnTokensPage(page, context);
+    await openTokenDetailPage(page, tokenHash);
+    await expect(
+      page.locator("section").filter({ hasText: "CREATOR FEE CLAIMS" }).first().getByText("0 GAS")
+    ).toBeVisible();
   });
 });

@@ -4,8 +4,12 @@ import { TokenAdminPanel } from "./TokenAdminPanel";
 import type { TokenInfo } from "../types";
 
 const invokeApplyTokenChanges = vi.fn();
+const invokeClaimCreatorFee = vi.fn();
+const invokeClaimCreatorFees = vi.fn();
 vi.mock("../neo-dapi-adapter", () => ({
   invokeApplyTokenChanges: (...args: unknown[]) => invokeApplyTokenChanges(...args),
+  invokeClaimCreatorFee: (...args: unknown[]) => invokeClaimCreatorFee(...args),
+  invokeClaimCreatorFees: (...args: unknown[]) => invokeClaimCreatorFees(...args),
 }));
 
 vi.mock("./AdminTabIdentity", () => ({
@@ -108,6 +112,7 @@ function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
     mode: "community",
     tier: 0,
     createdAt: 1,
+    claimableCreatorFee: 500_000n,
     ...overrides,
   };
 }
@@ -116,6 +121,10 @@ describe("TokenAdminPanel", () => {
   beforeEach(() => {
     invokeApplyTokenChanges.mockReset();
     invokeApplyTokenChanges.mockResolvedValue("0xtx");
+    invokeClaimCreatorFee.mockReset();
+    invokeClaimCreatorFee.mockResolvedValue("0xclaimPartial");
+    invokeClaimCreatorFees.mockReset();
+    invokeClaimCreatorFees.mockResolvedValue("0xclaimAll");
   });
 
   it("shows tabs when unlocked", () => {
@@ -128,7 +137,14 @@ describe("TokenAdminPanel", () => {
   it("shows locked banner when token is locked", () => {
     render(<TokenAdminPanel token={makeToken({ locked: true })} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
     expect(screen.getByText(/Permanently Immutable/i)).toBeInTheDocument();
+    expect(screen.getByText("CREATOR FEE CLAIMS")).toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("shows claimable creator GAS section for creator-owned tokens", () => {
+    render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+    expect(screen.getByText("CREATOR FEE CLAIMS")).toBeInTheDocument();
+    expect(screen.getByText("0.005 GAS")).toBeInTheDocument();
   });
 
   it("hides Supply tab when token is not mintable", () => {
@@ -222,5 +238,54 @@ describe("TokenAdminPanel", () => {
     );
     expect(invokeApplyTokenChanges).not.toHaveBeenCalled();
     expect(onTxSubmitted).not.toHaveBeenCalled();
+  });
+
+  it("submits a partial creator-fee claim with parsed GAS amount", async () => {
+    const onTxSubmitted = vi.fn();
+    render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={onTxSubmitted} />);
+
+    fireEvent.change(screen.getByLabelText("Creator fee claim GAS input"), {
+      target: { value: "0.002" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Claim Partial" }));
+
+    await waitFor(() =>
+      expect(invokeClaimCreatorFee).toHaveBeenCalledWith("0xtoken", 200000n)
+    );
+    expect(onTxSubmitted).toHaveBeenCalledWith(
+      "0xclaimPartial",
+      "Claiming creator fees for HUSH..."
+    );
+    expect(screen.getByText("Creator-fee claim submitted.")).toBeInTheDocument();
+  });
+
+  it("rejects partial creator-fee claims above the available balance", async () => {
+    render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Creator fee claim GAS input"), {
+      target: { value: "0.006" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Claim Partial" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Amount cannot exceed the current claimable creator fee balance."
+    );
+    expect(invokeClaimCreatorFee).not.toHaveBeenCalled();
+  });
+
+  it("submits a creator-fee claim all action", async () => {
+    const onTxSubmitted = vi.fn();
+    render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={onTxSubmitted} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Claim All" }));
+
+    await waitFor(() =>
+      expect(invokeClaimCreatorFees).toHaveBeenCalledWith("0xtoken")
+    );
+    expect(onTxSubmitted).toHaveBeenCalledWith(
+      "0xclaimAll",
+      "Claiming creator fees for HUSH..."
+    );
+    expect(screen.getByText("Creator-fee claim-all submitted.")).toBeInTheDocument();
   });
 });

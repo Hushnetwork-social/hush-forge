@@ -355,13 +355,15 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "25" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "150000" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "250000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "250000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "123456" }]));
 
     const result = await resolveTokenMetadata("0xfee");
 
     expect(result.burnRate).toBe(25);
     expect(result.creatorFeeRate).toBe(150000);
     expect(result.platformFeeRate).toBe(250000);
+    expect(result.claimableCreatorFee).toBe(123456n);
   });
 
   it("keeps explicit zero economics values for zero-config factory tokens", async () => {
@@ -375,6 +377,7 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xzer");
@@ -382,6 +385,7 @@ describe("resolveTokenMetadata", () => {
     expect(result.burnRate).toBe(0);
     expect(result.creatorFeeRate).toBe(0);
     expect(result.platformFeeRate).toBe(0);
+    expect(result.claimableCreatorFee).toBe(0n);
   });
 
   it("leaves economics undefined for non-factory tokens", async () => {
@@ -397,6 +401,7 @@ describe("resolveTokenMetadata", () => {
     expect(result.burnRate).toBeUndefined();
     expect(result.creatorFeeRate).toBeUndefined();
     expect(result.platformFeeRate).toBeUndefined();
+    expect(result.claimableCreatorFee).toBeUndefined();
   });
 
   it("prefers live totalSupply over stale factory registry supply", async () => {
@@ -426,12 +431,14 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
       .mockRejectedValueOnce(new Error("burn getter unavailable"))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "100000" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "200000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "200000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "300000" }]));
 
     const result = await resolveTokenMetadata("0xfbr");
 
     expect(result.burnRate).toBe(125);
     expect(result.creatorFeeRate).toBe(100000);
     expect(result.platformFeeRate).toBe(200000);
+    expect(result.claimableCreatorFee).toBe(300000n);
   });
 });

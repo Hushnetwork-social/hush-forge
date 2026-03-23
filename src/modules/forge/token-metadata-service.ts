@@ -175,13 +175,18 @@ function parseFactoryToken(
   }
 }
 
-type TokenEconomics = Pick<TokenInfo, "burnRate" | "creatorFeeRate" | "platformFeeRate">;
+type TokenEconomics = Pick<
+  TokenInfo,
+  "burnRate" | "creatorFeeRate" | "platformFeeRate" | "claimableCreatorFee"
+>;
 
 async function readTokenEconomics(contractHash: string): Promise<TokenEconomics> {
-  const [burnSettled, creatorFeeSettled, platformFeeSettled] = await Promise.allSettled([
+  const [burnSettled, creatorFeeSettled, platformFeeSettled, claimableCreatorFeeSettled] =
+    await Promise.allSettled([
     invokeFunction(contractHash, "getBurnRate", []),
     invokeFunction(contractHash, "getCreatorFeeRate", []),
     invokeFunction(contractHash, "getPlatformFeeRate", []),
+    invokeFunction(contractHash, "getClaimableCreatorFee", []),
   ]);
 
   return {
@@ -196,6 +201,10 @@ async function readTokenEconomics(contractHash: string): Promise<TokenEconomics>
     platformFeeRate:
       platformFeeSettled.status === "fulfilled"
         ? parseStackItemAsNumber(peek(platformFeeSettled.value.stack))
+        : undefined,
+    claimableCreatorFee:
+      claimableCreatorFeeSettled.status === "fulfilled"
+        ? parseStackItemAsBigInt(peek(claimableCreatorFeeSettled.value.stack))
         : undefined,
   };
 }
@@ -331,5 +340,6 @@ export async function resolveTokenMetadata(
     locked: factoryData?.locked ?? false,
     creatorFeeRate: tokenEconomics?.creatorFeeRate,
     platformFeeRate: tokenEconomics?.platformFeeRate,
+    claimableCreatorFee: tokenEconomics?.claimableCreatorFee,
   };
 }

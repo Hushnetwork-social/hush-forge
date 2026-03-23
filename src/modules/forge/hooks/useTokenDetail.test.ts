@@ -4,7 +4,6 @@ import { useTokenDetail } from "./useTokenDetail";
 import { useWalletStore, WALLET_INITIAL_STATE } from "../wallet-store";
 import type { TokenInfo } from "../types";
 
-// Mock dependencies
 vi.mock("../token-metadata-service", () => ({
   resolveTokenMetadata: vi.fn(),
 }));
@@ -16,16 +15,13 @@ vi.mock("../forge-config", () => ({
 
 vi.mock("../neo-rpc-client", () => ({
   invokeFunction: vi.fn(),
-  // addressToHash160 is used in addressToBEHash; return a stub so tests don't throw.
-  // Synthetic test addresses (e.g. "NwCreator") fall back to direct === comparison anyway.
-  addressToHash160: vi.fn(() => { throw new Error("stub — not a real address"); }),
+  addressToHash160: vi.fn(() => {
+    throw new Error("stub - not a real address");
+  }),
 }));
 
 import { resolveTokenMetadata as mockResolve } from "../token-metadata-service";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { addressToHash160 as mockAddressToHash160 } from "../neo-rpc-client";
 
 function makeToken(contractHash: string, creator: string | null): TokenInfo {
   return {
@@ -44,10 +40,6 @@ function makeToken(contractHash: string, creator: string | null): TokenInfo {
 function resetStore() {
   useWalletStore.setState({ ...WALLET_INITIAL_STATE }, false);
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("useTokenDetail", () => {
   beforeEach(() => {
@@ -82,6 +74,19 @@ describe("useTokenDetail", () => {
     expect(result.current.isOwnToken).toBe(true);
   });
 
+  it("isOwnToken is true when creator matches the wallet hash in little-endian form", async () => {
+    const token = makeToken("0xabc", "0x88c48eaef7e64b646440da567cd85c9060efbf63");
+    vi.mocked(mockResolve).mockResolvedValue(token);
+    vi.mocked(mockAddressToHash160).mockReturnValue(token.creator as string);
+    useWalletStore.setState({ address: "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c" });
+
+    const { result } = renderHook(() => useTokenDetail("0xabc"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.isOwnToken).toBe(true);
+  });
+
   it("isOwnToken is false for third-party tokens", async () => {
     const token = makeToken("0xabc", "NwOther");
     vi.mocked(mockResolve).mockResolvedValue(token);
@@ -107,7 +112,6 @@ describe("useTokenDetail", () => {
   });
 
   it("isUpgradeable is true for community mode tokens", async () => {
-    // makeToken sets mode: "community" — community tokens are managed by the factory
     vi.mocked(mockResolve).mockResolvedValue(makeToken("0xabc", null));
 
     const { result } = renderHook(() => useTokenDetail("0xabc"));

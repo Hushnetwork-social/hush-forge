@@ -855,6 +855,29 @@ export async function invokeBurn(
   );
 }
 
+export async function invokeClaimCreatorFees(
+  tokenHash: string
+): Promise<string> {
+  return invokeConnectedOperation(
+    tokenHash,
+    "claimCreatorFees",
+    [],
+    "Claim full creator fee balance from token"
+  );
+}
+
+export async function invokeClaimCreatorFee(
+  tokenHash: string,
+  amount: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    tokenHash,
+    "claimCreatorFee",
+    [{ type: "Integer", value: amount.toString() }],
+    `Claim ${amount} raw creator-fee units from token`
+  );
+}
+
 export async function invokeSetCreationFee(
   factoryHash: string,
   feeInDatoshi: bigint

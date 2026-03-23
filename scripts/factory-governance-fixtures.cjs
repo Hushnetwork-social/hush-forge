@@ -60,9 +60,14 @@ async function waitForTx(txid, timeoutMs = 120_000) {
   throw new Error(`Transaction ${txid} not confirmed after ${timeoutMs / 1000}s`);
 }
 
-async function sendInvocation(account, scriptHex) {
+function resolveWitnessScope(scope) {
+  if (scope === "Global") return tx.WitnessScope.Global;
+  return tx.WitnessScope.CalledByEntry;
+}
+
+async function sendInvocation(account, scriptHex, scope = "CalledByEntry") {
   const client = new rpcModule.NeoServerRpcClient(RPC_URL);
-  const signerSpec = [{ account: account.scriptHash, scopes: "CalledByEntry" }];
+  const signerSpec = [{ account: account.scriptHash, scopes: scope }];
   const dryRun = await client.invokeScript(u.HexString.fromHex(scriptHex), signerSpec);
   if (dryRun.state === "FAULT") {
     throw new Error(`Dry-run faulted: ${dryRun.exception ?? "unknown"}`);
@@ -70,7 +75,7 @@ async function sendInvocation(account, scriptHex) {
 
   const blockCount = await client.getBlockCount();
   const txn = new tx.Transaction({
-    signers: [{ account: account.scriptHash, scopes: tx.WitnessScope.CalledByEntry }],
+    signers: [{ account: account.scriptHash, scopes: resolveWitnessScope(scope) }],
     script: u.HexString.fromHex(scriptHex),
     validUntilBlock: blockCount + 200,
     systemFee: u.BigInteger.fromDecimal(dryRun.gasconsumed, 0),
@@ -277,6 +282,47 @@ async function mintTokens(factoryHash, tokenHash, recipient, amount) {
   console.log(`MINT_TOKENS_TX=${txid}`);
 }
 
+async function transferToken(tokenHash, recipient, amount) {
+  const account = getAccountFromEnv();
+  const script = sc.createScript({
+    scriptHash: tokenHash,
+    operation: "transfer",
+    args: [
+      sc.ContractParam.hash160(account.scriptHash),
+      sc.ContractParam.hash160(normalizeHashOrAddress(recipient)),
+      sc.ContractParam.integer(String(amount)),
+      sc.ContractParam.any(null),
+    ],
+  });
+  const txid = await sendInvocation(account, script, "Global");
+  await waitForTx(txid);
+  console.log(`TRANSFER_TOKEN_TX=${txid}`);
+}
+
+async function claimCreatorFee(tokenHash, amount) {
+  const account = getAccountFromEnv();
+  const script = sc.createScript({
+    scriptHash: tokenHash,
+    operation: "claimCreatorFee",
+    args: [sc.ContractParam.integer(String(amount))],
+  });
+  const txid = await sendInvocation(account, script);
+  await waitForTx(txid);
+  console.log(`CLAIM_CREATOR_FEE_TX=${txid}`);
+}
+
+async function claimAllCreatorFees(tokenHash) {
+  const account = getAccountFromEnv();
+  const script = sc.createScript({
+    scriptHash: tokenHash,
+    operation: "claimCreatorFees",
+    args: [],
+  });
+  const txid = await sendInvocation(account, script);
+  await waitForTx(txid);
+  console.log(`CLAIM_ALL_CREATOR_FEES_TX=${txid}`);
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
 
@@ -310,6 +356,21 @@ async function main() {
     return;
   }
 
+  if (command === "transfer-token" && args.length === 3) {
+    await transferToken(args[0], args[1], args[2]);
+    return;
+  }
+
+  if (command === "claim-creator-fee" && args.length === 2) {
+    await claimCreatorFee(args[0], args[1]);
+    return;
+  }
+
+  if (command === "claim-all-creator-fees" && args.length === 1) {
+    await claimAllCreatorFees(args[0]);
+    return;
+  }
+
   console.error(
     "Usage:\n" +
       "  node scripts/factory-governance-fixtures.cjs set-owner <factoryHash> <newOwnerHashOrAddress>\n" +
@@ -317,7 +378,10 @@ async function main() {
       "  node scripts/factory-governance-fixtures.cjs create-token <factoryHash> <name> <symbol> <supply> <decimals> <creatorFeeRateDatoshi>\n" +
       "  node scripts/factory-governance-fixtures.cjs set-platform-fee <factoryHash> <newRateDatoshi> [offset] [batchSize]\n" +
       "  node scripts/factory-governance-fixtures.cjs set-burn-rate <factoryHash> <tokenHash> <basisPoints>\n" +
-      "  node scripts/factory-governance-fixtures.cjs mint-tokens <factoryHash> <tokenHash> <recipientHashOrAddress> <amountRaw>"
+      "  node scripts/factory-governance-fixtures.cjs mint-tokens <factoryHash> <tokenHash> <recipientHashOrAddress> <amountRaw>\n" +
+      "  node scripts/factory-governance-fixtures.cjs transfer-token <tokenHash> <recipientHashOrAddress> <amountRaw>\n" +
+      "  node scripts/factory-governance-fixtures.cjs claim-creator-fee <tokenHash> <amountRaw>\n" +
+      "  node scripts/factory-governance-fixtures.cjs claim-all-creator-fees <tokenHash>"
   );
   process.exit(1);
 }

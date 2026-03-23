@@ -26,6 +26,7 @@ export interface TokenInfo {
   mintable?: boolean; // false for fixed supply tokens (hides supply admin tab)
   creatorFeeRate?: number; // per-transfer GAS fee in datoshi
   platformFeeRate?: number; // per-transfer GAS fee in datoshi
+  claimableCreatorFee?: bigint; // creator-fee GAS currently accrued in the token contract
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */

@@ -6,10 +6,14 @@ import type { TokenInfo } from "../types";
 const invokeApplyTokenChanges = vi.fn();
 const invokeClaimCreatorFee = vi.fn();
 const invokeClaimCreatorFees = vi.fn();
+const fetchFactoryConfig = vi.fn();
 vi.mock("../neo-dapi-adapter", () => ({
   invokeApplyTokenChanges: (...args: unknown[]) => invokeApplyTokenChanges(...args),
   invokeClaimCreatorFee: (...args: unknown[]) => invokeClaimCreatorFee(...args),
   invokeClaimCreatorFees: (...args: unknown[]) => invokeClaimCreatorFees(...args),
+}));
+vi.mock("../factory-governance-service", () => ({
+  fetchFactoryConfig: (...args: unknown[]) => fetchFactoryConfig(...args),
 }));
 
 vi.mock("./AdminTabIdentity", () => ({
@@ -125,6 +129,8 @@ describe("TokenAdminPanel", () => {
     invokeClaimCreatorFee.mockResolvedValue("0xclaimPartial");
     invokeClaimCreatorFees.mockReset();
     invokeClaimCreatorFees.mockResolvedValue("0xclaimAll");
+    fetchFactoryConfig.mockReset();
+    fetchFactoryConfig.mockResolvedValue({ operationFee: 50_000_000n });
   });
 
   it("shows tabs when unlocked", () => {
@@ -145,6 +151,13 @@ describe("TokenAdminPanel", () => {
     render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
     expect(screen.getByText("CREATOR FEE CLAIMS")).toBeInTheDocument();
     expect(screen.getByText("0.005 GAS")).toBeInTheDocument();
+  });
+
+  it("shows the current TokenFactory operation fee note for creator claims", async () => {
+    render(<TokenAdminPanel token={makeToken()} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
+    expect(await screen.findByText(/current TokenFactory operation fee/i)).toHaveTextContent(
+      "current TokenFactory operation fee (0.5 GAS)"
+    );
   });
 
   it("hides Supply tab when token is not mintable", () => {

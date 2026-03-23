@@ -72,6 +72,30 @@ async function waitForFunding(
   throw new Error(`Account ${address} not funded after ${timeoutMs}ms`);
 }
 
+async function waitForCondition<T>(
+  read: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  description: string,
+  timeoutMs = 120_000,
+  pollMs = 2_000
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let lastValue: T | null = null;
+  while (Date.now() < deadline) {
+    lastValue = await read();
+    if (predicate(lastValue)) {
+      return lastValue;
+    }
+    await sleep(pollMs);
+  }
+
+  throw new Error(
+    `Condition timed out after ${timeoutMs}ms: ${description}. Last value: ${JSON.stringify(lastValue, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    )}`
+  );
+}
+
 function deployFactoryAndParseHash(): string {
   const output = execSync("node scripts/deploy-factory.cjs", {
     cwd: FORGE_ROOT_DIR,
@@ -384,6 +408,11 @@ async function readClaimableCreatorFee(tokenHash: string): Promise<bigint> {
   return readIntegerStack(result);
 }
 
+async function readFactoryUpdateFee(factoryHash: string): Promise<bigint> {
+  const result = await rpcCall("invokefunction", [factoryHash, "getUpdateFee", [], []]);
+  return readIntegerStack(result);
+}
+
 async function selectWalletToken(page: Page, symbol: string): Promise<void> {
   const currentSymbol = page.getByTestId("wallet-panel-current-symbol");
   for (let step = 0; step < 6; step += 1) {
@@ -488,8 +517,16 @@ async function openTokenDetailPage(page: Page, tokenHash: string): Promise<void>
 
 async function dismissAdminHintIfPresent(page: Page): Promise<void> {
   const overlay = page.getByTestId("admin-update-hint-overlay");
-  if (await overlay.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await overlay.getByRole("button", { name: "OK" }).click();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (await overlay.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      await page.keyboard.press("Escape").catch(() => {});
+      if (await overlay.isVisible({ timeout: 500 }).catch(() => false)) {
+        await overlay.getByRole("button", { name: "OK" }).click();
+      }
+      await overlay.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
+      return;
+    }
+    await page.waitForTimeout(500);
   }
 }
 
@@ -763,6 +800,8 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
       E2E_TEST_ACCOUNT_WIF: CLIENT2_WIF,
     });
 
+    const operationFee = await readFactoryUpdateFee(factoryHash);
+
     expect(await readClaimableCreatorFee(tokenHash)).toBe(500_000n);
     expect(await readNep17Balance(GAS_HASH, tokenHash)).toBe(500_000n);
 
@@ -776,39 +815,57 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
       timeout: 10_000,
     });
     await expect(creatorClaimSection.getByText("0.005 GAS")).toBeVisible();
+    await dismissAdminHintIfPresent(page);
 
     await page.getByLabel("Creator fee claim GAS input").fill("0.002");
+    const factoryGasBeforePartial = await readNep17Balance(GAS_HASH, factoryHash);
     await signInNeoLine(context, async () => {
       await page.getByRole("button", { name: "Claim Partial" }).click();
     });
-
-    const partialClaimTxid = await waitForPendingTxHash(
-      page,
-      "Claiming creator fees for CLM93..."
+    const partialClaimState = await waitForCondition(
+      async () => ({
+        claimableCreatorFee: await readClaimableCreatorFee(tokenHash),
+        tokenGas: await readNep17Balance(GAS_HASH, tokenHash),
+        factoryGas: await readNep17Balance(GAS_HASH, factoryHash),
+      }),
+      (state) =>
+        state.claimableCreatorFee === 300_000n &&
+        state.tokenGas === 300_000n &&
+        state.factoryGas - factoryGasBeforePartial === operationFee,
+      "partial creator claim to reduce claimable balance to 0.003 GAS"
     );
-    await waitForTx(partialClaimTxid);
 
-    expect(await readClaimableCreatorFee(tokenHash)).toBe(300_000n);
-    expect(await readNep17Balance(GAS_HASH, tokenHash)).toBe(300_000n);
+    expect(partialClaimState.claimableCreatorFee).toBe(300_000n);
+    expect(partialClaimState.tokenGas).toBe(300_000n);
+    expect(partialClaimState.factoryGas - factoryGasBeforePartial).toBe(operationFee);
 
     await connectWalletOnTokensPage(page, context);
     await openTokenDetailPage(page, tokenHash);
     await expect(
       page.locator("section").filter({ hasText: "CREATOR FEE CLAIMS" }).first().getByText("0.003 GAS")
     ).toBeVisible();
+    await dismissAdminHintIfPresent(page);
 
+    const factoryGasBeforeClaimAll = await readNep17Balance(GAS_HASH, factoryHash);
     await signInNeoLine(context, async () => {
       await page.getByRole("button", { name: "Claim All" }).click();
     });
-
-    const claimAllTxid = await waitForPendingTxHash(
-      page,
-      "Claiming creator fees for CLM93..."
+    const claimAllState = await waitForCondition(
+      async () => ({
+        claimableCreatorFee: await readClaimableCreatorFee(tokenHash),
+        tokenGas: await readNep17Balance(GAS_HASH, tokenHash),
+        factoryGas: await readNep17Balance(GAS_HASH, factoryHash),
+      }),
+      (state) =>
+        state.claimableCreatorFee === 0n &&
+        state.tokenGas === 0n &&
+        state.factoryGas - factoryGasBeforeClaimAll === operationFee,
+      "claim-all creator fees to drain the token GAS balance"
     );
-    await waitForTx(claimAllTxid);
 
-    expect(await readClaimableCreatorFee(tokenHash)).toBe(0n);
-    expect(await readNep17Balance(GAS_HASH, tokenHash)).toBe(0n);
+    expect(claimAllState.claimableCreatorFee).toBe(0n);
+    expect(claimAllState.tokenGas).toBe(0n);
+    expect(claimAllState.factoryGas - factoryGasBeforeClaimAll).toBe(operationFee);
 
     await connectWalletOnTokensPage(page, context);
     await openTokenDetailPage(page, tokenHash);

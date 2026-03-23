@@ -75,6 +75,7 @@ function makeEconomics(
 describe("TokenDetail", () => {
   beforeEach(() => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult());
+    window.localStorage.clear();
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       writable: true,
@@ -120,6 +121,19 @@ describe("TokenDetail", () => {
     );
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
+  });
+
+  it("persists admin update hint dismissal for the same token", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({ isOwnToken: true, isUpgradeable: true })
+    );
+    const { rerender } = render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
+
+    rerender(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
     expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
   });
 

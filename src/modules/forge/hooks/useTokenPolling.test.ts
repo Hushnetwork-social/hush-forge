@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useTokenPolling } from "./useTokenPolling";
 
-// Mock forge-service
 vi.mock("../forge-service", () => ({
   pollForConfirmation: vi.fn(),
   TxFaultedError: class TxFaultedError extends Error {
@@ -29,10 +28,6 @@ import {
   TxTimeoutError,
 } from "../forge-service";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeConfirmedEvent(contractHash = "0xcontract123") {
   return {
     contractHash,
@@ -43,10 +38,6 @@ function makeConfirmedEvent(contractHash = "0xcontract123") {
     tier: 0,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("useTokenPolling", () => {
   beforeEach(() => {
@@ -59,7 +50,7 @@ describe("useTokenPolling", () => {
   });
 
   it("starts polling when txHash is provided", () => {
-    vi.mocked(mockPoll).mockReturnValue(new Promise(() => {})); // never resolves
+    vi.mocked(mockPoll).mockReturnValue(new Promise(() => {}));
     renderHook(() => useTokenPolling("0xtx123"));
     expect(vi.mocked(mockPoll)).toHaveBeenCalledWith(
       "0xtx123",
@@ -68,7 +59,7 @@ describe("useTokenPolling", () => {
     );
   });
 
-  it("sets status to 'confirmed' and contractHash on success", async () => {
+  it("sets status to confirmed and contractHash on success", async () => {
     vi.mocked(mockPoll).mockResolvedValue(makeConfirmedEvent("0xcontract999"));
 
     const { result } = renderHook(() => useTokenPolling("0xtx"));
@@ -79,7 +70,7 @@ describe("useTokenPolling", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("sets status to 'timeout' and error message on TxTimeoutError", async () => {
+  it("sets status to timeout and error message on TxTimeoutError", async () => {
     vi.mocked(mockPoll).mockRejectedValue(new TxTimeoutError("0xtx"));
 
     const { result } = renderHook(() => useTokenPolling("0xtx"));
@@ -90,7 +81,7 @@ describe("useTokenPolling", () => {
     expect(result.current.contractHash).toBeNull();
   });
 
-  it("sets status to 'faulted' and error message on TxFaultedError", async () => {
+  it("sets status to faulted and error message on TxFaultedError", async () => {
     vi.mocked(mockPoll).mockRejectedValue(new TxFaultedError("0xtx"));
 
     const { result } = renderHook(() => useTokenPolling("0xtx"));
@@ -101,8 +92,8 @@ describe("useTokenPolling", () => {
     expect(result.current.contractHash).toBeNull();
   });
 
-  it("does not update state after unmount (cancelled flag)", async () => {
-    let resolve: (v: ReturnType<typeof makeConfirmedEvent>) => void;
+  it("does not update state after unmount", async () => {
+    let resolve!: (v: ReturnType<typeof makeConfirmedEvent>) => void;
     vi.mocked(mockPoll).mockReturnValue(
       new Promise((res) => {
         resolve = res;
@@ -114,11 +105,40 @@ describe("useTokenPolling", () => {
     expect(result.current.status).toBe("pending");
     unmount();
 
-    // Resolve after unmount — should not throw or warn
     await act(async () => {
-      resolve!(makeConfirmedEvent());
+      resolve(makeConfirmedEvent());
       await Promise.resolve();
     });
-    // No assertion needed — test passes if there are no errors/warnings
+  });
+
+  it("resets to pending immediately when a new tx hash replaces a confirmed tx", async () => {
+    let resolveFirst!: (value: ReturnType<typeof makeConfirmedEvent>) => void;
+    vi.mocked(mockPoll)
+      .mockImplementationOnce(
+        () =>
+          new Promise((res) => {
+            resolveFirst = res;
+          })
+      )
+      .mockReturnValueOnce(new Promise(() => {}));
+
+    const { result, rerender } = renderHook(
+      ({ txHash }) => useTokenPolling(txHash),
+      { initialProps: { txHash: "0xfirst" as string | null } }
+    );
+
+    await act(async () => {
+      resolveFirst(makeConfirmedEvent("0xconfirmed"));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("confirmed"));
+    expect(result.current.contractHash).toBe("0xconfirmed");
+
+    rerender({ txHash: "0xsecond" });
+
+    expect(result.current.status).toBe("pending");
+    expect(result.current.contractHash).toBeNull();
+    expect(result.current.error).toBeNull();
   });
 });

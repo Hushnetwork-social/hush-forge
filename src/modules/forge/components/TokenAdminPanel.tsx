@@ -8,6 +8,7 @@ import {
   invokeClaimCreatorFees,
 } from "../neo-dapi-adapter";
 import { parseGasToDatoshi } from "../factory-governance-logic";
+import { fetchFactoryConfig } from "../factory-governance-service";
 import { AdminTabIdentity } from "./AdminTabIdentity";
 import { AdminTabSupply } from "./AdminTabSupply";
 import { AdminTabProperties } from "./AdminTabProperties";
@@ -60,8 +61,32 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
   const [creatorClaimInfo, setCreatorClaimInfo] = useState<string | null>(null);
   const [creatorClaimError, setCreatorClaimError] = useState<string | null>(null);
   const [creatorClaimPending, setCreatorClaimPending] = useState(false);
+  const [creatorClaimOperationFee, setCreatorClaimOperationFee] = useState<bigint | null>(null);
   const claimableCreatorFee = token.claimableCreatorFee ?? 0n;
   const showCreatorClaimSection = token.creator !== null;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!showCreatorClaimSection || !factoryHash) {
+      setCreatorClaimOperationFee(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetchFactoryConfig(factoryHash)
+      .then((config) => {
+        if (!cancelled) setCreatorClaimOperationFee(config.operationFee);
+      })
+      .catch(() => {
+        if (!cancelled) setCreatorClaimOperationFee(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [factoryHash, showCreatorClaimSection]);
 
   const tabs = useMemo(() => {
     const list: Array<{ id: AdminTab; label: string }> = [
@@ -298,6 +323,11 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
             </h4>
             <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
               Creator-fee GAS is held in the token contract until the original creator claims it.
+            </p>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+              Claim submission also pays the current TokenFactory operation fee
+              {creatorClaimOperationFee !== null ? ` (${formatGas(creatorClaimOperationFee)})` : ""}
+              {" "}plus the normal Neo network fee in the connected wallet.
             </p>
           </div>
 

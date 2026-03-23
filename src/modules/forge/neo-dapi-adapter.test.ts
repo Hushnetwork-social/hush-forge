@@ -13,6 +13,7 @@ import {
   invokeChangeMode,
   invokeLockToken,
   invokeBurn,
+  invokeTokenTransfer,
   invokeClaimCreatorFee,
   invokeClaimCreatorFees,
   invokeApplyTokenChanges,
@@ -383,6 +384,28 @@ describe("lifecycle invoke functions", () => {
     expect(call.signers[0].scopes).toBe("Global");
   });
 
+  it("invokeTokenTransfer calls the token contract with transfer and Global scope", async () => {
+    const instance = await connectMock();
+    await invokeTokenTransfer("0xtoken", "NhJX9eCbkKtgDrh1S4xMTRaHUGbZ5Be7uU", 125n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string | null }[];
+      signers: { scopes: string }[];
+    };
+    expect(call.scriptHash).toBe("0xtoken");
+    expect(call.operation).toBe("transfer");
+    expect(call.args).toEqual([
+      { type: "Hash160", value: "0x66ac3b95bb060000000000000000000000000000" },
+      { type: "Hash160", value: "0xb435bf4b8e34b28a73029eb42d0d99a775799eea" },
+      { type: "Integer", value: "125" },
+      { type: "Any", value: null },
+    ]);
+    expect(call.signers[0].scopes).toBe("Global");
+  });
+
   it("invokeClaimCreatorFee calls the token contract with the requested amount", async () => {
     const instance = await connectMock();
     await invokeClaimCreatorFee("0xtoken", 200_000n);
@@ -581,6 +604,19 @@ describe("factory governance invoke functions", () => {
     await connect("NeoLine");
 
     await expect(invokeBurn("0xtoken", 1n)).rejects.toBeInstanceOf(WalletRejectedError);
+  });
+
+  it("invokeTokenTransfer maps wallet rejection to WalletRejectedError", async () => {
+    const instance = makeMockDapi({
+      invoke: vi.fn().mockRejectedValue({ type: "CANCELED", message: "" }),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).NEOLineN3 = { Neo: makeMockNeo(instance) };
+    await connect("NeoLine");
+
+    await expect(
+      invokeTokenTransfer("0xtoken", "NhJX9eCbkKtgDrh1S4xMTRaHUGbZ5Be7uU", 1n)
+    ).rejects.toBeInstanceOf(WalletRejectedError);
   });
 
   it("invokeClaimCreatorFee maps wallet rejection to WalletRejectedError", async () => {

@@ -23,12 +23,6 @@ const TAXED_TRANSFER_AMOUNT = 10_000n;
 const ZERO_CONFIG_TRANSFER_AMOUNT = 1_000n;
 const BURN_AMOUNT = 1_234n;
 
-declare global {
-  interface Window {
-    __feat093TransferPromise?: Promise<{ txid: string }>;
-  }
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -167,23 +161,28 @@ async function launchWithNeoLine(
     timeout: 15_000,
   });
   await neoLinePage.waitForTimeout(2_000);
-
-  const pwInput = neoLinePage.locator('input[type="password"]');
-  if (await pwInput.isVisible({ timeout: 4_000 }).catch(() => false)) {
-    await pwInput.click();
-    await neoLinePage.keyboard.type(NEOLINE_PASSWORD ?? "");
-    await neoLinePage.keyboard.press("Enter");
-    await pwInput.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
-  }
+  await unlockNeoLinePage(neoLinePage);
 
   await neoLinePage.close();
   const page = await context.newPage();
   return { context, page };
 }
 
+async function unlockNeoLinePage(page: Page): Promise<void> {
+  const pwInput = page.locator('input[type="password"]');
+  if (await pwInput.isVisible({ timeout: 4_000 }).catch(() => false)) {
+    await pwInput.click();
+    await page.keyboard.type(NEOLINE_PASSWORD ?? "");
+    await page.keyboard.press("Enter");
+    await pwInput.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(1_000);
+  }
+}
+
 async function signExistingNeoLinePopup(popup: Page): Promise<void> {
   await popup.waitForLoadState("domcontentloaded", { timeout: 20_000 }).catch(() => {});
   await popup.locator(".loading-box").waitFor({ state: "hidden", timeout: 60_000 }).catch(() => {});
+  await unlockNeoLinePage(popup);
   await popup
     .waitForFunction(() => {
       const btn = document.querySelector("button.confirm:not(.pop-ups)");
@@ -191,11 +190,23 @@ async function signExistingNeoLinePopup(popup: Page): Promise<void> {
     }, { timeout: 30_000 })
     .catch(() => {});
 
-  await popup.evaluate(() => {
-    const btns = Array.from(document.querySelectorAll<HTMLButtonElement>("button.confirm"));
-    const btn = btns.find((item) => !item.classList.contains("pop-ups")) ?? btns[0];
-    btn?.click();
-  });
+  const clickedPrimary = await popup
+    .evaluate(() => {
+      const btns = Array.from(document.querySelectorAll<HTMLButtonElement>("button.confirm"));
+      const btn = btns.find((item) => !item.classList.contains("pop-ups")) ?? btns[0];
+      btn?.click();
+      return btn !== undefined;
+    })
+    .catch(() => false);
+
+  if (!clickedPrimary) {
+    const fallbackBtn = popup
+      .getByRole("button", { name: /Connect|Allow|Confirm|Sign|Send|Approve|Yes|ç¡®è®¤/i })
+      .first();
+    if (await fallbackBtn.isVisible({ timeout: 10_000 }).catch(() => false)) {
+      await fallbackBtn.click();
+    }
+  }
 
   await popup
     .waitForFunction(() => document.querySelector("button.confirm.pop-ups") !== null, {
@@ -373,68 +384,6 @@ async function readClaimableCreatorFee(tokenHash: string): Promise<bigint> {
   return readIntegerStack(result);
 }
 
-async function invokeTokenTransfer(
-  page: Page,
-  context: BrowserContext,
-  tokenHash: string,
-  recipientAddress: string,
-  amount: bigint
-): Promise<string> {
-  const fromHash = addressToScriptHash(CLIENT1_ADDRESS);
-  const toHash = addressToScriptHash(recipientAddress);
-
-  await signInNeoLine(context, async () => {
-    await page.evaluate(
-      ({ scriptHash, from, to, rawAmount }) => {
-        const walletWindow = window as Window & {
-          NEOLine?: { Neo: new () => { invoke(params: unknown): Promise<{ txid: string }> } };
-          NEOLineN3?: {
-            Init?: new () => { invoke(params: unknown): Promise<{ txid: string }> };
-            Neo?: new () => { invoke(params: unknown): Promise<{ txid: string }> };
-          };
-        };
-        const DapiCtor =
-          walletWindow.NEOLineN3?.Init ??
-          walletWindow.NEOLineN3?.Neo ??
-          walletWindow.NEOLine?.Neo;
-        if (!DapiCtor) {
-          throw new Error("NeoLine dAPI is unavailable on the page");
-        }
-        const dapi = new DapiCtor();
-        window.__feat093TransferPromise = dapi.invoke({
-          scriptHash,
-          operation: "transfer",
-          args: [
-            { type: "Hash160", value: from },
-            { type: "Hash160", value: to },
-            { type: "Integer", value: rawAmount },
-            { type: "Any", value: null },
-          ],
-          signers: [{ account: from, scopes: "Global" }],
-          description: `FEAT-093 transfer ${rawAmount} raw units`,
-        });
-      },
-      {
-        scriptHash: tokenHash,
-        from: fromHash,
-        to: toHash,
-        rawAmount: amount.toString(),
-      }
-    );
-  });
-
-  const txid = await page.evaluate(async () => {
-    const result = await window.__feat093TransferPromise;
-    delete window.__feat093TransferPromise;
-    return result?.txid ?? null;
-  });
-
-  if (!txid) {
-    throw new Error("NeoLine did not return a transaction hash for the transfer");
-  }
-  return txid;
-}
-
 async function selectWalletToken(page: Page, symbol: string): Promise<void> {
   const currentSymbol = page.getByTestId("wallet-panel-current-symbol");
   for (let step = 0; step < 6; step += 1) {
@@ -606,8 +555,8 @@ async function gotoWithRetry(page: Page, url: string, attempts = 3): Promise<voi
 }
 
 test.describe("FEAT-093 Token Taxation Integration", () => {
-  let profileCopyDir: string;
-  let context: BrowserContext;
+  let profileCopyDir: string | undefined;
+  let context: BrowserContext | undefined;
   let page: Page;
   let factoryHash: string;
 
@@ -638,11 +587,13 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
   });
 
   test.afterEach(async () => {
-    await context.close().catch(() => {});
-    removeProfileCopy(profileCopyDir);
+    await context?.close().catch(() => {});
+    if (profileCopyDir) {
+      removeProfileCopy(profileCopyDir);
+    }
   });
 
-  test("NeoLine holder transfer applies burn, creator fee, and platform fee", async () => {
+  test("Forge transfer overlay applies burn, creator fee, and platform fee through NeoLine dAPI", async () => {
     const tokenHash = createTokenViaClient2(factoryHash, "TX93A", 500_000);
     runFixture(["set-platform-fee", factoryHash, "1000000"]);
     runFixture(["set-burn-rate", factoryHash, tokenHash, "200"], {
@@ -659,12 +610,27 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     const factoryGasBefore = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyBefore = await readTotalSupply(tokenHash);
 
-    const txid = await invokeTokenTransfer(
+    await selectWalletToken(page, "TX93A");
+    await page.getByTestId("wallet-panel-transfer-action").click();
+    const dialog = page.getByRole("dialog", { name: "Transfer TX93A" });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await dialog.getByLabel("Recipient address").fill(CLIENT2_ADDRESS);
+    await dialog.getByLabel("Amount to transfer").fill(
+      TAXED_TRANSFER_AMOUNT.toString()
+    );
+    await expect(dialog.getByLabel("Transfer economics summary")).toContainText(
+      "Total token GAS taxes"
+    );
+    await expect(dialog).toContainText("0.015 GAS");
+    await expect(dialog).toContainText("9,800 TX93A");
+
+    await signInNeoLine(context, async () => {
+      await dialog.getByRole("button", { name: "Transfer", exact: true }).click();
+    });
+
+    const txid = await waitForPendingTxHash(
       page,
-      context,
-      tokenHash,
-      CLIENT2_ADDRESS,
-      TAXED_TRANSFER_AMOUNT
+      "Waiting for TX93A transfer confirmation..."
     );
     await waitForTx(txid);
 
@@ -683,7 +649,7 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     expect(supplyBefore - supplyAfter).toBe(200n);
   });
 
-  test("NeoLine zero-config transfer applies no token taxes", async () => {
+  test("Forge transfer overlay shows zero token taxes for a zero-config token", async () => {
     const tokenHash = createTokenViaClient2(factoryHash, "TX93Z", 0);
     mintHolderBalance(factoryHash, tokenHash, 100_000n);
 
@@ -696,12 +662,24 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     const factoryGasBefore = await readNep17Balance(GAS_HASH, factoryHash);
     const supplyBefore = await readTotalSupply(tokenHash);
 
-    const txid = await invokeTokenTransfer(
+    await selectWalletToken(page, "TX93Z");
+    await page.getByTestId("wallet-panel-transfer-action").click();
+    const dialog = page.getByRole("dialog", { name: "Transfer TX93Z" });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await dialog.getByLabel("Recipient address").fill(CLIENT2_ADDRESS);
+    await dialog.getByLabel("Amount to transfer").fill(
+      ZERO_CONFIG_TRANSFER_AMOUNT.toString()
+    );
+    await expect(dialog).toContainText("0 GAS");
+    await expect(dialog).toContainText("1,000 TX93Z");
+
+    await signInNeoLine(context, async () => {
+      await dialog.getByRole("button", { name: "Transfer", exact: true }).click();
+    });
+
+    const txid = await waitForPendingTxHash(
       page,
-      context,
-      tokenHash,
-      CLIENT2_ADDRESS,
-      ZERO_CONFIG_TRANSFER_AMOUNT
+      "Waiting for TX93Z transfer confirmation..."
     );
     await waitForTx(txid);
 

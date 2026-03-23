@@ -6,6 +6,7 @@ import { useTokenStore } from "../token-store";
 import type { TokenInfo, WalletBalance } from "../types";
 import { BurnTokenDialog } from "./BurnTokenDialog";
 import { TokenIcon } from "./TokenIcon";
+import { TransferTokenDialog } from "./TransferTokenDialog";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -190,6 +191,7 @@ export function WalletPanel({
   onTxSubmitted,
 }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [burnOpen, setBurnOpen] = useState(false);
 
   const tokens = useTokenStore((state) => state.tokens);
@@ -205,17 +207,24 @@ export function WalletPanel({
   const current = balances[safeIndex] ?? null;
   const currentToken =
     current === null ? null : (tokenByHash.get(current.contractHash) ?? null);
-  const burnAvailable =
+  const transferAvailable =
     current !== null &&
     currentToken !== null &&
     isFactoryToken(currentToken) &&
     current.amount > 0n;
+  const burnAvailable = transferAvailable;
 
   useEffect(() => {
     if (!burnAvailable && burnOpen) {
       setBurnOpen(false);
     }
   }, [burnAvailable, burnOpen]);
+
+  useEffect(() => {
+    if (!transferAvailable && transferOpen) {
+      setTransferOpen(false);
+    }
+  }, [transferAvailable, transferOpen]);
 
   function prev() {
     setCurrentIndex((index) => Math.max(0, index - 1));
@@ -323,8 +332,21 @@ export function WalletPanel({
               onDotClick={setCurrentIndex}
             />
 
-            {burnAvailable && current && currentToken && (
-              <div className="mt-4 flex justify-end">
+            {transferAvailable && current && currentToken && address && (
+              <div className="mt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  data-testid="wallet-panel-transfer-action"
+                  onClick={() => setTransferOpen(true)}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold"
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid var(--forge-border-medium)",
+                    color: "var(--forge-text-primary)",
+                  }}
+                >
+                  Transfer
+                </button>
                 <button
                   type="button"
                   data-testid="wallet-panel-burn-action"
@@ -343,6 +365,16 @@ export function WalletPanel({
           </>
         )}
       </div>
+
+      {transferOpen && current && currentToken && address && (
+        <TransferTokenDialog
+          token={currentToken}
+          balance={current}
+          connectedAddress={address}
+          onClose={() => setTransferOpen(false)}
+          onTxSubmitted={onTxSubmitted}
+        />
+      )}
 
       {burnOpen && current && currentToken && (
         <BurnTokenDialog

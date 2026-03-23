@@ -74,7 +74,7 @@ interface NeoDapi {
 }
 
 interface NeoDapiInvokeArg {
-  type: "Hash160" | "Integer" | "String" | "Boolean" | "Array" | "ByteArray";
+  type: "Hash160" | "Integer" | "String" | "Boolean" | "Array" | "ByteArray" | "Any";
   value: unknown;
 }
 
@@ -852,6 +852,26 @@ export async function invokeBurn(
     "burn",
     [{ type: "Integer", value: amount.toString() }],
     `Burn ${amount} raw token units`
+  );
+}
+
+export async function invokeTokenTransfer(
+  tokenHash: string,
+  toAddress: string,
+  amount: bigint
+): Promise<string> {
+  if (!_connectedAddress) throw new WalletNotConnectedError();
+
+  return invokeConnectedOperation(
+    tokenHash,
+    "transfer",
+    [
+      { type: "Hash160", value: addressToScriptHash(_connectedAddress) },
+      { type: "Hash160", value: addressToScriptHash(toAddress) },
+      { type: "Integer", value: amount.toString() },
+      { type: "Any", value: null },
+    ],
+    `Transfer ${amount} raw token units`
   );
 }
 

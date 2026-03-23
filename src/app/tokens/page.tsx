@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ForgeHeader } from "@/components/layout/ForgeHeader";
 import { WalletPanel } from "@/modules/forge/components/WalletPanel";
@@ -26,6 +26,7 @@ export default function TokensPage() {
     gasBalance,
     connect,
     disconnect,
+    refreshBalances,
   } = useWallet();
 
   const factory = useFactoryDeployment(address);
@@ -36,6 +37,7 @@ export default function TokensPage() {
 
   const [view, setView] = useState<PageView>("dashboard");
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const previousFactoryStatusRef = useRef(factory.status);
 
   useEffect(() => {
     if (address && connectionStatus === "connected") {
@@ -48,6 +50,27 @@ export default function TokensPage() {
       void loadWalletHeldTokens(balances);
     }
   }, [balances, loadWalletHeldTokens]);
+
+  useEffect(() => {
+    const previousStatus = previousFactoryStatusRef.current;
+    previousFactoryStatusRef.current = factory.status;
+
+    if (
+      previousStatus !== factory.status &&
+      factory.status === "deployed" &&
+      address &&
+      connectionStatus === "connected"
+    ) {
+      void refreshBalances();
+      void loadTokensForAddress(address);
+    }
+  }, [
+    address,
+    connectionStatus,
+    factory.status,
+    loadTokensForAddress,
+    refreshBalances,
+  ]);
 
   function handleTxSubmitted(
     txHash: string,

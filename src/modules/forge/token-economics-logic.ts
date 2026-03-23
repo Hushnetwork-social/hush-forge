@@ -1,5 +1,7 @@
 import type {
   BurnConfirmationSummary,
+  TransferConfirmationSummary,
+  TransferQuote,
   TokenEconomicsView,
   TokenInfo,
 } from "./types";
@@ -107,5 +109,35 @@ export function buildBurnConfirmationSummary(
     platformFeeDatoshi: economics.platformFeeDatoshi,
     platformFeeDisplay: economics.platformFeeDisplay,
     networkFeeDisclaimer: economics.networkFeeDisclaimer,
+  };
+}
+
+export function buildTransferConfirmationSummary(
+  token: TokenInfo | null,
+  amountRaw: bigint | null,
+  quote: TransferQuote | null
+): TransferConfirmationSummary | null {
+  if (token === null || amountRaw === null || quote === null) return null;
+
+  return {
+    amountRaw,
+    amountDisplay: formatTokenAmount(amountRaw, token.decimals),
+    recipientAmountRaw: quote.recipientAmountRaw,
+    recipientAmountDisplay: formatTokenAmount(
+      quote.recipientAmountRaw,
+      token.decimals
+    ),
+    transferBurnAmountRaw: quote.transferBurnAmountRaw,
+    transferBurnAmountDisplay: formatTokenAmount(
+      quote.transferBurnAmountRaw,
+      token.decimals
+    ),
+    creatorFeeDatoshi: quote.creatorFeeDatoshi,
+    creatorFeeDisplay: formatDatoshiAsGas(quote.creatorFeeDatoshi),
+    platformFeeDatoshi: quote.platformFeeDatoshi,
+    platformFeeDisplay: formatDatoshiAsGas(quote.platformFeeDatoshi),
+    totalGasFeeDatoshi: quote.totalGasFeeDatoshi,
+    totalGasFeeDisplay: formatDatoshiAsGas(quote.totalGasFeeDatoshi),
+    networkFeeDisclaimer: TOKEN_TAX_NETWORK_FEE_DISCLAIMER,
   };
 }

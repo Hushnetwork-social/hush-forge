@@ -137,6 +137,34 @@ export interface BurnConfirmationSummary {
   networkFeeDisclaimer: string;
 }
 
+export interface TransferQuote {
+  grossAmountRaw: bigint;
+  recipientAmountRaw: bigint;
+  transferBurnAmountRaw: bigint;
+  totalTokenBurnedRaw: bigint;
+  platformFeeDatoshi: bigint;
+  creatorFeeDatoshi: bigint;
+  totalGasFeeDatoshi: bigint;
+  isMint: boolean;
+  isDirectBurn: boolean;
+}
+
+export interface TransferConfirmationSummary {
+  amountRaw: bigint | null;
+  amountDisplay: string;
+  recipientAmountRaw: bigint;
+  recipientAmountDisplay: string;
+  transferBurnAmountRaw: bigint;
+  transferBurnAmountDisplay: string;
+  creatorFeeDatoshi: bigint;
+  creatorFeeDisplay: string;
+  platformFeeDatoshi: bigint;
+  platformFeeDisplay: string;
+  totalGasFeeDatoshi: bigint;
+  totalGasFeeDisplay: string;
+  networkFeeDisclaimer: string;
+}
+
 // ---------------------------------------------------------------------------
 // Transaction lifecycle
 // ---------------------------------------------------------------------------

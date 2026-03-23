@@ -224,6 +224,41 @@ describe("TokensPage", () => {
     });
   });
 
+  it("refreshes wallet balances after factory status becomes deployed", () => {
+    const refreshBalances = vi.fn();
+    let factoryStatus: FactoryDeployStatus = "initializing";
+
+    vi.mocked(useWallet).mockReturnValue({
+      walletType: null,
+      address: "NwMe",
+      balances: [],
+      connectionStatus: "connected",
+      errorMessage: null,
+      installedWallets: [],
+      gasBalance: 0n,
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      refreshBalances,
+    });
+
+    vi.mocked(useFactoryDeployment).mockImplementation(() => ({
+      status: factoryStatus,
+      factoryHash: factoryStatus === "deployed" ? "0xfactory" : "",
+      deployError: null,
+      deploy: vi.fn(),
+      initialize: vi.fn(),
+      recheck: vi.fn(),
+    }));
+
+    const { rerender } = render(<TokensPage />);
+    expect(refreshBalances).not.toHaveBeenCalled();
+
+    factoryStatus = "deployed";
+    rerender(<TokensPage />);
+
+    expect(refreshBalances).toHaveBeenCalledTimes(1);
+  });
+
   it("WalletConnectModal opens from header Connect Wallet click", () => {
     render(<TokensPage />);
     fireEvent.click(screen.getByText("Connect Wallet"));

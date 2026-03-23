@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useTokenStore } from "../token-store";
 import type { TokenInfo, WalletBalance } from "../types";
 import { WalletPanel } from "./WalletPanel";
+import { quoteTokenTransfer } from "../transfer-quote-service";
 
 vi.mock("../forge-config", () => ({
   FACTORY_CONTRACT_HASH: "0xfactory",
@@ -17,8 +18,13 @@ vi.mock("../token-metadata-service", () => ({
   resolveTokenMetadata: vi.fn(),
 }));
 
+vi.mock("../transfer-quote-service", () => ({
+  quoteTokenTransfer: vi.fn(),
+}));
+
 vi.mock("../neo-dapi-adapter", () => ({
   invokeBurn: vi.fn(),
+  invokeTokenTransfer: vi.fn(),
 }));
 
 function makeBalance(
@@ -62,6 +68,17 @@ const baseProps = {
 describe("WalletPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(quoteTokenTransfer).mockResolvedValue({
+      grossAmountRaw: 1_000_000_000n,
+      recipientAmountRaw: 980_000_000n,
+      transferBurnAmountRaw: 20_000_000n,
+      totalTokenBurnedRaw: 20_000_000n,
+      platformFeeDatoshi: 1_000_000n,
+      creatorFeeDatoshi: 500_000n,
+      totalGasFeeDatoshi: 1_500_000n,
+      isMint: false,
+      isDirectBurn: false,
+    });
     useTokenStore.setState({
       tokens: [],
       ownTokenHashes: new Set(),
@@ -287,6 +304,7 @@ describe("WalletPanel", () => {
       />
     );
 
+    expect(screen.getByRole("button", { name: "Transfer" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Burn" })).toBeInTheDocument();
   });
 
@@ -342,6 +360,39 @@ describe("WalletPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
       screen.queryByRole("dialog", { name: "Burn HUSH" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens and closes the transfer dialog from the wallet strip", () => {
+    useTokenStore.setState({
+      tokens: [makeToken()],
+    });
+
+    render(
+      <WalletPanel
+        {...baseProps}
+        connectionStatus="connected"
+        address="NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c"
+        balances={[
+          {
+            contractHash: "0xhush",
+            symbol: "HUSH",
+            amount: 1_500_000_000n,
+            decimals: 8,
+            displayAmount: "15.00000000",
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    expect(
+      screen.getByRole("dialog", { name: "Transfer HUSH" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.queryByRole("dialog", { name: "Transfer HUSH" })
     ).not.toBeInTheDocument();
   });
 });

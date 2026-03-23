@@ -67,7 +67,7 @@ function makeEconomics(
     platformFeeDatoshi: 0n,
     platformFeeDisplay: "0 GAS",
     networkFeeDisclaimer:
-      "Network GAS fees are charged separately by the Neo chain and are not part of token taxes.",
+      "Neo network GAS fees are charged separately and may be shown differently by your wallet. They are not part of token taxes.",
     ...overrides,
   };
 }

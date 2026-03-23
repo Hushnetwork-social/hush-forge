@@ -112,6 +112,11 @@ describe("FactoryAdminDashboard", () => {
 
     expect(screen.getByText("Total Claimable GAS")).toBeInTheDocument();
     expect(screen.getByText("2.50000000 GAS")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Claim submission still pays the normal Neo network fee separately in the connected wallet."
+      )
+    ).toBeInTheDocument();
     expect(screen.queryByText(/creation fees/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/update fees/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/transfer fees/i)).not.toBeInTheDocument();

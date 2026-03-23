@@ -71,6 +71,7 @@ function BalanceSlide({
         />
         <div className="min-w-0">
           <p
+            data-testid="wallet-panel-current-symbol"
             className="text-2xl font-bold leading-none"
             style={{ color: "var(--forge-text-primary)" }}
           >
@@ -326,6 +327,7 @@ export function WalletPanel({
               <div className="mt-4 flex justify-end">
                 <button
                   type="button"
+                  data-testid="wallet-panel-burn-action"
                   onClick={() => setBurnOpen(true)}
                   className="rounded-lg px-4 py-2 text-sm font-semibold"
                   style={{

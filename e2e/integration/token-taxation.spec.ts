@@ -13,6 +13,7 @@ const FORGE_ROOT_DIR = path.resolve(__dirname, "../..");
 const BASE_URL = "http://localhost:3000";
 const NEO_RPC_URL = "http://localhost:10332";
 const NEOLINE_ID = "cphhlgmgameodnhkjdmkpanlelnlohao";
+const FACTORY_HASH_STORAGE_KEY = "forge_factory_hash";
 const CLIENT1_ADDRESS = "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c";
 const CLIENT2_ADDRESS = "NhJX9eCbkKtgDrh1S4xMTRaHUGbZ5Be7uU";
 const CLIENT2_WIF = "L1RgqMJEBjdXcuYCMYB6m7viQ9zjkNPjZPAKhhBoXxEsygNXENBb";
@@ -20,6 +21,7 @@ const GAS_HASH = "0xd2a4cff31913016155e38e474a2c06d08be276cf";
 const NEOLINE_PASSWORD: string | undefined = process.env.NEOLINE_PASSWORD;
 const TAXED_TRANSFER_AMOUNT = 10_000n;
 const ZERO_CONFIG_TRANSFER_AMOUNT = 1_000n;
+const BURN_AMOUNT = 1_234n;
 
 declare global {
   interface Window {
@@ -424,6 +426,36 @@ async function invokeTokenTransfer(
   return txid;
 }
 
+async function selectWalletToken(page: Page, symbol: string): Promise<void> {
+  const currentSymbol = page.getByTestId("wallet-panel-current-symbol");
+  for (let step = 0; step < 6; step += 1) {
+    const currentText = (await currentSymbol.textContent().catch(() => null))?.trim();
+    if (currentText === symbol) {
+      return;
+    }
+    const nextButton = page.getByLabel("Next token");
+    const nextVisible = await nextButton.isVisible({ timeout: 1_000 }).catch(() => false);
+    if (!nextVisible || (await nextButton.isDisabled())) {
+      break;
+    }
+    await nextButton.click();
+    await page.waitForTimeout(300);
+  }
+
+  await expect(currentSymbol).toHaveText(symbol, { timeout: 10_000 });
+}
+
+function extractTxHashFromNeoTubeHref(href: string | null): string {
+  if (!href) {
+    throw new Error("Pending NeoTube transaction link was not available");
+  }
+  const match = href.match(/\/transaction\/(0x[0-9a-fA-F]{64})$/);
+  if (!match) {
+    throw new Error(`Could not parse tx hash from href: ${href}`);
+  }
+  return match[1].toLowerCase();
+}
+
 function createTokenViaClient2(
   factoryHash: string,
   symbol: string,
@@ -475,6 +507,12 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     factoryHash = deployFactoryAndParseHash();
     profileCopyDir = createProfileCopy();
     ({ context, page } = await launchWithNeoLine(profileCopyDir));
+    await context.addInitScript(
+      ({ storageKey, hash }) => {
+        window.localStorage.setItem(storageKey, hash);
+      },
+      { storageKey: FACTORY_HASH_STORAGE_KEY, hash: factoryHash }
+    );
   });
 
   test.afterEach(async () => {
@@ -546,5 +584,65 @@ test.describe("FEAT-093 Token Taxation Integration", () => {
     expect(creatorGasAfter - creatorGasBefore).toBe(0n);
     expect(factoryGasAfter - factoryGasBefore).toBe(0n);
     expect(supplyAfter - supplyBefore).toBe(0n);
+  });
+
+  test("NeoLine holder burn opens from the wallet strip and shows the tax summary", async () => {
+    const tokenHash = createTokenViaClient2(factoryHash, "BRN93", 500_000);
+    runFixture(["set-platform-fee", factoryHash, "1000000"]);
+    mintHolderBalance(factoryHash, tokenHash, 100_000n);
+
+    await connectWalletOnTokensPage(page, context);
+    await selectWalletToken(page, "BRN93");
+    await expect(page.getByTestId("wallet-panel-burn-action")).toBeVisible({
+      timeout: 10_000,
+    });
+
+    const holderBefore = await readNep17Balance(tokenHash, CLIENT1_ADDRESS);
+    const creatorGasBefore = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
+    const factoryGasBefore = await readNep17Balance(GAS_HASH, factoryHash);
+    const supplyBefore = await readTotalSupply(tokenHash);
+
+    await page.getByTestId("wallet-panel-burn-action").click();
+    const dialog = page.getByRole("dialog", { name: "Burn BRN93" });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByLabel("Burn economics summary")).toContainText(
+      "Creator fee"
+    );
+    await expect(dialog).toContainText("0.005 GAS");
+    await expect(dialog).toContainText("Platform fee");
+    await expect(dialog).toContainText("0.01 GAS");
+    await expect(dialog).toContainText(
+      "Neo network GAS fees are charged separately and may be shown differently by your wallet. They are not part of token taxes."
+    );
+
+    await dialog.getByLabel("Amount to burn").fill(BURN_AMOUNT.toString());
+
+    await signInNeoLine(context, async () => {
+      await dialog.getByRole("button", { name: "Burn", exact: true }).click();
+    });
+
+    const pendingToast = page.getByRole("status", {
+      name: "Pending transaction status",
+    });
+    await expect(pendingToast).toContainText(
+      "Waiting for BRN93 burn confirmation...",
+      { timeout: 30_000 }
+    );
+
+    const txHref = await pendingToast
+      .getByRole("link", { name: /Track transaction on NeoTube/i })
+      .getAttribute("href");
+    const txid = extractTxHashFromNeoTubeHref(txHref);
+    await waitForTx(txid);
+
+    const holderAfter = await readNep17Balance(tokenHash, CLIENT1_ADDRESS);
+    const creatorGasAfter = await readNep17Balance(GAS_HASH, CLIENT2_ADDRESS);
+    const factoryGasAfter = await readNep17Balance(GAS_HASH, factoryHash);
+    const supplyAfter = await readTotalSupply(tokenHash);
+
+    expect(holderBefore - holderAfter).toBe(BURN_AMOUNT);
+    expect(creatorGasAfter - creatorGasBefore).toBe(500_000n);
+    expect(factoryGasAfter - factoryGasBefore).toBe(1_000_000n);
+    expect(supplyBefore - supplyAfter).toBe(BURN_AMOUNT);
   });
 });

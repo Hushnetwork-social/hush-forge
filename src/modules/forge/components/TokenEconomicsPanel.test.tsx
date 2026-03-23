@@ -14,13 +14,18 @@ describe("TokenEconomicsPanel", () => {
           platformFeeDatoshi: 0n,
           platformFeeDisplay: "0 GAS",
           networkFeeDisclaimer:
-            "Network GAS fees are charged separately by the Neo chain and are not part of token taxes.",
+            "Neo network GAS fees are charged separately and may be shown differently by your wallet. They are not part of token taxes.",
         }}
       />
     );
 
     expect(
       screen.getByRole("heading", { name: "Token Economics" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "These are the current contract-enforced values for TokenFactory transfers and holder burns. Wallets may present chain fees separately at submission time."
+      )
     ).toBeInTheDocument();
     expect(screen.getByText("Burn Rate")).toBeInTheDocument();
     expect(screen.getByText("Creator Fee")).toBeInTheDocument();
@@ -29,7 +34,7 @@ describe("TokenEconomicsPanel", () => {
     expect(screen.getAllByText("0 GAS")).toHaveLength(2);
     expect(
       screen.getByText(
-        "Network GAS fees are charged separately by the Neo chain and are not part of token taxes."
+        "Neo network GAS fees are charged separately and may be shown differently by your wallet. They are not part of token taxes."
       )
     ).toBeInTheDocument();
   });

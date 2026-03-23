@@ -7,7 +7,7 @@ import type {
 const GAS_FACTOR = 100_000_000n;
 
 export const TOKEN_TAX_NETWORK_FEE_DISCLAIMER =
-  "Network GAS fees are charged separately by the Neo chain and are not part of token taxes.";
+  "Neo network GAS fees are charged separately and may be shown differently by your wallet. They are not part of token taxes.";
 
 function trimTrailingFractionZeros(value: string): string {
   return value.replace(/\.?0+$/, "");

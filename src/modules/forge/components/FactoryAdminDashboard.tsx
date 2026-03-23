@@ -419,6 +419,13 @@ export function FactoryAdminDashboard({
               >
                 {assetsLoading ? "Loading..." : claimableGasSummary.displayAmount}
               </p>
+              <p
+                className="mt-2 text-xs leading-relaxed"
+                style={{ color: "var(--forge-text-muted)" }}
+              >
+                Claim submission still pays the normal Neo network fee
+                separately in the connected wallet.
+              </p>
             </div>
 
             {assetsLoading ? (

@@ -27,8 +27,9 @@ export function TokenEconomicsPanel({ economics }: Props) {
           className="mt-1 text-xs leading-relaxed"
           style={{ color: "var(--forge-text-muted)" }}
         >
-          Current contract-enforced values for transfer and burn actions on this
-          TokenFactory token.
+          These are the current contract-enforced values for TokenFactory
+          transfers and holder burns. Wallets may present chain fees separately
+          at submission time.
         </p>
       </div>
 

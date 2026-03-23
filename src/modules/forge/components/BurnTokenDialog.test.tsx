@@ -61,7 +61,7 @@ describe("BurnTokenDialog", () => {
     expect(screen.getByText("0.025 GAS")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Network GAS fees are charged separately by the Neo chain and are not part of token taxes."
+        "Neo network GAS fees are charged separately and may be shown differently by your wallet. They are not part of token taxes."
       )
     ).toBeInTheDocument();
   });

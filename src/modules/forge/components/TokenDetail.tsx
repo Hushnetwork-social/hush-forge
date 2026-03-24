@@ -12,6 +12,7 @@ import { getRuntimeFactoryHash, NEOTUBE_BASE_URL } from "../forge-config";
 import { BurnBadge } from "./BurnBadge";
 import { LockBadge } from "./LockBadge";
 import { TokenAdminPanel } from "./TokenAdminPanel";
+import { TokenEconomicsPanel } from "./TokenEconomicsPanel";
 
 interface Props {
   contractHash: string;
@@ -85,25 +86,42 @@ function ModeBadge({ mode }: { mode: string }) {
 }
 
 export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
-  const { token, loading, error, isOwnToken, isUpgradeable } = useTokenDetail(contractHash);
+  const { token, economics, loading, error, isOwnToken, isUpgradeable } =
+    useTokenDetail(contractHash);
   const walletAddress = useWalletStore((s) => s.address);
   const { transfers, supported } = useTokenTransfers(contractHash, walletAddress);
   const [copied, setCopied] = useState(false);
-  const [dismissedHintFor, setDismissedHintFor] = useState<string | null>(null);
+  const adminHintStorageKey = `forge.adminHintDismissed.${contractHash}`;
+  const [hintDismissedInSession, setHintDismissedInSession] = useState(false);
+  const hintDismissedPersisted =
+    typeof localStorage !== "undefined" &&
+    localStorage.getItem(adminHintStorageKey) === "1";
   const showAdminHint =
     isOwnToken &&
     isUpgradeable &&
     !(token?.locked ?? false) &&
-    dismissedHintFor !== contractHash;
+    !hintDismissedInSession &&
+    !hintDismissedPersisted;
+
+  function dismissAdminHint() {
+    setHintDismissedInSession(true);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(adminHintStorageKey, "1");
+    }
+  }
 
   useEffect(() => {
     if (!showAdminHint) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setDismissedHintFor(contractHash);
+      if (e.key !== "Escape") return;
+      setHintDismissedInSession(true);
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(adminHintStorageKey, "1");
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showAdminHint, contractHash]);
+  }, [showAdminHint, adminHintStorageKey]);
 
   function copyHash() {
     navigator.clipboard
@@ -129,7 +147,7 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
           data-testid="admin-update-hint-overlay"
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.55)" }}
-          onClick={() => setDismissedHintFor(contractHash)}
+          onClick={dismissAdminHint}
         >
           <section
             role="dialog"
@@ -156,7 +174,7 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
                 type="button"
                 className="px-4 py-2 rounded-lg text-sm font-semibold"
                 style={{ background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))", color: "var(--forge-text-primary)" }}
-                onClick={() => setDismissedHintFor(contractHash)}
+                onClick={dismissAdminHint}
               >
                 OK
               </button>
@@ -232,6 +250,8 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
             {token.creator && <StatCard label="Creator" value={truncateHash(token.creator)} />}
             {token.createdAt !== null && <StatCard label="Created" value={formatDate(token.createdAt)} />}
           </dl>
+
+          {economics && <TokenEconomicsPanel economics={economics} />}
 
           {!token.creator && <p className="text-xs px-1" style={{ color: "var(--forge-text-muted)" }}>Not registered via Forge</p>}
 

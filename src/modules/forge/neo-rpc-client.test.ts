@@ -8,7 +8,16 @@ vi.mock("./neo-dapi-adapter", () => ({
 }));
 
 // Import after mocking
-const { invokeFunction, getApplicationLog, getBlockCount, getTokenBalance, getNep17Transfers, getNep17Balances } =
+const {
+  invokeFunction,
+  invokeScript,
+  calculateNetworkFee,
+  getApplicationLog,
+  getBlockCount,
+  getTokenBalance,
+  getNep17Transfers,
+  getNep17Balances,
+} =
   await import("./neo-rpc-client");
 
 // ---------------------------------------------------------------------------
@@ -115,6 +124,88 @@ describe("invokeFunction", () => {
     await expect(invokeFunction("0xfactory", "GetMinFee", [])).rejects.toThrow(
       /503/
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// invokeScript
+// ---------------------------------------------------------------------------
+
+describe("invokeScript", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("base64-encodes hex scripts before sending them to RPC", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          state: "HALT",
+          gasconsumed: "100000",
+          script: "YWJj",
+          stack: [],
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await invokeScript("616263", [
+      { account: "0x1111111111111111111111111111111111111111", scopes: "CalledByEntry" },
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    const parsed = JSON.parse((init as RequestInit).body as string);
+    expect(parsed.method).toBe("invokescript");
+    expect(parsed.params[0]).toBe("YWJj");
+  });
+
+  it("throws NeoRpcError when the simulated script faults", async () => {
+    mockFetch({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        state: "FAULT",
+        gasconsumed: "100000",
+        script: "YWJj",
+        stack: [],
+        exception: "Bad script",
+      },
+    });
+
+    await expect(invokeScript("616263")).rejects.toThrow(NeoRpcError);
+    await expect(invokeScript("616263")).rejects.toThrow(/FAULT/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// calculateNetworkFee
+// ---------------------------------------------------------------------------
+
+describe("calculateNetworkFee", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("base64-encodes unsigned transactions before sending them to RPC", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        jsonrpc: "2.0",
+        id: 1,
+        result: "12345",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const fee = await calculateNetworkFee("616263");
+
+    expect(fee).toBe(12345n);
+    const [, init] = fetchMock.mock.calls[0];
+    const parsed = JSON.parse((init as RequestInit).body as string);
+    expect(parsed.method).toBe("calculatenetworkfee");
+    expect(parsed.params[0]).toBe("YWJj");
   });
 });
 

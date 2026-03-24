@@ -93,7 +93,8 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("HUSH") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("HushToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "10000000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "10000000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xabc");
 
@@ -116,7 +117,8 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ICN") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("IconToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xabc");
 
@@ -131,7 +133,8 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("NIC") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("NicToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xabc");
 
@@ -231,7 +234,9 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("BRN") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("BurnToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "200" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xbrn");
     expect(result.burnRate).toBe(200);
@@ -245,7 +250,8 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("MAX") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("MaxToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xmax");
     expect(result.maxSupply).toBe("1000000000000000000");
@@ -259,7 +265,8 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LCK") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LockToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xlck");
     expect(result.locked).toBe(true);
@@ -273,7 +280,8 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ULK") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("UnlockToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xulk");
     expect(result.locked).toBe(false);
@@ -287,7 +295,8 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("OLD") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("OldToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "5000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "5000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xold");
     expect(result.burnRate).toBe(0);
@@ -333,5 +342,103 @@ describe("resolveTokenMetadata", () => {
     expect(result.symbol).toBe("TOK");
     expect(result.decimals).toBe(8);
     expect(result.supply).toBe(1_000_000n);
+  });
+
+  it("loads creator and platform fee rates for factory tokens", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("FEE", 0xab, "1000", "community", "1", "100")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FEE") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FeeToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "25" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "150000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "250000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "123456" }]));
+
+    const result = await resolveTokenMetadata("0xfee");
+
+    expect(result.burnRate).toBe(25);
+    expect(result.creatorFeeRate).toBe(150000);
+    expect(result.platformFeeRate).toBe(250000);
+    expect(result.claimableCreatorFee).toBe(123456n);
+  });
+
+  it("keeps explicit zero economics values for zero-config factory tokens", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("ZER", 0xab, "1000", "community", "1", "100")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ZER") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ZeroToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]));
+
+    const result = await resolveTokenMetadata("0xzer");
+
+    expect(result.burnRate).toBe(0);
+    expect(result.creatorFeeRate).toBe(0);
+    expect(result.platformFeeRate).toBe(0);
+    expect(result.claimableCreatorFee).toBe(0n);
+  });
+
+  it("leaves economics undefined for non-factory tokens", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(haltResult([{ type: "Any", value: null }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("EXT") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("ExternalToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "5000" }]));
+
+    const result = await resolveTokenMetadata("0xext");
+
+    expect(result.burnRate).toBeUndefined();
+    expect(result.creatorFeeRate).toBeUndefined();
+    expect(result.platformFeeRate).toBeUndefined();
+    expect(result.claimableCreatorFee).toBeUndefined();
+  });
+
+  it("prefers live totalSupply over stale factory registry supply", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("SUP", 0xab, "1000", "community", "1", "100")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("SUP") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("SupplyToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "750" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
+
+    const result = await resolveTokenMetadata("0xsup");
+
+    expect(result.supply).toBe(750n);
+  });
+
+  it("falls back to factory burnRate when the live getter is unavailable", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("FBR", 0xab, "1000", "community", "1", "100", "", "125")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FBR") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FallbackBurn") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockRejectedValueOnce(new Error("burn getter unavailable"))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "100000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "200000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "300000" }]));
+
+    const result = await resolveTokenMetadata("0xfbr");
+
+    expect(result.burnRate).toBe(125);
+    expect(result.creatorFeeRate).toBe(100000);
+    expect(result.platformFeeRate).toBe(200000);
+    expect(result.claimableCreatorFee).toBe(300000n);
   });
 });

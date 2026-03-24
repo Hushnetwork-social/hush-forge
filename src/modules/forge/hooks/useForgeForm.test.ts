@@ -5,6 +5,7 @@ import { useForgeForm } from "./useForgeForm";
 // Mock dependencies
 vi.mock("../forge-service", () => ({
   fetchCreationFee: vi.fn(),
+  quoteCreationCost: vi.fn(),
   checkSymbolAvailability: vi.fn(),
   submitForge: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock("../neo-dapi-adapter", () => ({
 import {
   checkSymbolAvailability as mockCheckSymbolAvailability,
   fetchCreationFee as mockFetchFee,
+  quoteCreationCost as mockQuoteCreationCost,
   submitForge as mockSubmitForge,
 } from "../forge-service";
 import { WalletRejectedError } from "../neo-dapi-adapter";
@@ -30,11 +32,18 @@ import { WalletRejectedError } from "../neo-dapi-adapter";
 // ---------------------------------------------------------------------------
 
 const DEFAULT_FEE = { datoshi: 1_500_000_000n, displayGas: "15" };
+const DEFAULT_CREATION_QUOTE = {
+  factoryFeeDatoshi: 1_500_000_000n,
+  estimatedSystemFeeDatoshi: 1_157_121_145n,
+  estimatedNetworkFeeDatoshi: 1_275_520n,
+  estimatedChainFeeDatoshi: 1_158_396_665n,
+  estimatedTotalWalletOutflowDatoshi: 2_658_396_665n,
+};
 
 /** Renders hook with fee pre-loaded (feeLoading = false). */
 async function renderWithFeeLoaded(
-  address: string | null = null,
-  gasBalance = 2_000_000_000n
+  address: string | null = "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+  gasBalance = 3_000_000_000n
 ) {
   vi.mocked(mockFetchFee).mockResolvedValue(DEFAULT_FEE);
   const hook = renderHook(() => useForgeForm(address, gasBalance));
@@ -53,6 +62,7 @@ describe("useForgeForm", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(mockCheckSymbolAvailability).mockResolvedValue({ available: true });
+    vi.mocked(mockQuoteCreationCost).mockResolvedValue(DEFAULT_CREATION_QUOTE);
   });
 
   // -------------------------------------------------------------------------
@@ -122,6 +132,34 @@ describe("useForgeForm", () => {
     vi.mocked(mockFetchFee).mockReturnValue(new Promise(() => {})); // never resolves
     const { result } = renderHook(() => useForgeForm(null, 0n));
     expect(result.current.gasCheckResult).toBeNull();
+  });
+
+  it("loads a creation-cost quote for a valid connected form and uses the total as the required GAS", async () => {
+    const { result } = await renderWithFeeLoaded(
+      "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+      3_000_000_000n
+    );
+
+    await act(async () => {
+      result.current.setName("OneToken");
+      result.current.setSymbol("ONE");
+      result.current.setSupply("1000000");
+      result.current.setDecimals("8");
+      result.current.setCreatorFee("0.05");
+    });
+
+    await waitFor(() => expect(result.current.creationCostLoading).toBe(false));
+    await waitFor(() =>
+      expect(result.current.creationCostQuote?.estimatedTotalWalletOutflowDatoshi).toBe(
+        DEFAULT_CREATION_QUOTE.estimatedTotalWalletOutflowDatoshi
+      )
+    );
+
+    expect(mockQuoteCreationCost).toHaveBeenCalledTimes(1);
+    expect(result.current.gasCheckResult?.required).toBe(
+      DEFAULT_CREATION_QUOTE.estimatedTotalWalletOutflowDatoshi
+    );
+    expect(result.current.canSubmit).toBe(true);
   });
 
   // -------------------------------------------------------------------------
@@ -217,6 +255,8 @@ describe("useForgeForm", () => {
       // imageUrl stays empty — default ""
     });
 
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
+
     await act(async () => {
       await result.current.submit();
     });
@@ -236,6 +276,8 @@ describe("useForgeForm", () => {
       result.current.setDecimals("8");
       result.current.setImageUrl("https://example.com/icon.png");
     });
+
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
 
     await act(async () => {
       await result.current.submit();
@@ -277,6 +319,8 @@ describe("useForgeForm", () => {
       result.current.setDecimals("8");
     });
 
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
+
     await act(async () => {
       await result.current.submit();
     });
@@ -297,6 +341,8 @@ describe("useForgeForm", () => {
       result.current.setSupply("10000000");
       result.current.setDecimals("8");
     });
+
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
 
     await act(async () => {
       await result.current.submit();
@@ -323,6 +369,8 @@ describe("useForgeForm", () => {
       result.current.setDecimals("8");
     });
 
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
+
     await act(async () => {
       await result.current.submit();
     });
@@ -344,6 +392,8 @@ describe("useForgeForm", () => {
       result.current.setSupply("10000000");
       result.current.setDecimals("8");
     });
+
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
 
     await act(async () => {
       await result.current.submit();
@@ -369,6 +419,8 @@ describe("useForgeForm", () => {
       result.current.setSupply("10000000");
       result.current.setDecimals("8");
     });
+
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
 
     await act(async () => {
       await result.current.submit();

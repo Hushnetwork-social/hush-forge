@@ -25,6 +25,8 @@ export interface TokenInfo {
   locked?: boolean; // true if token is permanently locked
   mintable?: boolean; // false for fixed supply tokens (hides supply admin tab)
   creatorFeeRate?: number; // per-transfer GAS fee in datoshi
+  platformFeeRate?: number; // per-transfer GAS fee in datoshi
+  claimableCreatorFee?: bigint; // creator-fee GAS currently accrued in the token contract
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */
@@ -83,6 +85,13 @@ export interface ClaimableFactoryAsset {
   partialClaimSupported: boolean;
 }
 
+export interface ClaimableFactoryGasSummary {
+  asset: ClaimableFactoryAsset | null;
+  amount: bigint;
+  displayAmount: string;
+  available: boolean;
+}
+
 export interface FactoryAdminAccess {
   connectedAddress: string | null;
   connectedHash: string | null;
@@ -106,6 +115,62 @@ export interface GovernanceErrorInfo {
   category: GovernanceErrorCategory;
   message: string;
   technicalDetails: string | null;
+}
+
+export interface TokenEconomicsView {
+  burnRateBps: number;
+  burnRateDisplay: string;
+  creatorFeeDatoshi: bigint;
+  creatorFeeDisplay: string;
+  platformFeeDatoshi: bigint;
+  platformFeeDisplay: string;
+  networkFeeDisclaimer: string;
+}
+
+export interface BurnConfirmationSummary {
+  amountRaw: bigint | null;
+  amountDisplay: string;
+  creatorFeeDatoshi: bigint;
+  creatorFeeDisplay: string;
+  platformFeeDatoshi: bigint;
+  platformFeeDisplay: string;
+  networkFeeDisclaimer: string;
+}
+
+export interface CreationCostQuote {
+  factoryFeeDatoshi: bigint;
+  estimatedSystemFeeDatoshi: bigint;
+  estimatedNetworkFeeDatoshi: bigint;
+  estimatedChainFeeDatoshi: bigint;
+  estimatedTotalWalletOutflowDatoshi: bigint;
+}
+
+export interface TransferQuote {
+  grossAmountRaw: bigint;
+  recipientAmountRaw: bigint;
+  transferBurnAmountRaw: bigint;
+  totalTokenBurnedRaw: bigint;
+  platformFeeDatoshi: bigint;
+  creatorFeeDatoshi: bigint;
+  totalGasFeeDatoshi: bigint;
+  isMint: boolean;
+  isDirectBurn: boolean;
+}
+
+export interface TransferConfirmationSummary {
+  amountRaw: bigint | null;
+  amountDisplay: string;
+  recipientAmountRaw: bigint;
+  recipientAmountDisplay: string;
+  transferBurnAmountRaw: bigint;
+  transferBurnAmountDisplay: string;
+  creatorFeeDatoshi: bigint;
+  creatorFeeDisplay: string;
+  platformFeeDatoshi: bigint;
+  platformFeeDisplay: string;
+  totalGasFeeDatoshi: bigint;
+  totalGasFeeDisplay: string;
+  networkFeeDisclaimer: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +226,13 @@ export interface TokenCreatedEvent {
 export interface RpcStackItem {
   type: string;
   value: unknown;
+}
+
+export interface RpcSigner {
+  account: string;
+  scopes: "None" | "CalledByEntry" | "CustomContracts" | "CustomGroups" | "Global";
+  allowedContracts?: string[];
+  allowedGroups?: string[];
 }
 
 export interface RpcExecution {

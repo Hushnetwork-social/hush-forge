@@ -5,6 +5,7 @@ import {
   checkGasBalance,
   pollForConfirmation,
   parseTokenCreatedEvent,
+  quoteCreationCost,
   TxFaultedError,
   TxTimeoutError,
 } from "./forge-service";
@@ -21,8 +22,12 @@ vi.mock("./forge-config", () => ({
 }));
 
 vi.mock("./neo-rpc-client", () => ({
+  addressToHash160: vi.fn((value: string) => value),
+  calculateNetworkFee: vi.fn(),
   getAllFactoryTokenHashes: vi.fn(),
   invokeFunction: vi.fn(),
+  invokeScript: vi.fn(),
+  getBlockCount: vi.fn(),
   getApplicationLog: vi.fn(),
   getRawMemPool: vi.fn(),
   getTokenBalance: vi.fn(),
@@ -33,8 +38,12 @@ vi.mock("./neo-dapi-adapter", () => ({
 }));
 
 import {
+  addressToHash160 as mockAddressToHash160,
+  calculateNetworkFee as mockCalculateNetworkFee,
   getAllFactoryTokenHashes as mockGetAllFactoryTokenHashes,
   invokeFunction as mockInvokeFunction,
+  invokeScript as mockInvokeScript,
+  getBlockCount as mockGetBlockCount,
   getApplicationLog as mockGetApplicationLog,
   getRawMemPool as mockGetRawMemPool,
   getTokenBalance as mockGetTokenBalance,
@@ -142,6 +151,54 @@ describe("fetchCreationFee", () => {
     const fee = await fetchCreationFee();
 
     expect(fee.datoshi).toBe(1_500_000_000n);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// quoteCreationCost
+// ---------------------------------------------------------------------------
+
+describe("quoteCreationCost", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(mockGetRuntimeFactoryHash).mockReturnValue(
+      "0x2222222222222222222222222222222222222222"
+    );
+    vi.mocked(mockAddressToHash160).mockReturnValue(
+      "0x1111111111111111111111111111111111111111"
+    );
+    vi.mocked(mockInvokeScript).mockResolvedValue({
+      state: "HALT",
+      gasconsumed: "1157121145",
+      script: "deadbeef",
+      stack: [],
+    });
+    vi.mocked(mockGetBlockCount).mockResolvedValue(1234);
+    vi.mocked(mockCalculateNetworkFee).mockResolvedValue(1_275_520n);
+  });
+
+  it("returns factory fee, chain fee, and total wallet outflow for the current create payload", async () => {
+    const quote = await quoteCreationCost(
+      "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+      {
+        name: "OneToken",
+        symbol: "ONE",
+        supply: 1_000_000_000_000_00n,
+        decimals: 8,
+        mode: "community",
+        imageUrl: "https://example.com/one.png",
+        creatorFeeRate: 5_000_000,
+      },
+      1_500_000_000n
+    );
+
+    expect(mockInvokeScript).toHaveBeenCalledTimes(1);
+    expect(mockCalculateNetworkFee).toHaveBeenCalledTimes(1);
+    expect(quote.factoryFeeDatoshi).toBe(1_500_000_000n);
+    expect(quote.estimatedSystemFeeDatoshi).toBe(1_272_833_259n);
+    expect(quote.estimatedNetworkFeeDatoshi).toBe(1_275_520n);
+    expect(quote.estimatedChainFeeDatoshi).toBe(1_274_108_779n);
+    expect(quote.estimatedTotalWalletOutflowDatoshi).toBe(2_774_108_779n);
   });
 });
 

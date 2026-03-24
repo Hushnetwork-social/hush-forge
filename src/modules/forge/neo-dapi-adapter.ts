@@ -74,7 +74,7 @@ interface NeoDapi {
 }
 
 interface NeoDapiInvokeArg {
-  type: "Hash160" | "Integer" | "String" | "Boolean" | "Array" | "ByteArray";
+  type: "Hash160" | "Integer" | "String" | "Boolean" | "Array" | "ByteArray" | "Any";
   value: unknown;
 }
 
@@ -358,7 +358,7 @@ function isWalletRejection(err: unknown): boolean {
 }
 
 async function invokeConnectedOperation(
-  factoryHash: string,
+  scriptHash: string,
   operation: string,
   args: NeoDapiInvokeArg[],
   description: string
@@ -367,7 +367,7 @@ async function invokeConnectedOperation(
 
   try {
     const result = await _dapi.invoke({
-      scriptHash: factoryHash,
+      scriptHash,
       operation,
       args,
       signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
@@ -841,6 +841,61 @@ export async function invokeApplyTokenChanges(
     if (isWalletRejection(err)) throw new WalletRejectedError();
     throw err;
   }
+}
+
+export async function invokeBurn(
+  tokenHash: string,
+  amount: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    tokenHash,
+    "burn",
+    [{ type: "Integer", value: amount.toString() }],
+    `Burn ${amount} raw token units`
+  );
+}
+
+export async function invokeTokenTransfer(
+  tokenHash: string,
+  toAddress: string,
+  amount: bigint
+): Promise<string> {
+  if (!_connectedAddress) throw new WalletNotConnectedError();
+
+  return invokeConnectedOperation(
+    tokenHash,
+    "transfer",
+    [
+      { type: "Hash160", value: addressToScriptHash(_connectedAddress) },
+      { type: "Hash160", value: addressToScriptHash(toAddress) },
+      { type: "Integer", value: amount.toString() },
+      { type: "Any", value: null },
+    ],
+    `Transfer ${amount} raw token units`
+  );
+}
+
+export async function invokeClaimCreatorFees(
+  tokenHash: string
+): Promise<string> {
+  return invokeConnectedOperation(
+    tokenHash,
+    "claimCreatorFees",
+    [],
+    "Claim full creator fee balance from token"
+  );
+}
+
+export async function invokeClaimCreatorFee(
+  tokenHash: string,
+  amount: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    tokenHash,
+    "claimCreatorFee",
+    [{ type: "Integer", value: amount.toString() }],
+    `Claim ${amount} raw creator-fee units from token`
+  );
 }
 
 export async function invokeSetCreationFee(

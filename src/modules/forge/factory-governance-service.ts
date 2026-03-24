@@ -2,10 +2,13 @@ import { getNep17Balances, invokeFunction } from "./neo-rpc-client";
 import { resolveTokenMetadata } from "./token-metadata-service";
 import type {
   ClaimableFactoryAsset,
+  ClaimableFactoryGasSummary,
   FactoryConfig,
   InvokeResult,
   RpcStackItem,
 } from "./types";
+
+const GAS_CONTRACT_HASH = "0xd2a4cff31913016155e38e474a2c06d08be276cf";
 
 function expectStackItem(values: RpcStackItem[], index: number): RpcStackItem {
   const item = values[index];
@@ -114,4 +117,35 @@ export async function fetchClaimableFactoryAssets(
   );
 
   return assets;
+}
+
+export function getClaimableFactoryGasAsset(
+  assets: ClaimableFactoryAsset[]
+): ClaimableFactoryAsset | null {
+  return (
+    assets.find(
+      (asset) => asset.contractHash.toLowerCase() === GAS_CONTRACT_HASH
+    ) ?? null
+  );
+}
+
+export function getClaimableFactoryGasSummary(
+  assets: ClaimableFactoryAsset[]
+): ClaimableFactoryGasSummary {
+  const asset = getClaimableFactoryGasAsset(assets);
+  if (asset === null) {
+    return {
+      asset: null,
+      amount: 0n,
+      displayAmount: "0 GAS",
+      available: false,
+    };
+  }
+
+  return {
+    asset,
+    amount: asset.amount,
+    displayAmount: `${asset.displayAmount} GAS`,
+    available: true,
+  };
 }

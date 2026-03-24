@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { TokenDetail } from "./TokenDetail";
 import { useTokenDetail } from "../hooks/useTokenDetail";
 import type { TokenDetailResult } from "../hooks/useTokenDetail";
-import type { TokenInfo } from "../types";
+import type { TokenEconomicsView, TokenInfo } from "../types";
 
 vi.mock("../hooks/useTokenDetail", () => ({
   useTokenDetail: vi.fn(),
@@ -47,6 +47,7 @@ function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
 function makeDetailResult(overrides: Partial<TokenDetailResult> = {}): TokenDetailResult {
   return {
     token: makeToken(),
+    economics: null,
     loading: false,
     error: null,
     isOwnToken: false,
@@ -55,9 +56,26 @@ function makeDetailResult(overrides: Partial<TokenDetailResult> = {}): TokenDeta
   };
 }
 
+function makeEconomics(
+  overrides: Partial<TokenEconomicsView> = {}
+): TokenEconomicsView {
+  return {
+    burnRateBps: 0,
+    burnRateDisplay: "0.00%",
+    creatorFeeDatoshi: 0n,
+    creatorFeeDisplay: "0 GAS",
+    platformFeeDatoshi: 0n,
+    platformFeeDisplay: "0 GAS",
+    networkFeeDisclaimer:
+      "Neo network GAS fees are charged separately and may be shown differently by your wallet. They are not part of token taxes.",
+    ...overrides,
+  };
+}
+
 describe("TokenDetail", () => {
   beforeEach(() => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult());
+    window.localStorage.clear();
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       writable: true,
@@ -103,6 +121,19 @@ describe("TokenDetail", () => {
     );
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
+  });
+
+  it("persists admin update hint dismissal for the same token", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({ isOwnToken: true, isUpgradeable: true })
+    );
+    const { rerender } = render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
+
+    rerender(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
     expect(screen.queryByRole("dialog", { name: "Admin update options" })).not.toBeInTheDocument();
   });
 
@@ -191,5 +222,22 @@ describe("TokenDetail", () => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ token: null, error: "Token not found" }));
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
     expect(screen.getByText("Token not found")).toBeInTheDocument();
+  });
+
+  it("renders the public token economics panel for non-owner visitors", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({
+        isOwnToken: false,
+        economics: makeEconomics(),
+      })
+    );
+
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Token Economics" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("0.00%")).toBeInTheDocument();
+    expect(screen.getAllByText("0 GAS")).toHaveLength(2);
   });
 });

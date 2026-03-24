@@ -16,7 +16,7 @@ const config: FactoryConfig = {
 
 const assets: ClaimableFactoryAsset[] = [
   {
-    contractHash: "0xresolved",
+    contractHash: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
     symbol: "GAS",
     name: "GasToken",
     amount: 250_000_000n,
@@ -105,6 +105,21 @@ describe("FactoryAdminDashboard", () => {
     expect(
       screen.getByText("Partial claim is unavailable when asset decimals cannot be resolved.")
     ).toBeInTheDocument();
+  });
+
+  it("shows a total claimable GAS summary without source breakdown", () => {
+    renderDashboard();
+
+    expect(screen.getByText("Total Claimable GAS")).toBeInTheDocument();
+    expect(screen.getByText("2.50000000 GAS")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Claim submission still pays the normal Neo network fee separately in the connected wallet."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/creation fees/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/update fees/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/transfer fees/i)).not.toBeInTheDocument();
   });
 
   it("locks unrelated actions while one mutation is active", () => {

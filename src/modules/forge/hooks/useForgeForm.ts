@@ -7,10 +7,11 @@ import { WalletRejectedError } from "../neo-dapi-adapter";
 import {
   checkSymbolAvailability,
   fetchCreationFee,
+  quoteCreationCost,
   submitForge,
   type GasBalanceCheck,
 } from "../forge-service";
-import type { ForgeParams } from "../types";
+import type { CreationCostQuote, ForgeParams } from "../types";
 
 export type ImagePreviewState = "idle" | "loading" | "ok" | "error";
 
@@ -35,13 +36,94 @@ export interface UseForgeFormResult {
   creationFeeDatoshi: bigint;
   creationFeeDisplay: string;
   feeLoading: boolean;
+  creationCostQuote: CreationCostQuote | null;
+  creationCostLoading: boolean;
+  creationCostError: string | null;
 
   gasCheckResult: GasBalanceCheck | null;
 
+  canSubmit: boolean;
   submitting: boolean;
   submittedTxHash: string | null;
   submitError: string | null;
   submit: () => Promise<void>;
+}
+
+function getValidationErrors(fields: {
+  name: string;
+  symbol: string;
+  supply: string;
+  decimals: string;
+  imageUrl: string;
+  creatorFee: string;
+}): Record<string, string> {
+  const errs: Record<string, string> = {};
+
+  if (!fields.name.trim()) {
+    errs.name = "Name is required";
+  }
+
+  if (!/^[A-Z]{2,10}$/.test(fields.symbol)) {
+    errs.symbol = "Symbol must be 2-10 uppercase letters only";
+  }
+
+  const supplyNum = Number(fields.supply);
+  if (
+    !fields.supply ||
+    Number.isNaN(supplyNum) ||
+    supplyNum <= 0 ||
+    !Number.isInteger(supplyNum)
+  ) {
+    errs.supply = "Supply must be a positive integer";
+  }
+
+  const decimalsNum = Number(fields.decimals);
+  if (
+    fields.decimals === "" ||
+    Number.isNaN(decimalsNum) ||
+    decimalsNum < 0 ||
+    decimalsNum > 18 ||
+    !Number.isInteger(decimalsNum)
+  ) {
+    errs.decimals = "Decimals must be an integer between 0 and 18";
+  }
+
+  if (fields.imageUrl.trim() && !/^https?:\/\/.+/.test(fields.imageUrl.trim())) {
+    errs.imageUrl = "Must be a valid http/https URL";
+  }
+
+  const creatorFeeNum = Number(fields.creatorFee);
+  if (
+    fields.creatorFee.trim() !== "" &&
+    (Number.isNaN(creatorFeeNum) || creatorFeeNum < 0 || creatorFeeNum > 0.05)
+  ) {
+    errs.creatorFee = "Maximum 0.05 GAS";
+  }
+
+  return errs;
+}
+
+function buildForgeParams(fields: {
+  name: string;
+  symbol: string;
+  supply: string;
+  decimals: string;
+  imageUrl: string;
+  creatorFee: string;
+}): ForgeParams {
+  const decimalsNum = Number(fields.decimals);
+  const creatorFeeGas =
+    fields.creatorFee.trim() === "" ? 0 : Number(fields.creatorFee);
+
+  return {
+    name: fields.name.trim(),
+    symbol: fields.symbol,
+    supply: BigInt(fields.supply) * 10n ** BigInt(decimalsNum),
+    decimals: decimalsNum,
+    mode: "community",
+    imageUrl: fields.imageUrl.trim() || undefined,
+    creatorFeeRate: Math.round(creatorFeeGas * 100_000_000),
+  };
 }
 
 export function useForgeForm(
@@ -62,6 +144,10 @@ export function useForgeForm(
   const [creationFeeDatoshi, setCreationFeeDatoshi] = useState(0n);
   const [creationFeeDisplay, setCreationFeeDisplay] = useState("15");
   const [feeLoading, setFeeLoading] = useState(true);
+  const [creationCostQuote, setCreationCostQuote] =
+    useState<CreationCostQuote | null>(null);
+  const [creationCostLoading, setCreationCostLoading] = useState(false);
+  const [creationCostError, setCreationCostError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submittedTxHash, setSubmittedTxHash] = useState<string | null>(null);
@@ -104,46 +190,105 @@ export function useForgeForm(
     return () => clearTimeout(timer);
   }, [imageUrl]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (feeLoading || !_address) {
+      setCreationCostQuote(null);
+      setCreationCostLoading(false);
+      setCreationCostError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const nextErrors = getValidationErrors({
+      name,
+      symbol,
+      supply,
+      decimals,
+      imageUrl,
+      creatorFee,
+    });
+
+    if (Object.keys(nextErrors).length > 0) {
+      setCreationCostQuote(null);
+      setCreationCostLoading(false);
+      setCreationCostError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const params = buildForgeParams({
+      name,
+      symbol,
+      supply,
+      decimals,
+      imageUrl,
+      creatorFee,
+    });
+
+    setCreationCostLoading(true);
+    setCreationCostError(null);
+
+    void quoteCreationCost(_address, params, creationFeeDatoshi)
+      .then((quote) => {
+        if (cancelled) return;
+        setCreationCostQuote(quote);
+        setSubmitError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setCreationCostQuote(null);
+        setCreationCostError(
+          err instanceof Error
+            ? err.message
+            : "Unable to estimate token creation cost right now."
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCreationCostLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    _address,
+    creationFeeDatoshi,
+    creatorFee,
+    decimals,
+    feeLoading,
+    imageUrl,
+    name,
+    supply,
+    symbol,
+  ]);
+
   const gasCheckResult = useMemo<GasBalanceCheck | null>(() => {
     if (feeLoading) return null;
-    const required = creationFeeDatoshi + creationFeeDatoshi / 10n;
+    const required =
+      creationCostQuote?.estimatedTotalWalletOutflowDatoshi ??
+      creationFeeDatoshi + creationFeeDatoshi / 10n;
     return {
       sufficient: gasBalance >= required,
       actual: gasBalance,
       required,
     };
-  }, [feeLoading, creationFeeDatoshi, gasBalance]);
+  }, [creationCostQuote, feeLoading, creationFeeDatoshi, gasBalance]);
 
   function validate(): boolean {
-    const errs: Record<string, string> = {};
-
-    if (!name.trim()) {
-      errs.name = "Name is required";
-    }
-
-    if (!/^[A-Z]{2,10}$/.test(symbol)) {
-      errs.symbol = "Symbol must be 2-10 uppercase letters only";
-    }
-
-    const supplyNum = Number(supply);
-    if (!supply || Number.isNaN(supplyNum) || supplyNum <= 0 || !Number.isInteger(supplyNum)) {
-      errs.supply = "Supply must be a positive integer";
-    }
-
-    const decimalsNum = Number(decimals);
-    if (decimals === "" || Number.isNaN(decimalsNum) || decimalsNum < 0 || decimalsNum > 18 || !Number.isInteger(decimalsNum)) {
-      errs.decimals = "Decimals must be an integer between 0 and 18";
-    }
-
-    if (imageUrl.trim() && !/^https?:\/\/.+/.test(imageUrl.trim())) {
-      errs.imageUrl = "Must be a valid http/https URL";
-    }
-
-    const creatorFeeNum = Number(creatorFee);
-    if (creatorFee.trim() !== "" && (Number.isNaN(creatorFeeNum) || creatorFeeNum < 0 || creatorFeeNum > 0.05)) {
-      errs.creatorFee = "Maximum 0.05 GAS";
-    }
-
+    const errs = getValidationErrors({
+      name,
+      symbol,
+      supply,
+      decimals,
+      imageUrl,
+      creatorFee,
+    });
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -167,8 +312,23 @@ export function useForgeForm(
     return `Symbol ${symbol} is already in use. Choose a different symbol.`;
   }
 
+  const canSubmit =
+    !submitting &&
+    !feeLoading &&
+    !creationCostLoading &&
+    creationCostError === null &&
+    creationCostQuote !== null &&
+    (gasCheckResult?.sufficient ?? false);
+
   async function submit() {
     if (!validate()) return;
+    if (creationCostLoading || creationCostQuote === null || creationCostError !== null) {
+      setSubmitError(
+        creationCostError ??
+          "Creation cost estimate is not ready yet. Wait for the quote before signing."
+      );
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError(null);
@@ -193,18 +353,14 @@ export function useForgeForm(
         return;
       }
 
-      const decimalsNum = Number(decimals);
-      const creatorFeeGas = creatorFee.trim() === "" ? 0 : Number(creatorFee);
-
-      const params: ForgeParams = {
-        name: name.trim(),
+      const params = buildForgeParams({
+        name,
         symbol,
-        supply: BigInt(supply) * (10n ** BigInt(decimalsNum)),
-        decimals: decimalsNum,
-        mode: "community",
-        imageUrl: imageUrl.trim() || undefined,
-        creatorFeeRate: Math.round(creatorFeeGas * 100_000_000),
-      };
+        supply,
+        decimals,
+        imageUrl,
+        creatorFee,
+      });
 
       const txHash = await submitForge(params, creationFeeDatoshi);
       setSubmittedTxHash(txHash);
@@ -250,7 +406,11 @@ export function useForgeForm(
     creationFeeDatoshi,
     creationFeeDisplay,
     feeLoading,
+    creationCostQuote,
+    creationCostLoading,
+    creationCostError,
     gasCheckResult,
+    canSubmit,
     submitting,
     submittedTxHash,
     submitError,

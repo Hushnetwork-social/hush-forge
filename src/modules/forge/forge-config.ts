@@ -5,8 +5,9 @@
  *
  * RPC URL priority:
  *   1. Wallet's selected network (N3MainNet / N3TestNet) â†’ known public RPC endpoints
- *   2. NEXT_PUBLIC_NEO_RPC_URL env var â†’ used ONLY for private / custom networks
- *      where the dAPI does not expose the node URL.
+ *   2. NEXT_PUBLIC_NEO_RPC_URL env var â†’ used as the fallback read endpoint before
+ *      wallet connection, and for private / custom networks where the dAPI does not
+ *      expose the node URL.
  */
 
 /**
@@ -35,15 +36,23 @@ export const GAS_CONTRACT_HASH =
   "0xd2a4cff31913016155e38e474a2c06d08be276cf";
 
 /**
- * Optional RPC URL override for private / custom Neo N3 networks.
- * This is ONLY used when the connected wallet's network is not one of the
- * well-known public networks (N3MainNet / N3TestNet). Public networks always
- * use the canonical RPC endpoints â€” this value is ignored for them.
+ * Optional read-RPC fallback for public market surfaces and private / custom
+ * Neo N3 networks. When a wallet is connected to MainNet / TestNet, the app
+ * still prefers the canonical wallet-derived RPC endpoint. Before a wallet is
+ * connected, or on custom/private networks, this value keeps read-only pages
+ * like `/markets` usable.
  *
  * Set in .env.local: NEXT_PUBLIC_NEO_RPC_URL=http://127.0.0.1:10332
  */
 export const PRIVATE_NET_RPC_URL =
   process.env.NEXT_PUBLIC_NEO_RPC_URL ?? "";
+
+/**
+ * BondingCurveRouter contract hash (0x-prefixed, 42 chars).
+ * Required for FEAT-075 market reads and trading pages.
+ */
+export const BONDING_CURVE_ROUTER_HASH =
+  process.env.NEXT_PUBLIC_BONDING_CURVE_ROUTER_HASH ?? "";
 
 /** localStorage key for persisting wallet type across sessions. */
 export const WALLET_STORAGE_KEY = "forge_wallet_type";
@@ -81,5 +90,12 @@ export function saveFactoryHash(hash: string): void {
       new CustomEvent<string>(FACTORY_HASH_UPDATED_EVENT, { detail: hash })
     );
   }
+}
+
+/** Returns the configured BondingCurveRouter hash, or "" when not configured. */
+export function getRuntimeBondingCurveRouterHash(): string {
+  const envHash = process.env.NEXT_PUBLIC_BONDING_CURVE_ROUTER_HASH ?? "";
+  if (envHash && envHash !== "0x") return envHash;
+  return "";
 }
 

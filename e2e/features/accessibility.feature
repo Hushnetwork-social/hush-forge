@@ -11,6 +11,6 @@ Feature: Accessibility
     Then the pending toast has role status and is polite
     And the pending toast has an accessible label
 
-  Scenario: All icon-only buttons have accessible labels
-    Given the user navigates to /tokens
+  Scenario: All icon-only buttons on the market shell have accessible labels
+    Given the user navigates to /markets
     Then every icon-only button has an aria-label attribute

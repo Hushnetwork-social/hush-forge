@@ -343,6 +343,38 @@ export async function invokeFunction(
   return result;
 }
 
+function isMissingContractOperationError(error: unknown): boolean {
+  return (
+    error instanceof NeoRpcError &&
+    /does(?:n't| not) exist/i.test(error.message)
+  );
+}
+
+async function invokeFunctionWithAliases(
+  contractHash: string,
+  operations: readonly string[],
+  params: RpcStackItem[] = []
+): Promise<InvokeResult> {
+  let lastError: unknown = null;
+
+  for (let index = 0; index < operations.length; index += 1) {
+    try {
+      return await invokeFunction(contractHash, operations[index], params);
+    } catch (error) {
+      lastError = error;
+      const hasFallback = index < operations.length - 1;
+      if (hasFallback && isMissingContractOperationError(error)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new NeoRpcError("Contract invocation failed for every operation alias.");
+}
+
 /**
  * Dry-runs an arbitrary script against the current RPC node.
  * Used for off-chain fee estimation before a wallet signature is requested.
@@ -602,7 +634,7 @@ export async function getBondingCurveState(
   routerHash: string,
   tokenHash: string
 ): Promise<MarketCurveState> {
-  const result = await invokeFunction(routerHash, "GetCurve", [
+  const result = await invokeFunctionWithAliases(routerHash, ["getCurve", "GetCurve"], [
     { type: "Hash160", value: tokenHash },
   ]);
 
@@ -614,10 +646,14 @@ export async function getBondingCurveBuyQuote(
   tokenHash: string,
   quoteIn: bigint
 ): Promise<MarketBuyQuote> {
-  const result = await invokeFunction(routerHash, "GetBuyQuote", [
-    { type: "Hash160", value: tokenHash },
-    { type: "Integer", value: quoteIn.toString() },
-  ]);
+  const result = await invokeFunctionWithAliases(
+    routerHash,
+    ["getBuyQuote", "GetBuyQuote"],
+    [
+      { type: "Hash160", value: tokenHash },
+      { type: "Integer", value: quoteIn.toString() },
+    ]
+  );
 
   return mapBuyQuoteTuple(tokenHash, result.stack);
 }
@@ -627,10 +663,14 @@ export async function getBondingCurveSellQuote(
   tokenHash: string,
   tokenIn: bigint
 ): Promise<MarketSellQuote> {
-  const result = await invokeFunction(routerHash, "GetSellQuote", [
-    { type: "Hash160", value: tokenHash },
-    { type: "Integer", value: tokenIn.toString() },
-  ]);
+  const result = await invokeFunctionWithAliases(
+    routerHash,
+    ["getSellQuote", "GetSellQuote"],
+    [
+      { type: "Hash160", value: tokenHash },
+      { type: "Integer", value: tokenIn.toString() },
+    ]
+  );
 
   return mapSellQuoteTuple(tokenHash, result.stack);
 }
@@ -639,9 +679,13 @@ export async function getBondingCurveGraduationProgress(
   routerHash: string,
   tokenHash: string
 ): Promise<MarketGraduationProgress> {
-  const result = await invokeFunction(routerHash, "GetGraduationProgress", [
-    { type: "Hash160", value: tokenHash },
-  ]);
+  const result = await invokeFunctionWithAliases(
+    routerHash,
+    ["getGraduationProgress", "GetGraduationProgress"],
+    [
+      { type: "Hash160", value: tokenHash },
+    ]
+  );
 
   return mapGraduationProgressTuple(tokenHash, result.stack);
 }

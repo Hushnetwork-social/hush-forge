@@ -63,6 +63,9 @@ export const WALLET_ADDRESS_STORAGE_KEY = "forge_wallet_address";
 /** localStorage key for the deployed factory contract hash (set after in-browser deployment). */
 export const FACTORY_HASH_STORAGE_KEY = "forge_factory_hash";
 
+/** localStorage key for the active BondingCurveRouter hash on dynamic/dev networks. */
+export const BONDING_CURVE_ROUTER_HASH_STORAGE_KEY = "forge_bonding_curve_router_hash";
+
 /** Browser event dispatched when the runtime factory hash changes. */
 export const FACTORY_HASH_UPDATED_EVENT = "forge:factory-hash-updated";
 
@@ -92,10 +95,21 @@ export function saveFactoryHash(hash: string): void {
   }
 }
 
+/** Persists the router hash to localStorage for dynamic/dev-network market reads. */
+export function saveBondingCurveRouterHash(hash: string): void {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(BONDING_CURVE_ROUTER_HASH_STORAGE_KEY, hash);
+  }
+}
+
 /** Returns the configured BondingCurveRouter hash, or "" when not configured. */
 export function getRuntimeBondingCurveRouterHash(): string {
   const envHash = process.env.NEXT_PUBLIC_BONDING_CURVE_ROUTER_HASH ?? "";
   if (envHash && envHash !== "0x") return envHash;
+  if (typeof localStorage !== "undefined") {
+    const saved = localStorage.getItem(BONDING_CURVE_ROUTER_HASH_STORAGE_KEY);
+    if (saved && saved !== "0x") return saved;
+  }
   return "";
 }
 

@@ -1,7 +1,7 @@
 /**
  * Step definitions for: wallet-connection.feature
  *
- * Shared steps (the user navigates to /tokens, the wallet is connected) are
+ * Shared steps (the user navigates to /markets or /tokens, the wallet is connected) are
  * defined in common.steps.ts.
  */
 

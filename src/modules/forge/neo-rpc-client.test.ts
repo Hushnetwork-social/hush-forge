@@ -530,7 +530,7 @@ describe("bonding curve RPC helpers", () => {
     mockGetActiveRpcUrl.mockReturnValue("http://localhost:10332");
   });
 
-  it("calls GetCurve with the token hash and maps the response", async () => {
+  it("calls getCurve with the token hash and maps the response", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -568,8 +568,68 @@ describe("bonding curve RPC helpers", () => {
     const [, init] = fetchMock.mock.calls[0];
     const parsed = JSON.parse((init as RequestInit).body as string);
     expect(parsed.params[0]).toBe("0xrouter");
-    expect(parsed.params[1]).toBe("GetCurve");
+    expect(parsed.params[1]).toBe("getCurve");
     expect(parsed.params[2]).toEqual([{ type: "Hash160", value: "0xtoken" }]);
+  });
+
+  it("falls back to GetCurve when the router only exposes the legacy alias", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            state: "FAULT",
+            gasconsumed: "1",
+            script: "abc",
+            exception: "Method \"getCurve\" with 1 parameter(s) doesn't exist in the contract.",
+            stack: [],
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            state: "HALT",
+            gasconsumed: "100000",
+            script: "abc",
+            stack: tupleResult([
+              byteString("Active"),
+              byteString("GAS"),
+              integer("100000000"),
+              integer("25000000"),
+              integer("750000"),
+              integer("987654321"),
+              integer("50000000"),
+              bool(false),
+              integer("123456"),
+              integer("42"),
+              integer("1710000000"),
+              integer("900000"),
+              integer("100000"),
+              integer("1000000"),
+            ]),
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getBondingCurveState("0xrouter", "0xtoken")).resolves.toMatchObject({
+      quoteAsset: "GAS",
+      totalTrades: 42n,
+    });
+
+    const firstCall = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const secondCall = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(firstCall.params[1]).toBe("getCurve");
+    expect(secondCall.params[1]).toBe("GetCurve");
   });
 
   it("maps buy, sell, and graduation progress responses", async () => {

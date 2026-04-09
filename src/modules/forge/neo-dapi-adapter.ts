@@ -8,6 +8,7 @@
 
 import { GAS_CONTRACT_HASH, PRIVATE_NET_RPC_URL, WALLET_STORAGE_KEY } from "./forge-config";
 import { getTokenBalance } from "./neo-rpc-client";
+import { serializeChangeModeParams } from "./token-mode-params";
 import type { ForgeParams, MarketQuoteAsset, WalletBalance, WalletType } from "./types";
 
 const NEO_CONTRACT_HASH = "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5";
@@ -765,6 +766,7 @@ export async function invokeChangeMode(
   params: unknown[]
 ): Promise<string> {
   if (!_dapi) throw new WalletNotConnectedError();
+  const serializedParams = serializeChangeModeParams(newMode, params);
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
@@ -774,7 +776,7 @@ export async function invokeChangeMode(
         { type: "String", value: newMode },
         {
           type: "Array",
-          value: params.map((p) => ({ type: "String", value: String(p) })),
+          value: serializedParams,
         },
       ],
       signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],

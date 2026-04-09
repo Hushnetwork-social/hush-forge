@@ -353,14 +353,18 @@ describe("lifecycle invoke functions", () => {
     );
   });
 
-  it("invokeChangeMode sends newMode as String and params as Array", async () => {
+  it("invokeChangeMode serializes speculation params as [String, Integer]", async () => {
     const instance = await connectMock();
-    await invokeChangeMode("0xfactory", "0xtoken", "speculation", []);
+    await invokeChangeMode("0xfactory", "0xtoken", "speculation", ["GAS", "600"]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: unknown }[] };
     expect(call.operation).toBe("changeTokenMode");
     expect(call.args[1]).toEqual({ type: "String", value: "speculation" });
     expect(call.args[2].type).toBe("Array");
+    expect(call.args[2].value).toEqual([
+      { type: "String", value: "GAS" },
+      { type: "Integer", value: "600" },
+    ]);
   });
 
   it("invokeLockToken calls factory with operation lockToken", async () => {

@@ -5,6 +5,7 @@ import {
   getBlockCount,
   invokeScript,
 } from "./neo-rpc-client";
+import { serializeChangeModeParams } from "./token-mode-params";
 import type { ContractChangeCostQuote } from "./types";
 
 const DUMMY_FEE_ESTIMATION_PUBLIC_KEY =
@@ -26,8 +27,9 @@ function buildChangeModeScript(
   factoryHash: string,
   tokenHash: string,
   newMode: string,
-  modeParams: string[]
+  modeParams: unknown[]
 ): string {
+  const serializedModeParams = serializeChangeModeParams(newMode, modeParams);
   const builder = new Neon.sc.ScriptBuilder();
   builder.emitContractCall({
     scriptHash: factoryHash,
@@ -37,7 +39,11 @@ function buildChangeModeScript(
       Neon.sc.ContractParam.hash160(tokenHash),
       Neon.sc.ContractParam.string(newMode),
       Neon.sc.ContractParam.array(
-        ...modeParams.map((value) => Neon.sc.ContractParam.string(value))
+        ...serializedModeParams.map((param) =>
+          param.type === "Integer"
+            ? Neon.sc.ContractParam.integer(param.value)
+            : Neon.sc.ContractParam.string(param.value)
+        )
       ),
     ],
   });
@@ -49,7 +55,7 @@ export async function quoteChangeModeCost(
   factoryHash: string,
   tokenHash: string,
   newMode: string,
-  modeParams: string[],
+  modeParams: unknown[],
   operationFeeDatoshi: bigint
 ): Promise<ContractChangeCostQuote> {
   const fromAccount = addressToHash160(address);

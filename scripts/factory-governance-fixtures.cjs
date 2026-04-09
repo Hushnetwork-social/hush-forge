@@ -2,12 +2,23 @@
 "use strict";
 
 const { wallet, sc, tx, u, rpc: rpcModule } = require("@cityofzion/neon-js");
+const fs = require("fs");
+const path = require("path");
 
 const RPC_URL = process.env.NEXT_PUBLIC_NEO_RPC_URL || "http://localhost:10332";
 const NETWORK_MAGIC = 5195086;
 const DEFAULT_TEST_WIF =
   "L3cNMQUSrvUrHx1MzacwHiUeCWzqK2MLt5fPvJj9mz6L2rzYZpok";
 const GAS_HASH = "0xd2a4cff31913016155e38e474a2c06d08be276cf";
+const CONTRACT_MANAGEMENT_HASH = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd";
+const ROUTER_NEF_PATH = path.resolve(
+  __dirname,
+  "../../hush-neo-contracts/src/BondingCurveRouter/bin/sc/BondingCurveRouter.nef"
+);
+const ROUTER_MANIFEST_PATH = path.resolve(
+  __dirname,
+  "../../hush-neo-contracts/src/BondingCurveRouter/bin/sc/BondingCurveRouter.manifest.json"
+);
 
 function getAccountFromEnv() {
   return new wallet.Account(process.env.E2E_TEST_ACCOUNT_WIF || DEFAULT_TEST_WIF);
@@ -112,6 +123,23 @@ function decodeHashStackItem(item) {
   return null;
 }
 
+function extractDeployedHash(log) {
+  const managementHash = normalizeHashOrAddress(CONTRACT_MANAGEMENT_HASH);
+  for (const execution of log.executions ?? []) {
+    if (execution.trigger !== "Application") continue;
+    for (const notification of execution.notifications ?? []) {
+      if (normalizeHashOrAddress(notification.contract) !== managementHash) continue;
+      if (notification.eventname !== "Deploy") continue;
+      const values = Array.isArray(notification.state?.value)
+        ? notification.state.value
+        : [];
+      const deployedHash = decodeHashStackItem(values[0]);
+      if (deployedHash) return deployedHash;
+    }
+  }
+  return null;
+}
+
 function extractTokenCreatedHash(log, factoryHash) {
   const targetHash = normalizeHashOrAddress(factoryHash);
   for (const execution of log.executions ?? []) {
@@ -178,6 +206,49 @@ async function setOwner(factoryHash, newOwner) {
   const txid = await sendInvocation(account, script);
   await waitForTx(txid);
   console.log(`SET_OWNER_TX=${txid}`);
+}
+
+async function deployRouter(factoryHash) {
+  const account = getAccountFromEnv();
+  if (!fs.existsSync(ROUTER_NEF_PATH) || !fs.existsSync(ROUTER_MANIFEST_PATH)) {
+    throw new Error(
+      "BondingCurveRouter artifacts are missing. Build hush-neo-contracts first."
+    );
+  }
+
+  const routerNef = fs.readFileSync(ROUTER_NEF_PATH);
+  const routerManifest = fs.readFileSync(ROUTER_MANIFEST_PATH, "utf8");
+  const deployScript = sc.createScript({
+    scriptHash: CONTRACT_MANAGEMENT_HASH,
+    operation: "deploy",
+    args: [
+      sc.ContractParam.byteArray(routerNef.toString("base64")),
+      sc.ContractParam.string(routerManifest),
+      sc.ContractParam.array(
+        sc.ContractParam.hash160(normalizeHashOrAddress(account.address)),
+        sc.ContractParam.hash160(factoryHash)
+      ),
+    ],
+  });
+
+  const deployTxid = await sendInvocation(account, deployScript);
+  const deployLog = await waitForTx(deployTxid);
+  const routerHash = extractDeployedHash(deployLog);
+  if (!routerHash) {
+    throw new Error("Could not determine BondingCurveRouter hash after deployment");
+  }
+
+  const setRouterScript = sc.createScript({
+    scriptHash: factoryHash,
+    operation: "setBondingCurveRouter",
+    args: [sc.ContractParam.hash160(routerHash)],
+  });
+  const setRouterTxid = await sendInvocation(account, setRouterScript);
+  await waitForTx(setRouterTxid);
+
+  console.log(`DEPLOY_ROUTER_TX=${deployTxid}`);
+  console.log(`SET_ROUTER_TX=${setRouterTxid}`);
+  console.log(`ROUTER_HASH=${routerHash}`);
 }
 
 async function fundFactory(factoryHash, amount) {
@@ -323,11 +394,43 @@ async function claimAllCreatorFees(tokenHash) {
   console.log(`CLAIM_ALL_CREATOR_FEES_TX=${txid}`);
 }
 
+async function changeMode(factoryHash, tokenHash, newMode, modeParams = []) {
+  const account = getAccountFromEnv();
+  const normalizedMode = String(newMode);
+  const params =
+    normalizedMode === "speculation"
+      ? sc.ContractParam.array(
+          sc.ContractParam.string(String(modeParams[0] ?? "GAS")),
+          sc.ContractParam.integer(String(modeParams[1] ?? "0"))
+        )
+      : sc.ContractParam.array(
+          ...modeParams.map((param) => sc.ContractParam.string(String(param)))
+        );
+
+  const script = sc.createScript({
+    scriptHash: factoryHash,
+    operation: "changeTokenMode",
+    args: [
+      sc.ContractParam.hash160(tokenHash),
+      sc.ContractParam.string(normalizedMode),
+      params,
+    ],
+  });
+  const txid = await sendInvocation(account, script, "Global");
+  await waitForTx(txid);
+  console.log(`CHANGE_MODE_TX=${txid}`);
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
 
   if (command === "set-owner" && args.length === 2) {
     await setOwner(args[0], args[1]);
+    return;
+  }
+
+  if (command === "deploy-router" && args.length === 1) {
+    await deployRouter(args[0]);
     return;
   }
 
@@ -371,9 +474,15 @@ async function main() {
     return;
   }
 
+  if (command === "change-mode" && args.length >= 3) {
+    await changeMode(args[0], args[1], args[2], args.slice(3));
+    return;
+  }
+
   console.error(
     "Usage:\n" +
       "  node scripts/factory-governance-fixtures.cjs set-owner <factoryHash> <newOwnerHashOrAddress>\n" +
+      "  node scripts/factory-governance-fixtures.cjs deploy-router <factoryHash>\n" +
       "  node scripts/factory-governance-fixtures.cjs fund-factory <factoryHash> <amountDatoshi>\n" +
       "  node scripts/factory-governance-fixtures.cjs create-token <factoryHash> <name> <symbol> <supply> <decimals> <creatorFeeRateDatoshi>\n" +
       "  node scripts/factory-governance-fixtures.cjs set-platform-fee <factoryHash> <newRateDatoshi> [offset] [batchSize]\n" +
@@ -381,7 +490,8 @@ async function main() {
       "  node scripts/factory-governance-fixtures.cjs mint-tokens <factoryHash> <tokenHash> <recipientHashOrAddress> <amountRaw>\n" +
       "  node scripts/factory-governance-fixtures.cjs transfer-token <tokenHash> <recipientHashOrAddress> <amountRaw>\n" +
       "  node scripts/factory-governance-fixtures.cjs claim-creator-fee <tokenHash> <amountRaw>\n" +
-      "  node scripts/factory-governance-fixtures.cjs claim-all-creator-fees <tokenHash>"
+      "  node scripts/factory-governance-fixtures.cjs claim-all-creator-fees <tokenHash>\n" +
+      "  node scripts/factory-governance-fixtures.cjs change-mode <factoryHash> <tokenHash> <mode> [modeParams...]"
   );
   process.exit(1);
 }

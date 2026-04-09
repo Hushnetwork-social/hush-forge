@@ -82,15 +82,31 @@ describe("ForgeHeader", () => {
     expect(disconnect).toHaveBeenCalled();
   });
 
-  it("shows Connecting… label and disables button while connecting", () => {
+  it("shows Connecting... label and disables button while connecting", () => {
     mockWallet(null, "connecting");
     render(<ForgeHeader onConnectClick={vi.fn()} />);
-    const btn = screen.getByRole("button", { name: "Connecting…" });
-    expect(btn).toBeDisabled();
+    const button = screen.getByRole("button", { name: "Connecting..." });
+    expect(button).toBeDisabled();
   });
 
-  it("Forge logo links to /tokens", () => {
+  it("Forge logo links to /markets by default", () => {
     render(<ForgeHeader onConnectClick={vi.fn()} />);
+    const link = screen.getByRole("link", { name: "Forge" });
+    expect(link).toHaveAttribute("href", "/markets");
+  });
+
+  it("renders the optional header slot content", () => {
+    render(
+      <ForgeHeader onConnectClick={vi.fn()}>
+        <div>shell content</div>
+      </ForgeHeader>
+    );
+
+    expect(screen.getByText("shell content")).toBeInTheDocument();
+  });
+
+  it("allows overriding the home link target", () => {
+    render(<ForgeHeader onConnectClick={vi.fn()} homeHref="/tokens" />);
     const link = screen.getByRole("link", { name: "Forge" });
     expect(link).toHaveAttribute("href", "/tokens");
   });

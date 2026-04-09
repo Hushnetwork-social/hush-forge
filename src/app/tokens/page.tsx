@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ForgeHeader } from "@/components/layout/ForgeHeader";
 import { WalletPanel } from "@/modules/forge/components/WalletPanel";
 import { TokenGrid } from "@/modules/forge/components/TokenGrid";
 import { ForgeOverlay } from "@/modules/forge/components/ForgeOverlay";
@@ -12,6 +11,7 @@ import { useFactoryDeployment } from "@/modules/forge/hooks/useFactoryDeployment
 import { useTokenStore } from "@/modules/forge/token-store";
 import { FactoryDeployBanner } from "@/modules/forge/components/FactoryDeployBanner";
 import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
+import { MarketShellLayout } from "@/modules/forge/components/MarketShellLayout";
 
 type PageView = "dashboard" | "forge-overlay";
 
@@ -37,6 +37,7 @@ export default function TokensPage() {
 
   const [view, setView] = useState<PageView>("dashboard");
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [marketSearch, setMarketSearch] = useState("");
   const previousFactoryStatusRef = useRef(factory.status);
 
   useEffect(() => {
@@ -83,15 +84,25 @@ export default function TokensPage() {
     setView("dashboard");
   }
 
+  function handleMarketSearchSubmit() {
+    const params = new URLSearchParams();
+    const trimmed = marketSearch.trim();
+    if (trimmed) {
+      params.set("search", trimmed);
+    }
+    const query = params.toString();
+    router.push(query ? `/markets?${query}` : "/markets");
+  }
+
   return (
     <>
-      <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
-
-      <main
-        className="min-h-screen p-6"
-        style={{ background: "var(--forge-bg-primary)" }}
+      <MarketShellLayout
+        onConnectClick={() => setShowConnectModal(true)}
+        searchValue={marketSearch}
+        onSearchChange={setMarketSearch}
+        onSearchSubmit={handleMarketSearchSubmit}
       >
-        <div className="max-w-5xl mx-auto flex flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
           <WalletPanel
             connectionStatus={connectionStatus}
             address={address}
@@ -137,7 +148,7 @@ export default function TokensPage() {
             onTokenClick={(hash) => router.push(`/tokens/${hash}`)}
           />
         </div>
-      </main>
+      </MarketShellLayout>
 
       {view === "forge-overlay" && (
         <ForgeOverlay

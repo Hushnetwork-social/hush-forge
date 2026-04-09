@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useFactoryAdminAccess } from "@/modules/forge/hooks/useFactoryAdminAccess";
 import { useWalletStore } from "@/modules/forge/wallet-store";
@@ -11,6 +12,8 @@ function truncateAddress(address: string): string {
 
 interface Props {
   onConnectClick: () => void;
+  homeHref?: string;
+  children?: ReactNode;
 }
 
 function LogoutIcon() {
@@ -33,7 +36,11 @@ function LogoutIcon() {
   );
 }
 
-export function ForgeHeader({ onConnectClick }: Props) {
+export function ForgeHeader({
+  onConnectClick,
+  homeHref = "/markets",
+  children,
+}: Props) {
   const address = useWalletStore((s) => s.address);
   const connectionStatus = useWalletStore((s) => s.connectionStatus);
   const disconnect = useWalletStore((s) => s.disconnect);
@@ -41,67 +48,73 @@ export function ForgeHeader({ onConnectClick }: Props) {
 
   return (
     <header
-      className="w-full px-6 py-4 flex items-center justify-between"
+      className="w-full px-6 py-4"
       style={{
         background: "var(--forge-bg-card)",
         borderBottom: "1px solid var(--forge-border-subtle)",
       }}
     >
-      <Link
-        href="/tokens"
-        className="text-xl font-bold tracking-wide"
-        style={{ color: "var(--forge-color-primary)" }}
-      >
-        Forge
-      </Link>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            href={homeHref}
+            className="text-xl font-bold tracking-wide"
+            style={{ color: "var(--forge-color-primary)" }}
+          >
+            Forge
+          </Link>
 
-      <div className="flex items-center gap-2">
-        {address ? (
-          <>
-            {adminAccess.access.navVisible && (
-              <Link
-                href="/admin/factory"
-                className="rounded px-3 py-1 text-sm font-semibold"
+          <div className="flex items-center gap-2">
+            {address ? (
+              <>
+                {adminAccess.access.navVisible && (
+                  <Link
+                    href="/admin/factory"
+                    className="rounded px-3 py-1 text-sm font-semibold"
+                    style={{
+                      color: "var(--forge-color-primary)",
+                      border: "1px solid var(--forge-border-medium)",
+                    }}
+                  >
+                    Admin
+                  </Link>
+                )}
+                <span
+                  className="rounded px-3 py-1 font-mono text-sm"
+                  style={{
+                    color: "var(--forge-color-accent)",
+                    background: "rgba(255,167,38,0.1)",
+                  }}
+                >
+                  {truncateAddress(address)}
+                </span>
+                <button
+                  onClick={disconnect}
+                  aria-label="Disconnect wallet"
+                  title="Disconnect wallet"
+                  className="rounded p-1.5 opacity-50 transition-opacity hover:opacity-100"
+                  style={{ color: "var(--forge-text-muted)" }}
+                >
+                  <LogoutIcon />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={onConnectClick}
+                disabled={connectionStatus === "connecting"}
+                className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
                 style={{
-                  color: "var(--forge-color-primary)",
-                  border: "1px solid var(--forge-border-medium)",
+                  background: "var(--forge-color-primary)",
+                  color: "var(--forge-text-primary)",
                 }}
               >
-                Admin
-              </Link>
+                {connectionStatus === "connecting" ? "Connecting..." : "Connect Wallet"}
+              </button>
             )}
-            <span
-              className="text-sm font-mono px-3 py-1 rounded"
-              style={{
-                color: "var(--forge-color-accent)",
-                background: "rgba(255,167,38,0.1)",
-              }}
-            >
-              {truncateAddress(address)}
-            </span>
-            <button
-              onClick={disconnect}
-              aria-label="Disconnect wallet"
-              title="Disconnect wallet"
-              className="p-1.5 rounded opacity-50 hover:opacity-100 transition-opacity"
-              style={{ color: "var(--forge-text-muted)" }}
-            >
-              <LogoutIcon />
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={onConnectClick}
-            disabled={connectionStatus === "connecting"}
-            className="text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
-            style={{
-              background: "var(--forge-color-primary)",
-              color: "var(--forge-text-primary)",
-            }}
-          >
-            {connectionStatus === "connecting" ? "Connecting…" : "Connect Wallet"}
-          </button>
-        )}
+          </div>
+        </div>
+
+        {children ? <div>{children}</div> : null}
       </div>
     </header>
   );

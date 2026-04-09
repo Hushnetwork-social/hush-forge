@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import type { ReactNode } from "react";
 import TokensPage from "./page";
 
+const pushMock = vi.fn();
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
+  usePathname: () => "/tokens",
 }));
 
 vi.mock("@/modules/forge/hooks/useWallet", () => ({
@@ -23,9 +27,16 @@ vi.mock("@/modules/forge/wallet-store", () => ({
 }));
 
 vi.mock("@/components/layout/ForgeHeader", () => ({
-  ForgeHeader: ({ onConnectClick }: { onConnectClick: () => void }) => (
+  ForgeHeader: ({
+    onConnectClick,
+    children,
+  }: {
+    onConnectClick: () => void;
+    children?: ReactNode;
+  }) => (
     <header data-testid="forge-header">
       <button onClick={onConnectClick}>Connect Wallet</button>
+      {children}
     </header>
   ),
 }));
@@ -83,6 +94,8 @@ function setupMocks({
     | "error",
   factoryStatus = "deployed" as FactoryDeployStatus,
 } = {}) {
+  pushMock.mockReset();
+
   vi.mocked(useWallet).mockReturnValue({
     walletType: null,
     address,
@@ -139,6 +152,28 @@ describe("TokensPage", () => {
     render(<TokensPage />);
     expect(screen.getByTestId("wallet-panel")).toBeInTheDocument();
     expect(screen.getByTestId("token-grid")).toBeInTheDocument();
+  });
+
+  it("renders route-backed shell tabs with Tokens active", () => {
+    render(<TokensPage />);
+
+    expect(screen.getByRole("link", { name: "Pairs" })).toHaveAttribute("href", "/markets");
+    expect(screen.getByRole("link", { name: "Tokens" })).toHaveAttribute("href", "/tokens");
+    expect(screen.getByRole("link", { name: "Tokens" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+  });
+
+  it("routes shell search into /markets", () => {
+    render(<TokensPage />);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search markets" }), {
+      target: { value: "hush" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(pushMock).toHaveBeenCalledWith("/markets?search=hush");
   });
 
   it("ForgeOverlay is not visible on load", () => {
@@ -208,7 +243,7 @@ describe("TokensPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("submete tx pendente para o provider global após assinatura", () => {
+  it("submits pending tx to the global provider after signature", () => {
     setupMocks({ address: "NwMe", connectionStatus: "connected" });
     const setPendingTx = vi.fn();
     vi.mocked(usePendingTx).mockReturnValue({

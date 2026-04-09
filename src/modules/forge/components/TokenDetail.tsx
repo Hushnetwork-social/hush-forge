@@ -13,10 +13,15 @@ import { BurnBadge } from "./BurnBadge";
 import { LockBadge } from "./LockBadge";
 import { TokenAdminPanel } from "./TokenAdminPanel";
 import { TokenEconomicsPanel } from "./TokenEconomicsPanel";
+import type { PendingTxSubmissionOptions } from "../types";
 
 interface Props {
   contractHash: string;
-  onTxSubmitted: (txHash: string, message: string) => void;
+  onTxSubmitted: (
+    txHash: string,
+    message: string,
+    options?: PendingTxSubmissionOptions
+  ) => void;
 }
 
 function StatCard({ label, value }: { label: string; value: React.ReactNode }) {
@@ -139,6 +144,7 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
   }
 
   const factoryHash = getRuntimeFactoryHash();
+  const marketHref = token?.mode === "speculative" ? `/markets/${contractHash}` : null;
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -256,6 +262,18 @@ export function TokenDetail({ contractHash, onTxSubmitted }: Props) {
           {!token.creator && <p className="text-xs px-1" style={{ color: "var(--forge-text-muted)" }}>Not registered via Forge</p>}
 
           <div className="flex flex-wrap gap-3">
+            {marketHref && (
+              <Link
+                href={marketHref}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{
+                  background: "rgba(255,107,53,0.14)",
+                  color: "var(--forge-color-primary)",
+                }}
+              >
+                View Market
+              </Link>
+            )}
             <button onClick={handleAddToWallet} className="px-4 py-2 rounded-lg text-sm" style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)", background: "transparent" }}>
               Add to NeoLine
             </button>

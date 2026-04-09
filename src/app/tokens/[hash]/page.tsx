@@ -7,6 +7,7 @@ import { TokenDetail } from "@/modules/forge/components/TokenDetail";
 import { WalletConnectModal } from "@/modules/forge/components/WalletConnectModal";
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
+import type { PendingTxSubmissionOptions } from "@/modules/forge/types";
 
 export default function TokenDetailPage() {
   const { hash } = useParams<{ hash: string }>();
@@ -17,12 +18,19 @@ export default function TokenDetailPage() {
 
   const [showConnectModal, setShowConnectModal] = useState(false);
 
-  function handleTxSubmitted(txHash: string, message: string) {
+  function handleTxSubmitted(
+    txHash: string,
+    message: string,
+    options?: PendingTxSubmissionOptions
+  ) {
     setPendingTx({
       txHash,
       message,
-      targetTokenHash: hash,
+      targetTokenHash: options?.targetTokenHash ?? hash,
+      redirectPath: options?.redirectPath,
+      marketLaunchSummary: options?.marketLaunchSummary,
     });
+
   }
 
   return (

@@ -41,6 +41,10 @@ vi.mock("@/modules/forge/components/TradeRail", () => ({
   TradeRail: () => <section data-testid="trade-rail">Trade rail</section>,
 }));
 
+vi.mock("@/modules/forge/components/PostLaunchBanner", () => ({
+  PostLaunchBanner: () => <section data-testid="post-launch-banner" />,
+}));
+
 import { useMarketPair } from "@/modules/forge/hooks/useMarketPair";
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 
@@ -143,6 +147,7 @@ describe("MarketPairPage", () => {
   it("shows launch disclosure and graduation progress", () => {
     render(<MarketPairPage />);
 
+    expect(screen.getByTestId("post-launch-banner")).toBeInTheDocument();
     expect(screen.getByText("Public market launch data")).toBeInTheDocument();
     expect(screen.getByText("80,000 HUSHDOG")).toBeInTheDocument();
     expect(screen.getByText("20,000 HUSHDOG")).toBeInTheDocument();

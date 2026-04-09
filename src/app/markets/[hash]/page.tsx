@@ -8,6 +8,7 @@ import { GraduationProgressCard } from "@/modules/forge/components/GraduationPro
 import { PairChartPanel } from "@/modules/forge/components/PairChartPanel";
 import { PairDataTabs } from "@/modules/forge/components/PairDataTabs";
 import { PairHeaderHero } from "@/modules/forge/components/PairHeaderHero";
+import { PostLaunchBanner } from "@/modules/forge/components/PostLaunchBanner";
 import { TradeRail } from "@/modules/forge/components/TradeRail";
 import { WalletConnectModal } from "@/modules/forge/components/WalletConnectModal";
 import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
@@ -84,6 +85,10 @@ export default function MarketPairPage() {
             </section>
           ) : pair ? (
             <>
+              <PostLaunchBanner
+                tokenHash={pair.tokenHash}
+                decimals={pair.token.decimals}
+              />
               <PairHeaderHero pair={pair} />
 
               <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_360px]">

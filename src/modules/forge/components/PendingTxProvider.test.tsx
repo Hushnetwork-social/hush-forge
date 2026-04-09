@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PendingTxProvider, usePendingTx } from "./PendingTxProvider";
 
 let mockPathname = "/markets/0xtoken1";
+const mockPush = vi.fn();
 let mockPollingState = {
   status: "pending" as const,
   contractHash: null as string | null,
@@ -11,6 +12,7 @@ let mockPollingState = {
 
 vi.mock("next/navigation", () => ({
   usePathname: () => mockPathname,
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock("../hooks/useTokenPolling", () => ({
@@ -41,9 +43,38 @@ function TriggerPending() {
   );
 }
 
+function TriggerLaunchPending() {
+  const { setPendingTx } = usePendingTx();
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        setPendingTx({
+          txHash: "0xlaunch",
+          message: "Launching market...",
+          targetTokenHash: "0xtoken1",
+          redirectPath: "/markets/0xtoken1",
+          marketLaunchSummary: {
+            tokenHash: "0xtoken1",
+            pairLabel: "HUSH/GAS",
+            quoteAsset: "GAS",
+            tokenSymbol: "HUSH",
+            curveInventoryRaw: "800",
+            retainedInventoryRaw: "200",
+          },
+        })
+      }
+    >
+      Queue launch tx
+    </button>
+  );
+}
+
 describe("PendingTxProvider", () => {
   beforeEach(() => {
     mockPathname = "/markets/0xtoken1";
+    mockPush.mockReset();
     mockPollingState = {
       status: "pending",
       contractHash: null,
@@ -86,5 +117,33 @@ describe("PendingTxProvider", () => {
     delete (window as any).location;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).location = originalLocation;
+  });
+
+  it("redirects to the market route and persists the launch summary after confirmation", async () => {
+    mockPathname = "/tokens/0xtoken1";
+    const view = render(
+      <PendingTxProvider>
+        <TriggerLaunchPending />
+      </PendingTxProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Queue launch tx" }));
+
+    mockPollingState = {
+      status: "confirmed",
+      contractHash: null,
+      error: null,
+    };
+    view.rerender(
+      <PendingTxProvider>
+        <TriggerLaunchPending />
+      </PendingTxProvider>
+    );
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/markets/0xtoken1"));
+
+    expect(
+      localStorage.getItem("forge.market.launch.0xtoken1")
+    ).toContain("\"pairLabel\":\"HUSH/GAS\"");
   });
 });

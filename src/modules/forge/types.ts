@@ -258,6 +258,15 @@ export interface MarketEnhancementServices {
   liveFeed: MarketLiveFeedProvider;
 }
 
+export interface MarketLaunchSummary {
+  tokenHash: string;
+  pairLabel: string;
+  quoteAsset: MarketQuoteAsset;
+  tokenSymbol: string;
+  curveInventoryRaw: string;
+  retainedInventoryRaw: string;
+}
+
 // ---------------------------------------------------------------------------
 // Wallet state
 // ---------------------------------------------------------------------------
@@ -365,6 +374,14 @@ export interface CreationCostQuote {
   estimatedTotalWalletOutflowDatoshi: bigint;
 }
 
+export interface ContractChangeCostQuote {
+  operationFeeDatoshi: bigint;
+  estimatedSystemFeeDatoshi: bigint;
+  estimatedNetworkFeeDatoshi: bigint;
+  estimatedChainFeeDatoshi: bigint;
+  estimatedTotalWalletOutflowDatoshi: bigint;
+}
+
 export interface TransferQuote {
   grossAmountRaw: bigint;
   recipientAmountRaw: bigint;
@@ -403,6 +420,12 @@ export type TxStatus =
   | "confirmed" // included in a block, ApplicationLog available
   | "faulted" // ApplicationLog state = FAULT
   | "timeout"; // polling timed out without confirmation
+
+export interface PendingTxSubmissionOptions {
+  targetTokenHash?: string;
+  redirectPath?: string;
+  marketLaunchSummary?: MarketLaunchSummary;
+}
 
 // ---------------------------------------------------------------------------
 // Forge form data

@@ -8,9 +8,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ForgeErrorToast, ForgePendingToast } from "./ForgeToaster";
 import { useTokenPolling } from "../hooks/useTokenPolling";
+import { persistMarketLaunchSummary } from "../market-launch-banner-state";
+import type { MarketLaunchSummary } from "../types";
 
 const STORAGE_KEY = "forge.pending.tx";
 
@@ -18,6 +20,8 @@ type PendingTxState = {
   txHash: string;
   message: string;
   targetTokenHash?: string;
+  redirectPath?: string;
+  marketLaunchSummary?: MarketLaunchSummary;
 };
 
 type PendingTxContextValue = {
@@ -38,6 +42,7 @@ export function usePendingTx() {
 
 export function PendingTxProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [pending, setPending] = useState<PendingTxState | null>(() => {
     if (typeof window === "undefined") return null;
@@ -71,6 +76,18 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
     if (!pending) return;
     if (polling.status === "confirmed") {
       const confirmedHash = pending.targetTokenHash ?? polling.contractHash ?? "";
+      if (pending.marketLaunchSummary) {
+        persistMarketLaunchSummary(pending.marketLaunchSummary);
+      }
+      if (pending.redirectPath) {
+        if (pathname === pending.redirectPath) {
+          window.location.reload();
+        } else {
+          router.push(pending.redirectPath);
+        }
+        queueMicrotask(() => setPending(null));
+        return;
+      }
       const isTokensList = pathname === "/tokens";
       const isSameTokenDetail = confirmedHash.length > 0 && pathname === `/tokens/${confirmedHash}`;
       const isMarketsList = pathname === "/markets";
@@ -87,7 +104,7 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
         setPending(null);
       });
     }
-  }, [pathname, pending, polling.contractHash, polling.error, polling.status]);
+  }, [pathname, pending, polling.contractHash, polling.error, polling.status, router]);
 
   const value = useMemo<PendingTxContextValue>(
     () => ({

@@ -185,6 +185,19 @@ describe("TokenDetail", () => {
     expect(screen.getByText("Burn 1.00%")).toBeInTheDocument();
   });
 
+  it("shows a market link for speculative tokens", () => {
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({ token: makeToken({ mode: "speculative" }) })
+    );
+
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+
+    expect(screen.getByRole("link", { name: "View Market" })).toHaveAttribute(
+      "href",
+      "/markets/0xabc123"
+    );
+  });
+
   it("shows lock badge when locked = true", () => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ token: makeToken({ locked: true }) }));
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);

@@ -13,6 +13,14 @@ vi.mock("../neo-dapi-adapter", () => ({
   WalletRejectedError: class WalletRejectedError extends Error {},
 }));
 
+vi.mock("./SpeculationActivationSheet", () => ({
+  SpeculationActivationSheet: ({
+    open,
+  }: {
+    open: boolean;
+  }) => (open ? <div>SPECULATION_ACTIVATION_SHEET</div> : null),
+}));
+
 function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
   return {
     contractHash: "0xtoken",
@@ -69,15 +77,51 @@ describe("AdminTabProperties", () => {
     expect(screen.getByText("Creator transfer fee must be between 0 and 0.05 GAS.")).toBeInTheDocument();
   });
 
-  it("mode transition calls invokeChangeMode", async () => {
+  it("non-speculation mode transition calls invokeChangeMode with contract mode names", async () => {
     invokeChangeMode.mockResolvedValue("0xmode");
     const onTxSubmitted = vi.fn();
-    render(<AdminTabProperties token={makeToken({ mode: "community" })} factoryHash="0xfactory" onTxSubmitted={onTxSubmitted} />);
+    render(
+      <AdminTabProperties
+        token={makeToken({ mode: "speculative" })}
+        factoryHash="0xfactory"
+        onTxSubmitted={onTxSubmitted}
+      />
+    );
 
-    fireEvent.change(screen.getByLabelText("Mode selector"), { target: { value: "speculative" } });
+    fireEvent.change(screen.getByLabelText("Mode selector"), {
+      target: { value: "community" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /Change Mode/i }));
 
-    await waitFor(() => expect(invokeChangeMode).toHaveBeenCalledWith("0xfactory", "0xtoken", "speculative", []));
+    await waitFor(() =>
+      expect(invokeChangeMode).toHaveBeenCalledWith(
+        "0xfactory",
+        "0xtoken",
+        "community",
+        []
+      )
+    );
     expect(onTxSubmitted).toHaveBeenCalledWith("0xmode", "Changing token mode...");
+  });
+
+  it("opens the speculation activation review instead of invoking change mode directly", () => {
+    render(
+      <AdminTabProperties
+        token={makeToken({ mode: "community" })}
+        factoryHash="0xfactory"
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Mode selector"), {
+      target: { value: "speculative" },
+    });
+
+    expect(screen.getByRole("button", { name: "Review Launch" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Launch" }));
+
+    expect(invokeChangeMode).not.toHaveBeenCalled();
+    expect(screen.getByText("SPECULATION_ACTIVATION_SHEET")).toBeInTheDocument();
   });
 });

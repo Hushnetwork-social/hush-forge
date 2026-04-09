@@ -73,7 +73,9 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
       const confirmedHash = pending.targetTokenHash ?? polling.contractHash ?? "";
       const isTokensList = pathname === "/tokens";
       const isSameTokenDetail = confirmedHash.length > 0 && pathname === `/tokens/${confirmedHash}`;
-      if (isTokensList || isSameTokenDetail) {
+      const isMarketsList = pathname === "/markets";
+      const isSameMarketDetail = confirmedHash.length > 0 && pathname === `/markets/${confirmedHash}`;
+      if (isTokensList || isSameTokenDetail || isMarketsList || isSameMarketDetail) {
         window.location.reload();
       }
       queueMicrotask(() => setPending(null));

@@ -8,7 +8,9 @@ import { GraduationProgressCard } from "@/modules/forge/components/GraduationPro
 import { PairChartPanel } from "@/modules/forge/components/PairChartPanel";
 import { PairDataTabs } from "@/modules/forge/components/PairDataTabs";
 import { PairHeaderHero } from "@/modules/forge/components/PairHeaderHero";
+import { TradeRail } from "@/modules/forge/components/TradeRail";
 import { WalletConnectModal } from "@/modules/forge/components/WalletConnectModal";
+import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
 import { useMarketPair } from "@/modules/forge/hooks/useMarketPair";
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 
@@ -45,7 +47,16 @@ export default function MarketPairPage() {
   const { hash } = useParams<{ hash: string }>();
   const [showConnectModal, setShowConnectModal] = useState(false);
   const { pair, capabilities, loading, error } = useMarketPair(hash);
-  const { connectionStatus, errorMessage, installedWallets, connect } = useWallet();
+  const { address, gasBalance, connectionStatus, errorMessage, installedWallets, connect } = useWallet();
+  const { setPendingTx } = usePendingTx();
+
+  function handleTxSubmitted(txHash: string, message: string) {
+    setPendingTx({
+      txHash,
+      message,
+      targetTokenHash: hash,
+    });
+  }
 
   return (
     <>
@@ -86,6 +97,14 @@ export default function MarketPairPage() {
                 </div>
 
                 <div className="space-y-6">
+                  <TradeRail
+                    pair={pair}
+                    connectedAddress={address}
+                    connectionStatus={connectionStatus}
+                    gasBalance={gasBalance}
+                    onConnectClick={() => setShowConnectModal(true)}
+                    onTxSubmitted={handleTxSubmitted}
+                  />
                   <GraduationProgressCard pair={pair} />
                 </div>
               </div>

@@ -8,7 +8,9 @@
 
 import { GAS_CONTRACT_HASH, PRIVATE_NET_RPC_URL, WALLET_STORAGE_KEY } from "./forge-config";
 import { getTokenBalance } from "./neo-rpc-client";
-import type { ForgeParams, WalletBalance, WalletType } from "./types";
+import type { ForgeParams, MarketQuoteAsset, WalletBalance, WalletType } from "./types";
+
+const NEO_CONTRACT_HASH = "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -371,6 +373,36 @@ async function invokeConnectedOperation(
       operation,
       args,
       signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      description,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
+async function invokeConnectedTransfer(
+  assetHash: string,
+  toHash: string,
+  amount: bigint,
+  data: NeoDapiInvokeArg,
+  description: string
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  if (!_connectedAddress) throw new WalletNotConnectedError();
+
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: assetHash,
+      operation: "transfer",
+      args: [
+        { type: "Hash160", value: addressToScriptHash(_connectedAddress) },
+        { type: "Hash160", value: toHash },
+        { type: "Integer", value: amount.toString() },
+        data,
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress), scopes: "Global" as const }],
       description,
     });
     return result.txid;
@@ -872,6 +904,52 @@ export async function invokeTokenTransfer(
       { type: "Any", value: null },
     ],
     `Transfer ${amount} raw token units`
+  );
+}
+
+export async function invokeBondingCurveBuy(
+  routerHash: string,
+  tokenHash: string,
+  quoteAsset: MarketQuoteAsset,
+  quoteAmount: bigint,
+  minTokensOut: bigint
+): Promise<string> {
+  const quoteAssetHash =
+    quoteAsset === "NEO" ? NEO_CONTRACT_HASH : GAS_CONTRACT_HASH;
+
+  return invokeConnectedTransfer(
+    quoteAssetHash,
+    routerHash,
+    quoteAmount,
+    {
+      type: "Array",
+      value: [
+        { type: "Hash160", value: tokenHash },
+        { type: "Integer", value: minTokensOut.toString() },
+      ],
+    },
+    `Buy ${tokenHash} with ${quoteAmount} ${quoteAsset}`
+  );
+}
+
+export async function invokeBondingCurveSell(
+  routerHash: string,
+  tokenHash: string,
+  tokenAmount: bigint,
+  minQuoteOut: bigint
+): Promise<string> {
+  return invokeConnectedTransfer(
+    tokenHash,
+    routerHash,
+    tokenAmount,
+    {
+      type: "Array",
+      value: [
+        { type: "Integer", value: minQuoteOut.toString() },
+        { type: "Integer", value: tokenAmount.toString() },
+      ],
+    },
+    `Sell ${tokenAmount} raw token units into ${routerHash}`
   );
 }
 

@@ -15,6 +15,12 @@ vi.mock("@/modules/forge/hooks/useWallet", () => ({
   useWallet: vi.fn(),
 }));
 
+vi.mock("@/modules/forge/components/PendingTxProvider", () => ({
+  usePendingTx: vi.fn(() => ({
+    setPendingTx: vi.fn(),
+  })),
+}));
+
 vi.mock("@/components/layout/ForgeHeader", () => ({
   ForgeHeader: ({ onConnectClick }: { onConnectClick: () => void }) => (
     <header data-testid="forge-header">
@@ -29,6 +35,10 @@ vi.mock("@/modules/forge/components/WalletConnectModal", () => ({
       <button onClick={onClose}>Close</button>
     </div>
   ),
+}));
+
+vi.mock("@/modules/forge/components/TradeRail", () => ({
+  TradeRail: () => <section data-testid="trade-rail">Trade rail</section>,
 }));
 
 import { useMarketPair } from "@/modules/forge/hooks/useMarketPair";
@@ -146,6 +156,7 @@ describe("MarketPairPage", () => {
     expect(
       await screen.findByText("Available after indexer deployment")
     ).toBeInTheDocument();
+    expect(screen.getByTestId("trade-rail")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Trade History" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Holders" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Top Traders" })).toBeInTheDocument();

@@ -14,6 +14,8 @@ import {
   invokeLockToken,
   invokeBurn,
   invokeTokenTransfer,
+  invokeBondingCurveBuy,
+  invokeBondingCurveSell,
   invokeClaimCreatorFee,
   invokeClaimCreatorFees,
   invokeApplyTokenChanges,
@@ -28,6 +30,8 @@ import {
 
 // Mock forge-config
 vi.mock("./forge-config", () => ({
+  GAS_CONTRACT_HASH: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
+  PRIVATE_NET_RPC_URL: "",
   WALLET_STORAGE_KEY: "forge_wallet_type",
 }));
 
@@ -404,6 +408,52 @@ describe("lifecycle invoke functions", () => {
       { type: "Any", value: null },
     ]);
     expect(call.signers[0].scopes).toBe("Global");
+  });
+
+  it("invokeBondingCurveBuy sends quote asset transfer with token hash and min out payload", async () => {
+    const instance = await connectMock();
+    await invokeBondingCurveBuy("0xrouter", "0xtoken", "GAS", 125_000_000n, 1_234n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: unknown }[];
+    };
+    expect(call.scriptHash).toBe("0xd2a4cff31913016155e38e474a2c06d08be276cf");
+    expect(call.operation).toBe("transfer");
+    expect(call.args[1]).toEqual({ type: "Hash160", value: "0xrouter" });
+    expect(call.args[2]).toEqual({ type: "Integer", value: "125000000" });
+    expect(call.args[3]).toEqual({
+      type: "Array",
+      value: [
+        { type: "Hash160", value: "0xtoken" },
+        { type: "Integer", value: "1234" },
+      ],
+    });
+  });
+
+  it("invokeBondingCurveSell sends token transfer with min quote and declared gross token input", async () => {
+    const instance = await connectMock();
+    await invokeBondingCurveSell("0xrouter", "0xtoken", 90_000n, 456_789n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: unknown }[];
+    };
+    expect(call.scriptHash).toBe("0xtoken");
+    expect(call.operation).toBe("transfer");
+    expect(call.args[1]).toEqual({ type: "Hash160", value: "0xrouter" });
+    expect(call.args[2]).toEqual({ type: "Integer", value: "90000" });
+    expect(call.args[3]).toEqual({
+      type: "Array",
+      value: [
+        { type: "Integer", value: "456789" },
+        { type: "Integer", value: "90000" },
+      ],
+    });
   });
 
   it("invokeClaimCreatorFee calls the token contract with the requested amount", async () => {

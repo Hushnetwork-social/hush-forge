@@ -235,9 +235,14 @@ export function ForgeOverlay({
                   </label>
                   <label className="flex items-center gap-2 text-sm" style={{ color: "var(--forge-text-muted)" }}>
                     <input type="radio" name="mode" disabled />
-                    Speculative <span className="text-xs">- coming soon</span>
+                    Speculative <span className="text-xs">- launch after creation</span>
                   </label>
                 </div>
+                <p className="mt-2 text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+                  Forge creates tokens in Community mode first. After creation, open the token page
+                  and use <strong style={{ color: "var(--forge-text-primary)" }}>Launch Speculation Market</strong> when
+                  you are ready to open trading.
+                </p>
               </div>
             </div>
           </div>

@@ -210,6 +210,12 @@ describe("ForgeOverlay", () => {
       'input[type="radio"]:disabled'
     );
     expect(disabledRadios.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Speculative/)).toHaveTextContent(
+      "Speculative - launch after creation"
+    );
+    expect(
+      screen.getByText(/Forge creates tokens in Community mode first/i)
+    ).toBeInTheDocument();
   });
 
   it("calls onTxSubmitted when submittedTxHash is set", async () => {

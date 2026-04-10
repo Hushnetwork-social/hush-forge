@@ -6,8 +6,9 @@
  * isOwnToken first checks the token store's ownTokenHashes set (populated when
  * the user loads the /tokens list). It then falls back to direct creator-vs-
  * address comparison so directly loaded token pages still recognize creator
- * ownership. For compatibility, the fallback compares both little-endian and
- * big-endian hash forms derived from the connected wallet address.
+ * ownership. For compatibility, the fallback compares both the canonical
+ * script hash form and the legacy reversed-byte form derived from the
+ * connected wallet address.
  */
 
 import { useEffect, useState } from "react";
@@ -27,16 +28,19 @@ export interface TokenDetailResult {
   isUpgradeable: boolean;
 }
 
-function addressToHashForms(address: string): { le: string | null; be: string | null } {
+function addressToHashForms(address: string): {
+  canonical: string | null;
+  reversedLegacy: string | null;
+} {
   try {
-    const le = addressToHash160(address);
-    const body = le.slice(2);
+    const canonical = addressToHash160(address);
+    const body = canonical.slice(2);
     return {
-      le,
-      be: "0x" + (body.match(/.{2}/g) ?? []).reverse().join(""),
+      canonical,
+      reversedLegacy: "0x" + (body.match(/.{2}/g) ?? []).reverse().join(""),
     };
   } catch {
-    return { le: null, be: null };
+    return { canonical: null, reversedLegacy: null };
   }
 }
 
@@ -73,15 +77,15 @@ export function useTokenDetail(contractHash: string): TokenDetailResult {
 
   const comparableCreatorHashes = address
     ? addressToHashForms(address)
-    : { le: null, be: null };
+    : { canonical: null, reversedLegacy: null };
 
   const isOwnToken =
     ownTokenHashes.has(contractHash) ||
     (!!token?.creator &&
       !!address &&
       (token.creator === address ||
-        token.creator === comparableCreatorHashes.le ||
-        token.creator === comparableCreatorHashes.be));
+        token.creator === comparableCreatorHashes.canonical ||
+        token.creator === comparableCreatorHashes.reversedLegacy));
 
   return {
     token,

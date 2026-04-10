@@ -1,13 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ForgeHeader } from "./ForgeHeader";
-import { useFactoryAdminAccess } from "@/modules/forge/hooks/useFactoryAdminAccess";
 import { useWalletStore } from "@/modules/forge/wallet-store";
 import type { ConnectionStatus, WalletStore } from "@/modules/forge/wallet-store";
-
-vi.mock("@/modules/forge/hooks/useFactoryAdminAccess", () => ({
-  useFactoryAdminAccess: vi.fn(),
-}));
 
 vi.mock("@/modules/forge/wallet-store", () => ({
   useWalletStore: vi.fn(),
@@ -27,21 +22,6 @@ function mockWallet(
 describe("ForgeHeader", () => {
   beforeEach(() => {
     mockWallet(null, "disconnected");
-    vi.mocked(useFactoryAdminAccess).mockReturnValue({
-      factoryHash: "0xfactory",
-      status: "idle",
-      config: null,
-      error: null,
-      access: {
-        connectedAddress: null,
-        connectedHash: null,
-        ownerHash: null,
-        isOwner: false,
-        navVisible: false,
-        routeAuthorized: false,
-      },
-      reload: vi.fn(),
-    });
   });
 
   it("shows Connect Wallet button when disconnected", () => {
@@ -82,62 +62,33 @@ describe("ForgeHeader", () => {
     expect(disconnect).toHaveBeenCalled();
   });
 
-  it("shows Connecting… label and disables button while connecting", () => {
+  it("shows Connecting... label and disables button while connecting", () => {
     mockWallet(null, "connecting");
     render(<ForgeHeader onConnectClick={vi.fn()} />);
-    const btn = screen.getByRole("button", { name: "Connecting…" });
-    expect(btn).toBeDisabled();
+    const button = screen.getByRole("button", { name: "Connecting..." });
+    expect(button).toBeDisabled();
   });
 
-  it("Forge logo links to /tokens", () => {
+  it("Forge logo links to /markets by default", () => {
     render(<ForgeHeader onConnectClick={vi.fn()} />);
+    const link = screen.getByRole("link", { name: "Forge" });
+    expect(link).toHaveAttribute("href", "/markets");
+  });
+
+  it("renders the optional header slot content", () => {
+    render(
+      <ForgeHeader onConnectClick={vi.fn()}>
+        <div>shell content</div>
+      </ForgeHeader>
+    );
+
+    expect(screen.getByText("shell content")).toBeInTheDocument();
+  });
+
+  it("allows overriding the home link target", () => {
+    render(<ForgeHeader onConnectClick={vi.fn()} homeHref="/tokens" />);
     const link = screen.getByRole("link", { name: "Forge" });
     expect(link).toHaveAttribute("href", "/tokens");
   });
 
-  it("shows Admin link for the TokenFactory owner", () => {
-    mockWallet("NXV7ZhHiyM1aHXwvUNBLNbCcFZdTLi1p5f", "connected");
-    vi.mocked(useFactoryAdminAccess).mockReturnValue({
-      factoryHash: "0xfactory",
-      status: "ready",
-      config: null,
-      error: null,
-      access: {
-        connectedAddress: "NXV7ZhHiyM1aHXwvUNBLNbCcFZdTLi1p5f",
-        connectedHash: "0xowner",
-        ownerHash: "0xowner",
-        isOwner: true,
-        navVisible: true,
-        routeAuthorized: true,
-      },
-      reload: vi.fn(),
-    });
-
-    render(<ForgeHeader onConnectClick={vi.fn()} />);
-
-    expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin/factory");
-  });
-
-  it("hides Admin link for non-owner wallets", () => {
-    mockWallet("NXV7ZhHiyM1aHXwvUNBLNbCcFZdTLi1p5f", "connected");
-    vi.mocked(useFactoryAdminAccess).mockReturnValue({
-      factoryHash: "0xfactory",
-      status: "ready",
-      config: null,
-      error: null,
-      access: {
-        connectedAddress: "NXV7ZhHiyM1aHXwvUNBLNbCcFZdTLi1p5f",
-        connectedHash: "0xuser",
-        ownerHash: "0xowner",
-        isOwner: false,
-        navVisible: false,
-        routeAuthorized: false,
-      },
-      reload: vi.fn(),
-    });
-
-    render(<ForgeHeader onConnectClick={vi.fn()} />);
-
-    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
-  });
 });

@@ -40,8 +40,8 @@ export async function connectWallet(page: Page, address: string): Promise<void> 
 }
 
 /**
- * Navigates to /tokens, connects wallet, clicks "Forge Token" and waits for
- * the Forge overlay to appear.
+ * Navigates to the creator dashboard at /tokens, connects wallet, clicks
+ * "Forge Token" and waits for the Forge overlay to appear.
  *
  * Does NOT wait for the FORGE submit button to be enabled — call
  * waitForForgeReady() afterwards when the scenario needs to submit the form.
@@ -89,6 +89,10 @@ Given(/the user navigates to \/tokens$/, async ({ page }) => {
   await page.goto("/tokens");
 });
 
+Given(/the user navigates to \/markets$/, async ({ page }) => {
+  await page.goto("/markets");
+});
+
 Given("the wallet is connected", async ({ page, mockDapi }) => {
   await page.goto("/tokens");
   await connectWallet(page, mockDapi.address);
@@ -100,20 +104,20 @@ Given("the Forge overlay is open", async ({ page, mockDapi }) => {
 
 Given("the Forge overlay is open with valid token details", async ({ page, mockDapi }) => {
   await openForgeOverlay(page, mockDapi.address);
-  await waitForForgeReady(page);
   await fillValidForgeForm(page);
+  await waitForForgeReady(page);
 });
 
 Given("the Forge overlay is open with a valid form", async ({ page, mockDapi }) => {
   await openForgeOverlay(page, mockDapi.address);
-  await waitForForgeReady(page);
   await fillValidForgeForm(page);
+  await waitForForgeReady(page);
 });
 
 Given("a pending transaction toast is visible", async ({ page, mockDapi }) => {
   await openForgeOverlay(page, mockDapi.address);
-  await waitForForgeReady(page);
   await fillValidForgeForm(page);
+  await waitForForgeReady(page);
   // Override invoke() to return a fake txid instantly - the pending toast only
   // needs the txHash to be set, not an actual confirmed on-chain TX.
   // This avoids waiting 30 s for a real TX, which is unnecessary for accessibility tests.

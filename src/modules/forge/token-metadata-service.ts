@@ -137,6 +137,22 @@ function peek(stack: RpcStackItem[]): RpcStackItem | undefined {
   return stack[0];
 }
 
+function normalizeFactoryMode(mode: string): TokenInfo["mode"] {
+  switch (mode) {
+    case "speculation":
+      return "speculative";
+    case "crowdfunding":
+      return "crowdfund";
+    case "community":
+    case "speculative":
+    case "crowdfund":
+    case "premium":
+      return mode;
+    default:
+      return null;
+  }
+}
+
 /**
  * Parses the factory getToken() result.
  * Actual Array format returned by the contract:
@@ -162,7 +178,7 @@ function parseFactoryToken(
       // name not stored in factory — will be filled from direct contract call
       creator: decodeHash(v[1].value as string),
       supply: BigInt(v[2].value as string),
-      mode: decodeStr(v[3].value as string) as "community" | "premium",
+      mode: normalizeFactoryMode(decodeStr(v[3].value as string)),
       tier: v[4] !== undefined ? Number(v[4].value) || null : null,
       createdAt: v[5] !== undefined ? Number(v[5].value) || null : null,
       imageUrl: v[6] !== undefined ? decodeStr(v[6].value as string) || undefined : undefined,

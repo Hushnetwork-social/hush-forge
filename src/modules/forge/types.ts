@@ -39,6 +39,250 @@ export interface TokenMetadata {
 }
 
 // ---------------------------------------------------------------------------
+// Market data
+// ---------------------------------------------------------------------------
+
+export type MarketQuoteAsset = "GAS" | "NEO";
+export type MarketPairStatus = "active" | "graduation_ready" | "unknown";
+export type MarketDataSourceMode = "baseline" | "indexer";
+export type LaunchProfileId = "starter" | "standard" | "growth" | "flagship";
+
+export interface MarketCurveState {
+  tokenHash: string;
+  contractStatus: string;
+  status: MarketPairStatus;
+  quoteAsset: MarketQuoteAsset;
+  launchProfile?: LaunchProfileId | null;
+  virtualQuote: bigint;
+  virtualTokens: bigint;
+  realQuote: bigint;
+  currentCurveInventory: bigint;
+  invariantK: bigint;
+  graduationThreshold: bigint;
+  graduationReady: boolean;
+  currentPrice: bigint;
+  totalTrades: bigint;
+  createdAt: number | null;
+  curveInventory: bigint;
+  retainedInventory: bigint;
+  totalSupply: bigint;
+}
+
+export interface MarketBuyQuote {
+  tokenHash: string;
+  grossQuoteIn: bigint;
+  quoteConsumed: bigint;
+  quoteRefund: bigint;
+  grossTokenOut: bigint;
+  burnAmount: bigint;
+  netTokenOut: bigint;
+  platformFee: bigint;
+  creatorFee: bigint;
+  nextPrice: bigint;
+  capped: boolean;
+}
+
+export interface MarketSellQuote {
+  tokenHash: string;
+  grossTokenIn: bigint;
+  burnAmount: bigint;
+  netTokenIn: bigint;
+  grossQuoteOut: bigint;
+  netQuoteOut: bigint;
+  platformFee: bigint;
+  creatorFee: bigint;
+  nextPrice: bigint;
+  liquidityOkay: boolean;
+}
+
+export interface MarketGraduationProgress {
+  tokenHash: string;
+  realQuote: bigint;
+  graduationThreshold: bigint;
+  progressBps: number;
+  graduationReady: boolean;
+}
+
+export interface MarketEnhancementCapabilities {
+  mode: MarketDataSourceMode;
+  marketList: boolean;
+  trendData: boolean;
+  candles: boolean;
+  tradeHistory: boolean;
+  holders: boolean;
+  topTraders: boolean;
+  liveFeed: boolean;
+  contractChangeFeed: boolean;
+}
+
+export interface MarketDiscoveryItem {
+  pairHash: string;
+  tokenHash: string;
+  pairLabel: string;
+  token: TokenInfo;
+  quoteAsset: MarketQuoteAsset;
+  marketType: "BondingCurve";
+  status: MarketPairStatus;
+  contractStatus: string;
+  lastPrice: bigint | null;
+  volume24h: bigint | null;
+  tradeCount24h: number | null;
+  totalTrades: bigint | null;
+  createdAt: number | null;
+  launchCurveInventory: bigint | null;
+  launchRetainedInventory: bigint | null;
+  totalSupply: bigint | null;
+  searchableText: string;
+  curve: MarketCurveState | null;
+}
+
+export interface MarketPairReadModel {
+  pairHash: string;
+  tokenHash: string;
+  pairLabel: string;
+  token: TokenInfo;
+  quoteAsset: MarketQuoteAsset;
+  marketType: "BondingCurve";
+  curve: MarketCurveState;
+  graduation: MarketGraduationProgress;
+  capabilities: MarketEnhancementCapabilities;
+}
+
+export type MarketCandleInterval = "1m" | "5m" | "15m" | "1h" | "1d";
+
+export interface MarketCandle {
+  time: number;
+  open: bigint;
+  high: bigint;
+  low: bigint;
+  close: bigint;
+  volume: bigint;
+}
+
+export interface MarketTradeHistoryEntry {
+  id: string;
+  occurredAt: number;
+  side: "buy" | "sell";
+  trader: string;
+  quoteAsset: MarketQuoteAsset;
+  quoteAmount: bigint;
+  tokenAmount: bigint;
+  price: bigint;
+  txHash: string;
+}
+
+export interface MarketHolderEntry {
+  rank: number;
+  address: string;
+  balance: bigint;
+  shareBps: number | null;
+}
+
+export interface MarketTopTraderEntry {
+  rank: number;
+  address: string;
+  totalTrades: number;
+  buyVolume: bigint;
+  sellVolume: bigint;
+  netQuoteVolume: bigint;
+}
+
+export interface MarketActivitySnapshot {
+  tokenHash: string;
+  interval: "15m";
+  indexedThroughBlock: number;
+  indexedAt: number;
+  candles: MarketCandle[];
+  trades: MarketTradeHistoryEntry[];
+  holders: MarketHolderEntry[];
+  topTraders: MarketTopTraderEntry[];
+}
+
+export interface MarketLiveTradeEvent extends MarketTradeHistoryEntry {
+  currentPrice: bigint | null;
+}
+
+export interface MarketCandleQuery {
+  tokenHash: string;
+  interval: MarketCandleInterval;
+  limit?: number;
+}
+
+export interface MarketTradeHistoryQuery {
+  tokenHash: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface MarketHolderQuery {
+  tokenHash: string;
+  limit?: number;
+}
+
+export interface MarketTopTraderQuery {
+  tokenHash: string;
+  limit?: number;
+}
+
+export interface MarketDiscoveryProvider {
+  isAvailable(): boolean;
+  listPairs(searchQuery?: string): Promise<MarketDiscoveryItem[]>;
+}
+
+export interface MarketTrendingProvider {
+  isAvailable(): boolean;
+  listTrendingPairs(limit: number): Promise<MarketDiscoveryItem[]>;
+}
+
+export interface MarketCandleProvider {
+  isAvailable(): boolean;
+  getCandles(query: MarketCandleQuery): Promise<MarketCandle[]>;
+}
+
+export interface MarketTradeHistoryProvider {
+  isAvailable(): boolean;
+  getTrades(query: MarketTradeHistoryQuery): Promise<MarketTradeHistoryEntry[]>;
+}
+
+export interface MarketHolderProvider {
+  isAvailable(): boolean;
+  getHolders(query: MarketHolderQuery): Promise<MarketHolderEntry[]>;
+}
+
+export interface MarketTopTraderProvider {
+  isAvailable(): boolean;
+  getTopTraders(query: MarketTopTraderQuery): Promise<MarketTopTraderEntry[]>;
+}
+
+export interface MarketLiveFeedProvider {
+  isAvailable(): boolean;
+  subscribe(
+    tokenHash: string,
+    onTrade: (event: MarketLiveTradeEvent) => void
+  ): () => void;
+}
+
+export interface MarketEnhancementServices {
+  discovery: MarketDiscoveryProvider;
+  trending: MarketTrendingProvider;
+  candles: MarketCandleProvider;
+  tradeHistory: MarketTradeHistoryProvider;
+  holders: MarketHolderProvider;
+  topTraders: MarketTopTraderProvider;
+  liveFeed: MarketLiveFeedProvider;
+}
+
+export interface MarketLaunchSummary {
+  tokenHash: string;
+  pairLabel: string;
+  quoteAsset: MarketQuoteAsset;
+  launchProfile?: LaunchProfileId | null;
+  tokenSymbol: string;
+  curveInventoryRaw: string;
+  retainedInventoryRaw: string;
+}
+
+// ---------------------------------------------------------------------------
 // Wallet state
 // ---------------------------------------------------------------------------
 
@@ -145,6 +389,14 @@ export interface CreationCostQuote {
   estimatedTotalWalletOutflowDatoshi: bigint;
 }
 
+export interface ContractChangeCostQuote {
+  operationFeeDatoshi: bigint;
+  estimatedSystemFeeDatoshi: bigint;
+  estimatedNetworkFeeDatoshi: bigint;
+  estimatedChainFeeDatoshi: bigint;
+  estimatedTotalWalletOutflowDatoshi: bigint;
+}
+
 export interface TransferQuote {
   grossAmountRaw: bigint;
   recipientAmountRaw: bigint;
@@ -183,6 +435,12 @@ export type TxStatus =
   | "confirmed" // included in a block, ApplicationLog available
   | "faulted" // ApplicationLog state = FAULT
   | "timeout"; // polling timed out without confirmation
+
+export interface PendingTxSubmissionOptions {
+  targetTokenHash?: string;
+  redirectPath?: string;
+  marketLaunchSummary?: MarketLaunchSummary;
+}
 
 // ---------------------------------------------------------------------------
 // Forge form data

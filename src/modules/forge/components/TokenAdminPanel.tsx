@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { TokenInfo } from "../types";
+import type { PendingTxSubmissionOptions, TokenInfo } from "../types";
 import {
   invokeApplyTokenChanges,
   invokeClaimCreatorFee,
@@ -21,13 +21,23 @@ type AdminTab = "identity" | "supply" | "properties" | "danger";
 interface Props {
   token: TokenInfo;
   factoryHash: string;
-  onTxSubmitted: (txHash: string, message: string) => void;
+  onTxSubmitted: (
+    txHash: string,
+    message: string,
+    options?: PendingTxSubmissionOptions
+  ) => void;
 }
 
 function formatGas(datoshi: bigint): string {
   const whole = datoshi / 100_000_000n;
   const fraction = (datoshi % 100_000_000n).toString().padStart(8, "0");
   return `${whole.toLocaleString("en-US")}.${fraction}`.replace(/\.?0+$/, "") + " GAS";
+}
+
+function toContractMode(mode: string): string {
+  if (mode === "speculative") return "speculation";
+  if (mode === "crowdfund") return "crowdfunding";
+  return mode;
 }
 
 export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
@@ -139,7 +149,7 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
           creatorFeeRate = Number(change.payload.datoshi ?? -1);
           break;
         case "mode":
-          newMode = String(change.payload.mode ?? "").trim();
+          newMode = toContractMode(String(change.payload.mode ?? "").trim());
           break;
         case "maxSupply":
           newMaxSupply = BigInt(String(change.payload.maxSupply ?? "-1"));

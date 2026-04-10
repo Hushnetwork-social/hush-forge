@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import type { ReactNode } from "react";
 import TokensPage from "./page";
 
+const pushMock = vi.fn();
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
+  usePathname: () => "/tokens",
 }));
 
 vi.mock("@/modules/forge/hooks/useWallet", () => ({
@@ -12,6 +16,10 @@ vi.mock("@/modules/forge/hooks/useWallet", () => ({
 
 vi.mock("@/modules/forge/hooks/useFactoryDeployment", () => ({
   useFactoryDeployment: vi.fn(),
+}));
+
+vi.mock("@/modules/forge/hooks/useFactoryAdminAccess", () => ({
+  useFactoryAdminAccess: vi.fn(),
 }));
 
 vi.mock("@/modules/forge/token-store", () => ({
@@ -23,9 +31,16 @@ vi.mock("@/modules/forge/wallet-store", () => ({
 }));
 
 vi.mock("@/components/layout/ForgeHeader", () => ({
-  ForgeHeader: ({ onConnectClick }: { onConnectClick: () => void }) => (
+  ForgeHeader: ({
+    onConnectClick,
+    children,
+  }: {
+    onConnectClick: () => void;
+    children?: ReactNode;
+  }) => (
     <header data-testid="forge-header">
       <button onClick={onConnectClick}>Connect Wallet</button>
+      {children}
     </header>
   ),
 }));
@@ -67,6 +82,7 @@ vi.mock("@/modules/forge/components/WalletConnectModal", () => ({
 
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 import { useFactoryDeployment } from "@/modules/forge/hooks/useFactoryDeployment";
+import { useFactoryAdminAccess } from "@/modules/forge/hooks/useFactoryAdminAccess";
 import type { FactoryDeployStatus } from "@/modules/forge/hooks/useFactoryDeployment";
 import { useTokenStore } from "@/modules/forge/token-store";
 import type { TokenStore } from "@/modules/forge/token-store";
@@ -83,6 +99,8 @@ function setupMocks({
     | "error",
   factoryStatus = "deployed" as FactoryDeployStatus,
 } = {}) {
+  pushMock.mockReset();
+
   vi.mocked(useWallet).mockReturnValue({
     walletType: null,
     address,
@@ -108,6 +126,22 @@ function setupMocks({
   vi.mocked(usePendingTx).mockReturnValue({
     setPendingTx: vi.fn(),
     clearPendingTx: vi.fn(),
+  });
+
+  vi.mocked(useFactoryAdminAccess).mockReturnValue({
+    factoryHash: "0xfactory",
+    status: "ready",
+    config: null,
+    error: null,
+    access: {
+      connectedAddress: address,
+      connectedHash: address ? "0xuser" : null,
+      ownerHash: null,
+      isOwner: false,
+      navVisible: false,
+      routeAuthorized: false,
+    },
+    reload: vi.fn(),
   });
 
   vi.mocked(useTokenStore).mockImplementation(
@@ -139,6 +173,25 @@ describe("TokensPage", () => {
     render(<TokensPage />);
     expect(screen.getByTestId("wallet-panel")).toBeInTheDocument();
     expect(screen.getByTestId("token-grid")).toBeInTheDocument();
+  });
+
+  it("renders route-backed shell tabs with Tokens active", () => {
+    render(<TokensPage />);
+
+    expect(screen.getByRole("link", { name: "Pairs" })).toHaveAttribute("href", "/markets");
+    expect(screen.getByRole("link", { name: "Tokens" })).toHaveAttribute("href", "/tokens");
+    expect(screen.getByRole("link", { name: "Tokens" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+  });
+
+  it("does not render the pairs search UI in the shared shell", () => {
+    render(<TokensPage />);
+
+    expect(
+      screen.queryByRole("searchbox", { name: "Search markets" })
+    ).not.toBeInTheDocument();
   });
 
   it("ForgeOverlay is not visible on load", () => {
@@ -208,7 +261,7 @@ describe("TokensPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("submete tx pendente para o provider global após assinatura", () => {
+  it("submits pending tx to the global provider after signature", () => {
     setupMocks({ address: "NwMe", connectionStatus: "connected" });
     const setPendingTx = vi.fn();
     vi.mocked(usePendingTx).mockReturnValue({

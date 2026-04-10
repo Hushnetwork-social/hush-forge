@@ -1,7 +1,7 @@
 /**
  * Step definitions for: token-list.feature
  *
- * "the user navigates to /tokens" is defined in common.steps.ts.
+ * Shared route steps are defined in common.steps.ts.
  *
  * These scenarios require a running NeoExpress devnet where the test account
  * has created at least one token via the TokenFactory.
@@ -76,6 +76,32 @@ When(
 // ---------------------------------------------------------------------------
 // Then
 // ---------------------------------------------------------------------------
+
+Then(
+  "the public market shell is visible",
+  async ({ page }) => {
+    await expect(page.getByText("Public markets")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText("Trending now")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByRole("searchbox", { name: "Search markets" })
+    ).toBeVisible({ timeout: 10_000 });
+  }
+);
+
+Then("the Pairs tab is active", async ({ page }) => {
+  await expect(page.getByRole("link", { name: "Pairs" })).toHaveAttribute(
+    "aria-current",
+    "page"
+  );
+  await expect(page.getByRole("link", { name: "Tokens" })).toHaveAttribute(
+    "href",
+    "/tokens"
+  );
+});
 
 Then(
   "the token grid shows tokens held by the test account",

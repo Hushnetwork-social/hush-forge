@@ -1,9 +1,9 @@
-Feature: Token List Dashboard
+Feature: Market And Token Lists
 
-  Scenario: Token dashboard shows wallet balances when connected
-    Given the wallet is connected with the test account
-    When the user navigates to /tokens
-    Then the token grid shows tokens held by the test account
+  Scenario: Public markets landing shows the route split entrypoint
+    When the user navigates to /markets
+    Then the public market shell is visible
+    And the Pairs tab is active
 
   Scenario: Own tokens show a Yours badge
     Given the test account has created at least one token

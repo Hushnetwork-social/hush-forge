@@ -1,7 +1,7 @@
 Feature: Wallet Connection
 
-  Scenario: Connect NeoLine wallet for the first time
-    Given the user navigates to /tokens
+  Scenario: Connect NeoLine wallet from the public markets landing
+    Given the user navigates to /markets
     When the user clicks "Connect Wallet"
     Then the wallet connection modal appears
     And after connecting the wallet address is shown in the header

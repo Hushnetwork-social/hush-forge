@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ForgeHeader } from "@/components/layout/ForgeHeader";
 import { WalletPanel } from "@/modules/forge/components/WalletPanel";
 import { TokenGrid } from "@/modules/forge/components/TokenGrid";
 import { ForgeOverlay } from "@/modules/forge/components/ForgeOverlay";
@@ -12,6 +11,7 @@ import { useFactoryDeployment } from "@/modules/forge/hooks/useFactoryDeployment
 import { useTokenStore } from "@/modules/forge/token-store";
 import { FactoryDeployBanner } from "@/modules/forge/components/FactoryDeployBanner";
 import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
+import { MarketShellLayout } from "@/modules/forge/components/MarketShellLayout";
 
 type PageView = "dashboard" | "forge-overlay";
 
@@ -83,15 +83,10 @@ export default function TokensPage() {
     setView("dashboard");
   }
 
-  return (
+      return (
     <>
-      <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
-
-      <main
-        className="min-h-screen p-6"
-        style={{ background: "var(--forge-bg-primary)" }}
-      >
-        <div className="max-w-5xl mx-auto flex flex-col gap-6">
+      <MarketShellLayout onConnectClick={() => setShowConnectModal(true)}>
+        <div className="flex w-full flex-col gap-6">
           <WalletPanel
             connectionStatus={connectionStatus}
             address={address}
@@ -137,7 +132,7 @@ export default function TokensPage() {
             onTokenClick={(hash) => router.push(`/tokens/${hash}`)}
           />
         </div>
-      </main>
+      </MarketShellLayout>
 
       {view === "forge-overlay" && (
         <ForgeOverlay

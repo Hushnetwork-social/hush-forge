@@ -6,9 +6,17 @@
  * this adapter — never with window.NEOLine or window.OneGate directly.
  */
 
-import { GAS_CONTRACT_HASH, PRIVATE_NET_RPC_URL, WALLET_STORAGE_KEY } from "./forge-config";
+import {
+  GAS_CONTRACT_HASH,
+  PRIVATE_NET_RPC_URL,
+  WALLET_STORAGE_KEY,
+  saveBondingCurveRouterHash,
+} from "./forge-config";
 import { getTokenBalance } from "./neo-rpc-client";
-import type { ForgeParams, WalletBalance, WalletType } from "./types";
+import { serializeChangeModeParams } from "./token-mode-params";
+import type { ForgeParams, MarketQuoteAsset, WalletBalance, WalletType } from "./types";
+
+const NEO_CONTRACT_HASH = "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -380,6 +388,36 @@ async function invokeConnectedOperation(
   }
 }
 
+async function invokeConnectedTransfer(
+  assetHash: string,
+  toHash: string,
+  amount: bigint,
+  data: NeoDapiInvokeArg,
+  description: string
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  if (!_connectedAddress) throw new WalletNotConnectedError();
+
+  try {
+    const result = await _dapi.invoke({
+      scriptHash: assetHash,
+      operation: "transfer",
+      args: [
+        { type: "Hash160", value: addressToScriptHash(_connectedAddress) },
+        { type: "Hash160", value: toHash },
+        { type: "Integer", value: amount.toString() },
+        data,
+      ],
+      signers: [{ account: addressToScriptHash(_connectedAddress), scopes: "Global" as const }],
+      description,
+    });
+    return result.txid;
+  } catch (err) {
+    if (isWalletRejection(err)) throw new WalletRejectedError();
+    throw err;
+  }
+}
+
 /**
  * Submits a token creation transaction to the TokenFactory via GAS transfer.
  * The factory's onNEP17Payment handler receives [name, symbol, supply, decimals, "community"].
@@ -455,6 +493,13 @@ export async function invokeForge(
  */
 export async function initializeFactory(factoryHash: string): Promise<string> {
   if (!_dapi) throw new WalletNotConnectedError();
+  if (shouldUseDevnetServerFactoryActions()) {
+    const result = await invokeDevnetFactoryActionDetailed("initialize", factoryHash);
+    if (result.routerHash) {
+      saveBondingCurveRouterHash(result.routerHash);
+    }
+    return result.txid;
+  }
 
   const [nefRes, manifestRes] = await Promise.all([
     fetch("/contracts/TokenTemplate.nef"),
@@ -496,6 +541,65 @@ export async function initializeFactory(factoryHash: string): Promise<string> {
 /** ContractManagement hash — same on all Neo N3 networks. */
 const CONTRACT_MANAGEMENT_HASH = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd";
 
+function shouldUseDevnetServerFactoryActions(): boolean {
+  return PRIVATE_NET_RPC_URL === "/api/rpc";
+}
+
+async function invokeDevnetFactoryAction(
+  action: "deploy" | "initialize",
+  factoryHash?: string
+): Promise<string> {
+  const payload = await invokeDevnetFactoryActionDetailed(action, factoryHash);
+  return payload.txid;
+}
+
+async function invokeDevnetFactoryActionDetailed(
+  action: "deploy" | "initialize" | "bootstrapSpeculation",
+  factoryHash?: string
+): Promise<{ txid: string; routerHash?: string }> {
+  const response = await fetch("/api/devnet/factory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action,
+      connectedAddress: _connectedAddress,
+      factoryHash,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { txid?: string; routerHash?: string; error?: string }
+    | null;
+
+  if (!response.ok || !payload?.txid) {
+    throw new Error(payload?.error ?? `Devnet factory ${action} failed.`);
+  }
+
+  return { txid: payload.txid, routerHash: payload.routerHash };
+}
+
+export async function ensureDevnetSpeculationBootstrap(
+  factoryHash: string
+): Promise<string> {
+  if (!_dapi) throw new WalletNotConnectedError();
+  if (!shouldUseDevnetServerFactoryActions()) {
+    throw new Error(
+      "Devnet speculation bootstrap is only available on the local private network."
+    );
+  }
+
+  const result = await invokeDevnetFactoryActionDetailed(
+    "bootstrapSpeculation",
+    factoryHash
+  );
+  if (result.routerHash) {
+    saveBondingCurveRouterHash(result.routerHash);
+    return result.routerHash;
+  }
+
+  throw new Error("Devnet speculation bootstrap did not return a router hash.");
+}
+
 /**
  * Deploys the TokenFactory contract via ContractManagement.deploy.
  * Fetches the NEF and manifest from /contracts/ (served from public/).
@@ -505,6 +609,9 @@ const CONTRACT_MANAGEMENT_HASH = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd";
  */
 export async function deployFactory(): Promise<string> {
   if (!_dapi) throw new WalletNotConnectedError();
+  if (shouldUseDevnetServerFactoryActions()) {
+    return invokeDevnetFactoryAction("deploy");
+  }
 
   const [nefRes, manifestRes] = await Promise.all([
     fetch("/contracts/TokenFactory.nef"),
@@ -733,6 +840,7 @@ export async function invokeChangeMode(
   params: unknown[]
 ): Promise<string> {
   if (!_dapi) throw new WalletNotConnectedError();
+  const serializedParams = serializeChangeModeParams(newMode, params);
   try {
     const result = await _dapi.invoke({
       scriptHash: factoryHash,
@@ -742,7 +850,7 @@ export async function invokeChangeMode(
         { type: "String", value: newMode },
         {
           type: "Array",
-          value: params.map((p) => ({ type: "String", value: String(p) })),
+          value: serializedParams,
         },
       ],
       signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
@@ -826,7 +934,7 @@ export async function invokeApplyTokenChanges(
         { type: "String", value: params.newMode },
         {
           type: "Array",
-          value: params.modeParams.map((p) => ({ type: "String", value: p })),
+          value: serializeChangeModeParams(params.newMode, params.modeParams),
         },
         { type: "Integer", value: params.newMaxSupply.toString() },
         { type: "Hash160", value: mintToValue },
@@ -872,6 +980,52 @@ export async function invokeTokenTransfer(
       { type: "Any", value: null },
     ],
     `Transfer ${amount} raw token units`
+  );
+}
+
+export async function invokeBondingCurveBuy(
+  routerHash: string,
+  tokenHash: string,
+  quoteAsset: MarketQuoteAsset,
+  quoteAmount: bigint,
+  minTokensOut: bigint
+): Promise<string> {
+  const quoteAssetHash =
+    quoteAsset === "NEO" ? NEO_CONTRACT_HASH : GAS_CONTRACT_HASH;
+
+  return invokeConnectedTransfer(
+    quoteAssetHash,
+    routerHash,
+    quoteAmount,
+    {
+      type: "Array",
+      value: [
+        { type: "Hash160", value: tokenHash },
+        { type: "Integer", value: minTokensOut.toString() },
+      ],
+    },
+    `Buy ${tokenHash} with ${quoteAmount} ${quoteAsset}`
+  );
+}
+
+export async function invokeBondingCurveSell(
+  routerHash: string,
+  tokenHash: string,
+  tokenAmount: bigint,
+  minQuoteOut: bigint
+): Promise<string> {
+  return invokeConnectedTransfer(
+    tokenHash,
+    routerHash,
+    tokenAmount,
+    {
+      type: "Array",
+      value: [
+        { type: "Integer", value: minQuoteOut.toString() },
+        { type: "Integer", value: tokenAmount.toString() },
+      ],
+    },
+    `Sell ${tokenAmount} raw token units into ${routerHash}`
   );
 }
 

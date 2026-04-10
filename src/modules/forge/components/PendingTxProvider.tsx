@@ -8,9 +8,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ForgeErrorToast, ForgePendingToast } from "./ForgeToaster";
 import { useTokenPolling } from "../hooks/useTokenPolling";
+import { dispatchMarketDataInvalidated } from "../market-data-events";
+import { persistMarketLaunchSummary } from "../market-launch-banner-state";
+import type { MarketLaunchSummary, TxStatus } from "../types";
+import { useWalletStore } from "../wallet-store";
 
 const STORAGE_KEY = "forge.pending.tx";
 
@@ -18,11 +22,15 @@ type PendingTxState = {
   txHash: string;
   message: string;
   targetTokenHash?: string;
+  redirectPath?: string;
+  marketLaunchSummary?: MarketLaunchSummary;
 };
 
 type PendingTxContextValue = {
   setPendingTx: (pending: PendingTxState) => void;
   clearPendingTx: () => void;
+  pendingTx: PendingTxState | null;
+  pendingStatus: TxStatus | null;
 };
 
 const noop = () => {};
@@ -30,6 +38,8 @@ const noop = () => {};
 const PendingTxContext = createContext<PendingTxContextValue>({
   setPendingTx: noop,
   clearPendingTx: noop,
+  pendingTx: null,
+  pendingStatus: null,
 });
 
 export function usePendingTx() {
@@ -38,6 +48,7 @@ export function usePendingTx() {
 
 export function PendingTxProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [pending, setPending] = useState<PendingTxState | null>(() => {
     if (typeof window === "undefined") return null;
@@ -71,9 +82,26 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
     if (!pending) return;
     if (polling.status === "confirmed") {
       const confirmedHash = pending.targetTokenHash ?? polling.contractHash ?? "";
+      if (pending.marketLaunchSummary) {
+        persistMarketLaunchSummary(pending.marketLaunchSummary);
+      }
+      if (pending.redirectPath) {
+        if (pathname === pending.redirectPath) {
+          window.location.reload();
+        } else {
+          router.push(pending.redirectPath);
+        }
+        queueMicrotask(() => setPending(null));
+        return;
+      }
       const isTokensList = pathname === "/tokens";
       const isSameTokenDetail = confirmedHash.length > 0 && pathname === `/tokens/${confirmedHash}`;
-      if (isTokensList || isSameTokenDetail) {
+      const isMarketsList = pathname === "/markets";
+      const isSameMarketDetail = confirmedHash.length > 0 && pathname === `/markets/${confirmedHash}`;
+      if (isSameMarketDetail) {
+        dispatchMarketDataInvalidated(confirmedHash, "trade_confirmation");
+        void useWalletStore.getState().refreshBalances();
+      } else if (isTokensList || isSameTokenDetail || isMarketsList) {
         window.location.reload();
       }
       queueMicrotask(() => setPending(null));
@@ -85,7 +113,7 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
         setPending(null);
       });
     }
-  }, [pathname, pending, polling.contractHash, polling.error, polling.status]);
+  }, [pathname, pending, polling.contractHash, polling.error, polling.status, router]);
 
   const value = useMemo<PendingTxContextValue>(
     () => ({
@@ -97,8 +125,10 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
       clearPendingTx() {
         setPending(null);
       },
+      pendingTx: pending,
+      pendingStatus: pending ? polling.status : null,
     }),
-    []
+    [pending, polling.status]
   );
 
   return (

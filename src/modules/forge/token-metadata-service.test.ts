@@ -125,6 +125,35 @@ describe("resolveTokenMetadata", () => {
     expect(result.imageUrl).toBe("https://example.com/icon.png");
   });
 
+  it("normalizes speculation and crowdfunding modes from factory storage to UI mode labels", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("SPC", 0xab, "1000", "speculation", "1", "100")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("SPC") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("SpecToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
+
+    const speculative = await resolveTokenMetadata("0xspec");
+    expect(speculative.mode).toBe("speculative");
+
+    vi.mocked(mockInvokeFunction).mockReset();
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("CRD", 0xab, "1000", "crowdfunding", "1", "100")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("CRD") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("CrowdToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
+
+    const crowdfund = await resolveTokenMetadata("0xcrowd");
+    expect(crowdfund.mode).toBe("crowdfund");
+  });
+
   it("imageUrl is undefined when factory stores empty string", async () => {
     vi.mocked(mockInvokeFunction)
       .mockResolvedValueOnce(

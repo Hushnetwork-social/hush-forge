@@ -18,6 +18,7 @@
     "setup:wallet-profile": "npx ts-node --project tsconfig.json e2e/setup-neoline-wallet.ts"
   },
   "dependencies": {
+    "lightweight-charts": "^5.1.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",

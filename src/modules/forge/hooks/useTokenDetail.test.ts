@@ -74,10 +74,23 @@ describe("useTokenDetail", () => {
     expect(result.current.isOwnToken).toBe(true);
   });
 
-  it("isOwnToken is true when creator matches the wallet hash in little-endian form", async () => {
+  it("isOwnToken is true when creator matches the wallet hash in canonical form", async () => {
     const token = makeToken("0xabc", "0x88c48eaef7e64b646440da567cd85c9060efbf63");
     vi.mocked(mockResolve).mockResolvedValue(token);
     vi.mocked(mockAddressToHash160).mockReturnValue(token.creator as string);
+    useWalletStore.setState({ address: "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c" });
+
+    const { result } = renderHook(() => useTokenDetail("0xabc"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.isOwnToken).toBe(true);
+  });
+
+  it("isOwnToken stays true when creator is stored in the legacy reversed-byte form", async () => {
+    const token = makeToken("0xabc", "0x63bfef60905cd87c56da4064644be6f7ae8ec488");
+    vi.mocked(mockResolve).mockResolvedValue(token);
+    vi.mocked(mockAddressToHash160).mockReturnValue("0x88c48eaef7e64b646440da567cd85c9060efbf63");
     useWalletStore.setState({ address: "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c" });
 
     const { result } = renderHook(() => useTokenDetail("0xabc"));

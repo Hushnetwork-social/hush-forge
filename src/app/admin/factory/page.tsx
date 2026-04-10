@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ForgeHeader } from "@/components/layout/ForgeHeader";
+import { MarketShellTabs } from "@/modules/forge/components/MarketShellTabs";
 import {
   FactoryAdminDashboard,
   type AdminMutationState,
@@ -198,7 +199,9 @@ export default function FactoryAdminPage() {
   if (!address) {
     return (
       <>
-        <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
+        <ForgeHeader onConnectClick={() => setShowConnectModal(true)}>
+          <MarketShellTabs />
+        </ForgeHeader>
         <main className="min-h-screen px-6 py-10" style={{ background: "var(--forge-bg-primary)" }}>
           <div className="mx-auto max-w-3xl rounded-2xl p-8 text-center" style={{ background: "var(--forge-bg-card)", border: "1px solid var(--forge-border-medium)" }}>
             <h1 className="text-3xl font-semibold">Connect Wallet Required</h1>
@@ -222,7 +225,9 @@ export default function FactoryAdminPage() {
   if (accessState.status === "loading") {
     return (
       <>
-        <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
+        <ForgeHeader onConnectClick={() => setShowConnectModal(true)}>
+          <MarketShellTabs />
+        </ForgeHeader>
         <main className="min-h-screen px-6 py-10" style={{ background: "var(--forge-bg-primary)" }}>
           <div className="mx-auto max-w-3xl rounded-2xl p-8 text-center" style={{ background: "var(--forge-bg-card)", border: "1px solid var(--forge-border-medium)" }}>
             <h1 className="text-3xl font-semibold">Checking owner access...</h1>
@@ -235,7 +240,9 @@ export default function FactoryAdminPage() {
   if (accessState.status === "error") {
     return (
       <>
-        <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
+        <ForgeHeader onConnectClick={() => setShowConnectModal(true)}>
+          <MarketShellTabs />
+        </ForgeHeader>
         <main className="min-h-screen px-6 py-10" style={{ background: "var(--forge-bg-primary)" }}>
           <div className="mx-auto max-w-3xl rounded-2xl p-8 text-center" style={{ background: "var(--forge-bg-card)", border: "1px solid var(--forge-border-medium)" }}>
             <h1 className="text-3xl font-semibold">Unable to load TokenFactory configuration</h1>
@@ -263,7 +270,9 @@ export default function FactoryAdminPage() {
   if (!accessState.access.routeAuthorized || !accessState.config) {
     return (
       <>
-        <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
+        <ForgeHeader onConnectClick={() => setShowConnectModal(true)}>
+          <MarketShellTabs />
+        </ForgeHeader>
         <main className="min-h-screen px-6 py-10" style={{ background: "var(--forge-bg-primary)" }}>
           <div className="mx-auto max-w-3xl rounded-2xl p-8 text-center" style={{ background: "var(--forge-bg-card)", border: "1px solid var(--forge-border-medium)" }}>
             <h1 className="text-3xl font-semibold">Unauthorized</h1>
@@ -278,7 +287,9 @@ export default function FactoryAdminPage() {
 
   return (
     <>
-      <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
+      <ForgeHeader onConnectClick={() => setShowConnectModal(true)}>
+        <MarketShellTabs />
+      </ForgeHeader>
       <FactoryAdminDashboard
         factoryHash={accessState.factoryHash}
         connectedAddress={address}

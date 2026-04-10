@@ -38,7 +38,7 @@ export default function TokenDetailPage() {
       <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
 
       <main
-        className="min-h-screen"
+        className="min-h-screen px-6 py-6"
         style={{ background: "var(--forge-bg-primary)" }}
       >
         <TokenDetail contractHash={hash} onTxSubmitted={handleTxSubmitted} />

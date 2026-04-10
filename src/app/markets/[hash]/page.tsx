@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { ForgeHeader } from "@/components/layout/ForgeHeader";
 import { LaunchDisclosureCard } from "@/modules/forge/components/LaunchDisclosureCard";
+import { MarketShellTabs } from "@/modules/forge/components/MarketShellTabs";
 import { GraduationProgressCard } from "@/modules/forge/components/GraduationProgressCard";
 import { PairChartPanel } from "@/modules/forge/components/PairChartPanel";
 import { PairDataTabs } from "@/modules/forge/components/PairDataTabs";
@@ -12,19 +13,26 @@ import { PostLaunchBanner } from "@/modules/forge/components/PostLaunchBanner";
 import { TradeRail } from "@/modules/forge/components/TradeRail";
 import { WalletConnectModal } from "@/modules/forge/components/WalletConnectModal";
 import { usePendingTx } from "@/modules/forge/components/PendingTxProvider";
+import { useMarketActivity } from "@/modules/forge/hooks/useMarketActivity";
 import { useMarketPair } from "@/modules/forge/hooks/useMarketPair";
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 
 function PairPageSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <div
-        role="status"
-        aria-label="Loading market"
-        className="h-64 animate-pulse rounded-[28px]"
-        style={{ background: "rgba(255,255,255,0.04)" }}
-      />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_340px]">
+        <div
+          role="status"
+          aria-label="Loading market"
+          className="h-64 animate-pulse rounded-[28px]"
+          style={{ background: "rgba(255,255,255,0.04)" }}
+        />
+        <div
+          className="h-64 animate-pulse rounded-[28px]"
+          style={{ background: "rgba(255,255,255,0.04)" }}
+        />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_340px]">
         <div className="space-y-6">
           <div
             className="h-[420px] animate-pulse rounded-[28px]"
@@ -47,7 +55,12 @@ function PairPageSkeleton() {
 export default function MarketPairPage() {
   const { hash } = useParams<{ hash: string }>();
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const { pair, capabilities, loading, error } = useMarketPair(hash);
+  const { pair, loading, error } = useMarketPair(hash);
+  const {
+    activity,
+    loading: activityLoading,
+    error: activityError,
+  } = useMarketActivity(pair?.tokenHash ?? null);
   const { address, gasBalance, connectionStatus, errorMessage, installedWallets, connect } = useWallet();
   const { setPendingTx } = usePendingTx();
 
@@ -61,7 +74,9 @@ export default function MarketPairPage() {
 
   return (
     <>
-      <ForgeHeader onConnectClick={() => setShowConnectModal(true)} />
+      <ForgeHeader onConnectClick={() => setShowConnectModal(true)}>
+        <MarketShellTabs />
+      </ForgeHeader>
 
       <main
         className="min-h-screen px-6 py-6"
@@ -89,15 +104,25 @@ export default function MarketPairPage() {
                 tokenHash={pair.tokenHash}
                 decimals={pair.token.decimals}
               />
-              <PairHeaderHero pair={pair} />
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_340px]">
+                <PairHeaderHero pair={pair} />
+                <GraduationProgressCard pair={pair} />
+              </div>
 
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_360px]">
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_340px]">
                 <div className="space-y-6">
                   <PairChartPanel
-                    pairLabel={pair.pairLabel}
-                    candlesEnabled={capabilities.candles}
+                    pair={pair}
+                    activity={activity}
+                    activityLoading={activityLoading}
+                    activityError={activityError}
                   />
-                  <PairDataTabs capabilities={capabilities} />
+                  <PairDataTabs
+                    pair={pair}
+                    activity={activity}
+                    activityLoading={activityLoading}
+                    activityError={activityError}
+                  />
                   <LaunchDisclosureCard pair={pair} />
                 </div>
 
@@ -110,7 +135,6 @@ export default function MarketPairPage() {
                     onConnectClick={() => setShowConnectModal(true)}
                     onTxSubmitted={handleTxSubmitted}
                   />
-                  <GraduationProgressCard pair={pair} />
                 </div>
               </div>
             </>

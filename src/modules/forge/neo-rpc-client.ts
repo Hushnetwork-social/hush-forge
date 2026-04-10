@@ -11,6 +11,7 @@ import { getActiveRpcUrl } from "./neo-dapi-adapter";
 import type {
   ApplicationLog,
   InvokeResult,
+  LaunchProfileId,
   MarketBuyQuote,
   MarketCurveState,
   MarketGraduationProgress,
@@ -29,31 +30,14 @@ const UTF8_DECODER = new TextDecoder();
 // Address utilities
 // ---------------------------------------------------------------------------
 
-const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
 /**
- * Converts a Neo N3 address (e.g. "NRyRNU...") to the little-endian hex script
- * hash format required by the JSON-RPC `invokefunction` args (e.g. "0xabcd...").
- * If the input already looks like a hex hash it is returned as-is.
+ * Converts a Neo N3 address (e.g. "NRyRNU...") to the canonical 0x-prefixed
+ * script hash form used by JSON-RPC Hash160 params and neon-js hash160 helpers.
+ * If the input already looks like a hex hash it is normalized and returned.
  */
 export function addressToHash160(addressOrHash: string): string {
-  if (/^0x[0-9a-fA-F]{40}$/.test(addressOrHash)) return addressOrHash;
-
-  let n = 0n;
-  for (const ch of addressOrHash) {
-    const idx = BASE58_ALPHABET.indexOf(ch);
-    if (idx < 0) throw new Error(`Invalid Base58 character: ${ch}`);
-    n = n * 58n + BigInt(idx);
-  }
-
-  const bytes: number[] = [];
-  for (let i = 0; i < 25; i += 1) {
-    bytes.unshift(Number(n & 0xffn));
-    n >>= 8n;
-  }
-
-  const hashBytes = bytes.slice(1, 21).reverse();
-  return "0x" + hashBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  if (/^0x[0-9a-fA-F]{40}$/.test(addressOrHash)) return addressOrHash.toLowerCase();
+  return `0x${Neon.wallet.getScriptHashFromAddress(addressOrHash).toLowerCase()}`;
 }
 
 /**
@@ -238,6 +222,23 @@ function normalizeQuoteAsset(value: string, label: string): MarketQuoteAsset {
     return normalized;
   }
   throw new NeoRpcError(`${label} returned unsupported quote asset: ${value}`);
+}
+
+function normalizeLaunchProfile(
+  value: string,
+  label: string
+): LaunchProfileId | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length === 0) return null;
+  if (
+    normalized === "starter" ||
+    normalized === "standard" ||
+    normalized === "growth" ||
+    normalized === "flagship"
+  ) {
+    return normalized;
+  }
+  throw new NeoRpcError(`${label} returned unsupported launch profile: ${value}`);
 }
 
 function derivePairStatus(contractStatus: string, graduationReady: boolean): MarketPairStatus {
@@ -565,7 +566,13 @@ export function mapCurveTuple(tokenHash: string, stack: RpcStackItem[]): MarketC
     contractStatus,
     status: derivePairStatus(contractStatus, graduationReady),
     quoteAsset: normalizeQuoteAsset(parseStackItemText(tuple[1], "GetCurve[1]"), "GetCurve[1]"),
+    launchProfile:
+      tuple.length > 15
+        ? normalizeLaunchProfile(parseStackItemText(tuple[15], "GetCurve[15]"), "GetCurve[15]")
+        : null,
     virtualQuote: parseStackItemBigInt(tuple[2], "GetCurve[2]"),
+    virtualTokens:
+      tuple.length > 14 ? parseStackItemBigInt(tuple[14], "GetCurve[14]") : 0n,
     realQuote: parseStackItemBigInt(tuple[3], "GetCurve[3]"),
     currentCurveInventory: parseStackItemBigInt(tuple[4], "GetCurve[4]"),
     invariantK: parseStackItemBigInt(tuple[5], "GetCurve[5]"),

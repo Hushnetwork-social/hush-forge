@@ -15,6 +15,11 @@ import {
   parseTradeAmountInput,
   type MarketTradeSide,
 } from "./market-trade-logic";
+import {
+  isMarketDataInvalidationForToken,
+  MARKET_DATA_INVALIDATED_EVENT,
+  type MarketDataInvalidatedDetail,
+} from "./market-data-events";
 import { formatQuoteAmount, formatTokenDisplay } from "./market-formatting";
 import {
   invokeBondingCurveBuy,
@@ -261,6 +266,7 @@ export function useMarketTradeFlow(
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [failure, setFailure] = useState<MarketTradeFailureState | null>(null);
   const [impactAcknowledged, setImpactAcknowledged] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   const deferredAmountInput = useDeferredValue(amountInput);
   const previewStale = deferredAmountInput.trim() !== amountInput.trim();
@@ -295,6 +301,31 @@ export function useMarketTradeFlow(
   }, [slippageInput]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return () => undefined;
+    }
+
+    function handleInvalidated(event: Event) {
+      const detail = (event as CustomEvent<MarketDataInvalidatedDetail>).detail;
+      if (isMarketDataInvalidationForToken(detail, pair.tokenHash)) {
+        setRefreshVersion((current) => current + 1);
+      }
+    }
+
+    window.addEventListener(
+      MARKET_DATA_INVALIDATED_EVENT,
+      handleInvalidated as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        MARKET_DATA_INVALIDATED_EVENT,
+        handleInvalidated as EventListener
+      );
+    };
+  }, [pair.tokenHash]);
+
+  useEffect(() => {
     let cancelled = false;
 
     if (!connectedAddress) {
@@ -325,7 +356,7 @@ export function useMarketTradeFlow(
     return () => {
       cancelled = true;
     };
-  }, [connectedAddress, pair.quoteAsset, pair.tokenHash]);
+  }, [connectedAddress, pair.quoteAsset, pair.tokenHash, refreshVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -384,30 +415,31 @@ export function useMarketTradeFlow(
     return () => {
       cancelled = true;
     };
-  }, [deferredAmountInput, deferredAmountRaw, pair.tokenHash, routerHash, side]);
+  }, [
+    deferredAmountInput,
+    deferredAmountRaw,
+    pair.tokenHash,
+    refreshVersion,
+    routerHash,
+    side,
+  ]);
 
   const requiredGasFee =
-    isSellQuote(quote, side) ? quote.creatorFee + quote.platformFee : 0n;
+    quote !== null && "creatorFee" in quote && "platformFee" in quote
+      ? quote.creatorFee + quote.platformFee
+      : 0n;
 
   const executionPrice = useMemo(() => {
     if (isBuyQuote(quote, side)) {
-      return calculateExecutionPriceRaw(
-        quote.quoteConsumed,
-        quote.netTokenOut,
-        pair.token.decimals
-      );
+      return calculateExecutionPriceRaw(quote.quoteConsumed, quote.netTokenOut);
     }
 
     if (isSellQuote(quote, side)) {
-      return calculateExecutionPriceRaw(
-        quote.netQuoteOut,
-        quote.grossTokenIn,
-        pair.token.decimals
-      );
+      return calculateExecutionPriceRaw(quote.netQuoteOut, quote.grossTokenIn);
     }
 
     return null;
-  }, [pair.token.decimals, quote, side]);
+  }, [quote, side]);
 
   const priceImpactBps = useMemo(
     () => calculatePriceImpactBps(pair.curve.currentPrice, executionPrice),
@@ -459,7 +491,12 @@ export function useMarketTradeFlow(
       };
     }
 
-    if (connectedAddress && side === "buy" && quoteBalance !== null && amountRaw > quoteBalance) {
+    if (
+      connectedAddress &&
+      side === "buy" &&
+      quoteBalance !== null &&
+      amountRaw + requiredGasFee > quoteBalance
+    ) {
       return {
         code: "insufficient_quote_balance" as TradeValidationCode,
         message: `Amount exceeds the current ${pair.quoteAsset} wallet balance.`,
@@ -620,7 +657,7 @@ export function useMarketTradeFlow(
           routerHash,
           pair.tokenHash,
           pair.quoteAsset,
-          quote.grossQuoteIn,
+          quote.grossQuoteIn + requiredGasFee,
           minimumOutput
         );
       } else if (isSellQuote(quote, side)) {

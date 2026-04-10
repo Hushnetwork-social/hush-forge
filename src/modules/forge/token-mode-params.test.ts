@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { serializeChangeModeParams } from "./token-mode-params";
 
 describe("serializeChangeModeParams", () => {
-  it("serializes speculation mode as quote asset plus integer curve inventory", () => {
-    expect(serializeChangeModeParams("speculation", ["GAS", "700000"])).toEqual([
+  it("serializes speculation mode as quote asset, curve inventory, and launch profile", () => {
+    expect(serializeChangeModeParams("speculation", ["GAS", "700000", "growth"])).toEqual([
       { type: "String", value: "GAS" },
       { type: "Integer", value: "700000" },
+      { type: "String", value: "growth" },
     ]);
   });
 

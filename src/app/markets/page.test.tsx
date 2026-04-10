@@ -4,9 +4,10 @@ import { MarketsPageClient } from "./page";
 import type { MarketDiscoveryItem } from "@/modules/forge/types";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
   usePathname: () => "/markets",
 }));
 
@@ -37,6 +38,20 @@ vi.mock("@/modules/forge/hooks/useFactoryAdminAccess", () => ({
       routeAuthorized: false,
     },
     reload: vi.fn(),
+  })),
+}));
+
+vi.mock("@/modules/forge/hooks/useQuoteAssetUsdReference", () => ({
+  useQuoteAssetUsdReference: vi.fn((asset: "GAS" | "NEO") => ({
+    reference: {
+      asset,
+      provider: "CoinGecko",
+      priceUsd: asset === "GAS" ? 1.75 : 12,
+      fetchedAt: Date.now(),
+      lastUpdatedAt: Date.now(),
+    },
+    loading: false,
+    error: null,
   })),
 }));
 
@@ -92,6 +107,7 @@ function setupMocks({
   error = null as string | null,
 } = {}) {
   pushMock.mockReset();
+  replaceMock.mockReset();
 
   vi.mocked(useWallet).mockReturnValue({
     walletType: null,
@@ -145,7 +161,11 @@ describe("MarketsPage", () => {
     expect(screen.getByRole("link", { name: "Pairs" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Tokens" })).toHaveAttribute("href", "/tokens");
     expect(screen.getByText("Trending now")).toBeInTheDocument();
-    expect(screen.getByText("Public markets")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Market Cap" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Reserve" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "24h Vol" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Created" })).toBeInTheDocument();
+    expect(screen.queryByText("Public markets")).not.toBeInTheDocument();
     expect(screen.queryByTestId("wallet-panel")).not.toBeInTheDocument();
   });
 
@@ -159,22 +179,21 @@ describe("MarketsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("updates the route search query from the shell search", () => {
+  it("updates the route search query as the market search changes", () => {
     render(<MarketsPageClient initialSearch="" />);
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search markets" }), {
       target: { value: "moon" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    expect(pushMock).toHaveBeenCalledWith("/markets?search=moon");
+    expect(replaceMock).toHaveBeenCalledWith("/markets?search=moon");
   });
 
   it("shows the empty-state CTA to /tokens when there are no pairs", () => {
     setupMocks({ pairs: [], trendingPairs: [] });
     render(<MarketsPageClient initialSearch="" />);
 
-    expect(screen.getByText("No live markets yet.")).toBeInTheDocument();
+    expect(screen.getByText("No tradable markets yet.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Tokens" })).toHaveAttribute("href", "/tokens");
   });
 

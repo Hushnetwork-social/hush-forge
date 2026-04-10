@@ -35,9 +35,9 @@ describe("market-trade-logic", () => {
   });
 
   it("derives effective execution price and price impact", () => {
-    const executionPrice = calculateExecutionPriceRaw(125_000_000n, 100_000_000_000n, 8);
-    expect(executionPrice).toBe(125_000n);
-    expect(calculatePriceImpactBps(100_000n, executionPrice)).toBe(2500);
+    const executionPrice = calculateExecutionPriceRaw(125_000_000n, 100_000_000_000n);
+    expect(executionPrice).toBe(1_250_000_000_000_000n);
+    expect(calculatePriceImpactBps(1_000_000_000_000_000n, executionPrice)).toBe(2500);
     expect(formatPriceImpactBps(2500)).toBe("25.00%");
   });
 

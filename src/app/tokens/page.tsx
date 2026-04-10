@@ -37,7 +37,6 @@ export default function TokensPage() {
 
   const [view, setView] = useState<PageView>("dashboard");
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [marketSearch, setMarketSearch] = useState("");
   const previousFactoryStatusRef = useRef(factory.status);
 
   useEffect(() => {
@@ -84,25 +83,10 @@ export default function TokensPage() {
     setView("dashboard");
   }
 
-  function handleMarketSearchSubmit() {
-    const params = new URLSearchParams();
-    const trimmed = marketSearch.trim();
-    if (trimmed) {
-      params.set("search", trimmed);
-    }
-    const query = params.toString();
-    router.push(query ? `/markets?${query}` : "/markets");
-  }
-
-  return (
+      return (
     <>
-      <MarketShellLayout
-        onConnectClick={() => setShowConnectModal(true)}
-        searchValue={marketSearch}
-        onSearchChange={setMarketSearch}
-        onSearchSubmit={handleMarketSearchSubmit}
-      >
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <MarketShellLayout onConnectClick={() => setShowConnectModal(true)}>
+        <div className="flex w-full flex-col gap-6">
           <WalletPanel
             connectionStatus={connectionStatus}
             address={address}

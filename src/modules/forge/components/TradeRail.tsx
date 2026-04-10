@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
+  formatMarketPrice,
   formatQuoteAmount,
+  formatQuoteAmountRounded,
   formatTokenDisplay,
+  formatTokenDisplayRounded,
 } from "../market-formatting";
 import { formatDatoshiAsGas } from "../token-economics-logic";
 import type { MarketPairReadModel } from "../types";
@@ -38,10 +41,8 @@ function RailButton({
       aria-pressed={active}
       className="flex-1 rounded-full px-4 py-2 text-sm font-semibold transition"
       style={{
-        background: active
-          ? "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))"
-          : "rgba(255,255,255,0.04)",
-        color: active ? "var(--forge-text-primary)" : "var(--forge-text-muted)",
+        background: active ? "rgba(255,107,53,0.14)" : "rgba(255,255,255,0.04)",
+        color: active ? "var(--forge-color-primary)" : "var(--forge-text-muted)",
       }}
     >
       {label}
@@ -50,9 +51,11 @@ function RailButton({
 }
 
 function PresetChip({
+  active = false,
   label,
   onClick,
 }: {
+  active?: boolean;
   label: string;
   onClick: () => void;
 }) {
@@ -62,13 +65,32 @@ function PresetChip({
       onClick={onClick}
       className="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:opacity-90"
       style={{
-        background: "rgba(255,255,255,0.05)",
-        color: "var(--forge-text-muted)",
+        background: active
+          ? "linear-gradient(135deg, rgba(255, 123, 61, 0.2), rgba(255, 92, 42, 0.32))"
+          : "rgba(255,255,255,0.05)",
+        color: active ? "var(--forge-text-primary)" : "var(--forge-text-muted)",
+        border: active ? "1px solid rgba(255, 123, 61, 0.3)" : "1px solid transparent",
       }}
     >
       {label}
     </button>
   );
+}
+
+const SLIPPAGE_PRESET_OPTIONS = ["1", "3", "5"] as const;
+
+type SlippageMode = (typeof SLIPPAGE_PRESET_OPTIONS)[number] | "custom";
+
+function resolveSlippageMode(value: string): SlippageMode {
+  const trimmed = value.trim();
+  return SLIPPAGE_PRESET_OPTIONS.includes(trimmed as (typeof SLIPPAGE_PRESET_OPTIONS)[number])
+    ? (trimmed as (typeof SLIPPAGE_PRESET_OPTIONS)[number])
+    : "custom";
+}
+
+function formatSlippageSummary(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? `${trimmed}%` : "Custom";
 }
 
 function PreviewRow({
@@ -134,12 +156,15 @@ export function TradeRail({
     minimumOutput,
     requiredGasFee,
     priceImpactLabel,
-    impactTone,
     requiresImpactAcknowledgement,
     impactAcknowledged,
     setImpactAcknowledged,
     submit,
   } = useMarketTradeFlow(pair, connectedAddress, gasBalance);
+  const [advancedOpen, setAdvancedOpen] = useState(() => resolveSlippageMode(slippageInput) === "custom");
+  const [slippageMode, setSlippageMode] = useState<SlippageMode>(() =>
+    resolveSlippageMode(slippageInput)
+  );
 
   useEffect(() => {
     if (!submittedTxHash) return;
@@ -170,6 +195,17 @@ export function TradeRail({
   const disableCta =
     connectionStatus === "connecting" ||
     (connectedAddress !== null && !canSubmit);
+  const currentSlippageSummary = formatSlippageSummary(slippageInput);
+
+  const handlePresetSlippageSelect = (preset: (typeof SLIPPAGE_PRESET_OPTIONS)[number]) => {
+    setSlippageMode(preset);
+    setSlippageInput(preset);
+  };
+
+  const handleCustomSlippageSelect = () => {
+    setSlippageMode("custom");
+    setAdvancedOpen(true);
+  };
 
   return (
     <>
@@ -181,8 +217,8 @@ export function TradeRail({
           border: "1px solid var(--forge-border-subtle)",
         }}
       >
-        <div className="flex items-center justify-between gap-3">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <p
               className="text-xs uppercase tracking-[0.24em]"
               style={{ color: "var(--forge-text-muted)" }}
@@ -190,21 +226,31 @@ export function TradeRail({
               Trade Rail
             </p>
             <h2
-              className="mt-2 text-2xl font-semibold"
+              className="mt-2 whitespace-nowrap text-2xl font-semibold"
               style={{ color: "var(--forge-text-primary)" }}
             >
               Buy / Sell
             </h2>
           </div>
-          <span
-            className="rounded-full px-3 py-1 text-xs font-semibold"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              color: "var(--forge-text-muted)",
-            }}
-          >
-            {pair.quoteAsset} pair
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              aria-expanded={advancedOpen}
+              aria-controls="trade-advanced-settings"
+              aria-label={`Advanced settings. Current slippage ${currentSlippageSummary}`}
+              onClick={() => setAdvancedOpen((current) => !current)}
+              className="rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-90"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: advancedOpen
+                  ? "1px solid rgba(255, 123, 61, 0.32)"
+                  : "1px solid transparent",
+                color: "var(--forge-text-muted)",
+              }}
+            >
+              Advanced · {currentSlippageSummary}
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 flex gap-2">
@@ -229,7 +275,7 @@ export function TradeRail({
                         ? connectedAddress
                           ? "Refreshing..."
                           : "-"
-                        : formatQuoteAmount(quoteBalance, pair.quoteAsset)
+                        : formatQuoteAmountRounded(quoteBalance, pair.quoteAsset, 2)
                     }`
                   : `Balance: ${
                       tokenBalance === null
@@ -274,36 +320,88 @@ export function TradeRail({
                   />
                 ))}
           </div>
-
-          <div>
-            <label
-              htmlFor="trade-slippage"
-              className="text-sm font-medium"
-              style={{ color: "var(--forge-text-muted)" }}
-            >
-              Slippage tolerance
-            </label>
-            <div
-              className="mt-2 flex items-center rounded-[18px] px-4 py-3"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid var(--forge-border-subtle)",
-              }}
-            >
-              <input
-                id="trade-slippage"
-                type="text"
-                value={slippageInput}
-                onChange={(event) => setSlippageInput(event.target.value)}
-                className="w-full bg-transparent text-sm outline-none"
-                style={{ color: "var(--forge-text-primary)" }}
-              />
-              <span className="text-sm" style={{ color: "var(--forge-text-muted)" }}>
-                %
-              </span>
-            </div>
-          </div>
         </div>
+
+        {advancedOpen && (
+          <div
+            id="trade-advanced-settings"
+            className="mt-4 rounded-[22px] p-4"
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid var(--forge-border-subtle)",
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p
+                  className="text-xs uppercase tracking-[0.24em]"
+                  style={{ color: "var(--forge-text-muted)" }}
+                >
+                  Advanced
+                </p>
+                <p className="mt-2 text-sm" style={{ color: "var(--forge-text-muted)" }}>
+                  Slippage protection between quote preview and wallet signature.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen(false)}
+                className="text-xs font-semibold transition hover:opacity-90"
+                style={{ color: "var(--forge-text-muted)" }}
+              >
+                Hide
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {SLIPPAGE_PRESET_OPTIONS.map((preset) => (
+                <PresetChip
+                  key={preset}
+                  active={slippageMode === preset}
+                  label={`${preset}%`}
+                  onClick={() => handlePresetSlippageSelect(preset)}
+                />
+              ))}
+              <PresetChip
+                active={slippageMode === "custom"}
+                label="Custom"
+                onClick={handleCustomSlippageSelect}
+              />
+            </div>
+
+            {slippageMode === "custom" && (
+              <div className="mt-4">
+                <label
+                  htmlFor="trade-slippage"
+                  className="text-sm font-medium"
+                  style={{ color: "var(--forge-text-muted)" }}
+                >
+                  Custom slippage
+                </label>
+                <div
+                  className="mt-2 flex items-center rounded-[18px] px-4 py-3"
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid var(--forge-border-subtle)",
+                  }}
+                >
+                  <input
+                    id="trade-slippage"
+                    type="text"
+                    value={slippageInput}
+                    onChange={(event) => setSlippageInput(event.target.value)}
+                    placeholder="1"
+                    className="w-full bg-transparent text-sm outline-none"
+                    style={{ color: "var(--forge-text-primary)" }}
+                  />
+                  <span className="text-sm" style={{ color: "var(--forge-text-muted)" }}>
+                    %
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {quoteError && (
           <div
@@ -345,48 +443,42 @@ export function TradeRail({
             </div>
           )}
 
-        {quote && (
-          <>
-            {(isBuy && "capped" in quote && (quote.capped || quote.quoteRefund > 0n)) && (
-              <div
-                className="mt-4 rounded-[18px] px-4 py-3 text-sm"
-                style={{
-                  background: "rgba(255, 193, 7, 0.12)",
-                  color: "#ffd166",
-                }}
-              >
-                This buy is capped by the remaining curve inventory. Excess {pair.quoteAsset} will
-                be refunded after execution.
-              </div>
-            )}
+          {quote && (
+            <>
+              {(isBuy && "capped" in quote && quote.capped) && (
+                <div
+                  className="mt-4 rounded-[18px] px-4 py-3 text-sm"
+                  style={{
+                    background: "rgba(255, 193, 7, 0.12)",
+                    color: "#ffd166",
+                  }}
+                >
+                  {quote.quoteRefund > 0n
+                    ? `This buy is capped by the remaining curve inventory. Excess ${pair.quoteAsset} will be refunded after execution.`
+                    : "This buy exactly fills the remaining curve inventory."}
+                </div>
+              )}
 
-            {impactTone !== "none" && (
+            {requiresImpactAcknowledgement && (
               <div
                 className="mt-4 rounded-[18px] px-4 py-3 text-sm"
                 style={{
-                  background:
-                    impactTone === "danger"
-                      ? "rgba(255,82,82,0.1)"
-                      : "rgba(255, 193, 7, 0.12)",
-                  color: impactTone === "danger" ? "var(--forge-error)" : "#ffd166",
+                  background: "rgba(255,82,82,0.1)",
+                  color: "var(--forge-error)",
                 }}
               >
                 <p>
                   Price impact is currently {priceImpactLabel}.
-                  {impactTone === "danger"
-                    ? " This trade needs explicit acknowledgement before signature."
-                    : " Review the preview before signing."}
+                  {" "}This trade needs explicit acknowledgement before signature.
                 </p>
-                {requiresImpactAcknowledgement && (
-                  <label className="mt-3 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={impactAcknowledged}
-                      onChange={(event) => setImpactAcknowledged(event.target.checked)}
-                    />
-                    <span>I understand this trade has more than 15% price impact.</span>
-                  </label>
-                )}
+                <label className="mt-3 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={impactAcknowledged}
+                    onChange={(event) => setImpactAcknowledged(event.target.checked)}
+                  />
+                  <span>I understand this trade has more than 15% price impact.</span>
+                </label>
               </div>
             )}
           </>
@@ -402,7 +494,7 @@ export function TradeRail({
               quote === null
                 ? "-"
                 : isBuy && "netTokenOut" in quote
-                  ? formatTokenDisplay(
+                  ? formatTokenDisplayRounded(
                       quote.netTokenOut,
                       pair.token.decimals,
                       pair.token.symbol
@@ -419,7 +511,11 @@ export function TradeRail({
               minimumOutput === null
                 ? "-"
                 : isBuy
-                  ? formatTokenDisplay(minimumOutput, pair.token.decimals, pair.token.symbol)
+                  ? formatTokenDisplayRounded(
+                      minimumOutput,
+                      pair.token.decimals,
+                      pair.token.symbol
+                    )
                   : formatQuoteAmount(minimumOutput, pair.quoteAsset)
             }
           />
@@ -448,16 +544,22 @@ export function TradeRail({
               value={formatTokenDisplay(quote.burnAmount, pair.token.decimals, pair.token.symbol)}
             />
           )}
-          {!isBuy && quote !== null && "creatorFee" in quote && quote.creatorFee > 0n && (
+          {quote !== null && "creatorFee" in quote && quote.creatorFee > 0n && (
             <PreviewRow
-              label="Creator fee"
+              label="TokenOwner fee"
               value={formatDatoshiAsGas(quote.creatorFee)}
             />
           )}
-          {!isBuy && quote !== null && "platformFee" in quote && quote.platformFee > 0n && (
+          {quote !== null && "platformFee" in quote && quote.platformFee > 0n && (
             <PreviewRow
               label="Platform fee"
               value={formatDatoshiAsGas(quote.platformFee)}
+            />
+          )}
+          {isBuy && quote !== null && requiredGasFee > 0n && "grossQuoteIn" in quote && (
+            <PreviewRow
+              label="Total wallet outflow"
+              value={formatQuoteAmount(quote.grossQuoteIn + requiredGasFee, pair.quoteAsset)}
             />
           )}
           {!isBuy && (
@@ -469,7 +571,11 @@ export function TradeRail({
           {quote !== null && "nextPrice" in quote && (
             <PreviewRow
               label="Next price"
-              value={formatQuoteAmount(quote.nextPrice, pair.quoteAsset)}
+              value={formatMarketPrice(
+                quote.nextPrice,
+                pair.quoteAsset,
+                pair.token.decimals
+              )}
             />
           )}
         </div>

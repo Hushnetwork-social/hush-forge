@@ -1,11 +1,14 @@
 import {
   getRuntimeBondingCurveRouterHash,
   getRuntimeFactoryHash,
+  saveBondingCurveRouterHash,
 } from "./forge-config";
 import {
   getAllFactoryTokenHashes,
   getBondingCurveGraduationProgress,
   getBondingCurveState,
+  invokeFunction,
+  isContractDeployed,
 } from "./neo-rpc-client";
 import { resolveTokenMetadata } from "./token-metadata-service";
 import type {
@@ -104,14 +107,53 @@ export const BASELINE_MARKET_ENHANCEMENT_SERVICES: MarketEnhancementServices = {
   liveFeed: unavailableLiveFeedProvider,
 };
 
-function requireRouterHash(): string {
-  const routerHash = getRuntimeBondingCurveRouterHash();
-  if (!routerHash || routerHash === "0x") {
-    throw new Error(
-      "BondingCurveRouter contract hash is not configured. Set NEXT_PUBLIC_BONDING_CURVE_ROUTER_HASH."
-    );
+function decodeHashStackItem(value: unknown): string {
+  const base64 = String(value ?? "");
+  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  if (bytes.length !== 20) {
+    throw new Error(`Expected 20-byte hash, got ${bytes.length}`);
   }
-  return routerHash;
+
+  const hex = [...bytes]
+    .reverse()
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
+  return `0x${hex}`;
+}
+
+async function resolveRouterHash(): Promise<string> {
+  const savedRouterHash = getRuntimeBondingCurveRouterHash();
+  if (savedRouterHash && savedRouterHash !== "0x") {
+    const deployed = await isContractDeployed(savedRouterHash).catch(() => false);
+    if (deployed) {
+      return savedRouterHash;
+    }
+  }
+
+  const factoryHash = getRuntimeFactoryHash();
+  if (!factoryHash || factoryHash === "0x") {
+    return "";
+  }
+
+  try {
+    const result = await invokeFunction(factoryHash, "getBondingCurveRouter", []);
+    const routerStackItem = result.stack[0];
+    if (
+      routerStackItem &&
+      (routerStackItem.type === "ByteString" || routerStackItem.type === "ByteArray")
+    ) {
+      const resolvedRouterHash = decodeHashStackItem(routerStackItem.value);
+      if (resolvedRouterHash !== "0x0000000000000000000000000000000000000000") {
+        saveBondingCurveRouterHash(resolvedRouterHash);
+        return resolvedRouterHash;
+      }
+    }
+  } catch (error) {
+    console.warn("[markets] could not resolve router hash from factory:", String(error));
+  }
+
+  return "";
 }
 
 function toPairHash(tokenHash: string): string {
@@ -203,21 +245,37 @@ export async function listBaselineMarketPairs(
   const factoryHash = getRuntimeFactoryHash();
   if (!factoryHash || factoryHash === "0x") return [];
 
-  const routerHash = requireRouterHash();
   const tokenHashes = await getAllFactoryTokenHashes(factoryHash);
   if (tokenHashes.length === 0) return [];
 
   const tokens = await Promise.all(tokenHashes.map(resolveTokenMetadata));
-  const speculationTokens = tokens.filter((token) => token.mode === "speculative");
-  if (speculationTokens.length === 0) return [];
+  const candidateTokens = tokens.filter((token) => !token.isNative);
+  if (candidateTokens.length === 0) return [];
+
+  const configuredTradableTokens = candidateTokens.filter(
+    (token) => token.mode === "speculative"
+  );
+  const routerHash = await resolveRouterHash();
+
+  if (!routerHash || routerHash === "0x") {
+    if (configuredTradableTokens.length === 0) return [];
+    throw new Error(
+      "BondingCurveRouter contract hash is not configured. Set NEXT_PUBLIC_BONDING_CURVE_ROUTER_HASH."
+    );
+  }
 
   const curves = await Promise.allSettled(
-    speculationTokens.map((token) => getBondingCurveState(routerHash, token.contractHash))
+    candidateTokens.map((token) => getBondingCurveState(routerHash, token.contractHash))
   );
 
-  const pairs = speculationTokens.flatMap((token, index) => {
+  const pairs = candidateTokens.flatMap((token, index) => {
     const settled = curves[index];
     if (settled.status !== "fulfilled") {
+      console.warn(
+        "[markets] skipping token without readable curve state:",
+        token.contractHash,
+        String(settled.reason)
+      );
       return [];
     }
     return [toDiscoveryItem(token, settled.value)];
@@ -239,7 +297,12 @@ export async function getBaselineMarketPair(
 ): Promise<MarketPairReadModel | null> {
   if (!tokenHash) return null;
 
-  const routerHash = requireRouterHash();
+  const routerHash = await resolveRouterHash();
+  if (!routerHash || routerHash === "0x") {
+    throw new Error(
+      "BondingCurveRouter contract hash is not configured. Set NEXT_PUBLIC_BONDING_CURVE_ROUTER_HASH."
+    );
+  }
   const [token, curve] = await Promise.all([
     resolveTokenMetadata(tokenHash),
     getBondingCurveState(routerHash, tokenHash),

@@ -401,7 +401,8 @@ async function changeMode(factoryHash, tokenHash, newMode, modeParams = []) {
     normalizedMode === "speculation"
       ? sc.ContractParam.array(
           sc.ContractParam.string(String(modeParams[0] ?? "GAS")),
-          sc.ContractParam.integer(String(modeParams[1] ?? "0"))
+          sc.ContractParam.integer(String(modeParams[1] ?? "0")),
+          sc.ContractParam.string(String(modeParams[2] ?? "starter"))
         )
       : sc.ContractParam.array(
           ...modeParams.map((param) => sc.ContractParam.string(String(param)))

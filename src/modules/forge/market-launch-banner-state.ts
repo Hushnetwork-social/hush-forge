@@ -6,6 +6,7 @@ interface StoredMarketLaunchSummary {
   tokenHash: string;
   pairLabel: string;
   quoteAsset: "GAS" | "NEO";
+  launchProfile?: "starter" | "standard" | "growth" | "flagship" | null;
   tokenSymbol: string;
   curveInventoryRaw: string;
   retainedInventoryRaw: string;
@@ -52,6 +53,13 @@ export function readMarketLaunchSummary(
       tokenHash: parsed.tokenHash,
       pairLabel: parsed.pairLabel,
       quoteAsset: parsed.quoteAsset,
+      launchProfile:
+        parsed.launchProfile === "starter" ||
+        parsed.launchProfile === "standard" ||
+        parsed.launchProfile === "growth" ||
+        parsed.launchProfile === "flagship"
+          ? parsed.launchProfile
+          : null,
       tokenSymbol: parsed.tokenSymbol,
       curveInventoryRaw: parsed.curveInventoryRaw,
       retainedInventoryRaw: parsed.retainedInventoryRaw,
@@ -74,6 +82,13 @@ export function dismissMarketLaunchSummary(tokenHash: string): void {
       tokenHash: typeof parsed.tokenHash === "string" ? parsed.tokenHash : tokenHash,
       pairLabel: typeof parsed.pairLabel === "string" ? parsed.pairLabel : tokenHash,
       quoteAsset: parsed.quoteAsset === "NEO" ? "NEO" : "GAS",
+      launchProfile:
+        parsed.launchProfile === "starter" ||
+        parsed.launchProfile === "standard" ||
+        parsed.launchProfile === "growth" ||
+        parsed.launchProfile === "flagship"
+          ? parsed.launchProfile
+          : null,
       tokenSymbol: typeof parsed.tokenSymbol === "string" ? parsed.tokenSymbol : "",
       curveInventoryRaw:
         typeof parsed.curveInventoryRaw === "string" ? parsed.curveInventoryRaw : "0",

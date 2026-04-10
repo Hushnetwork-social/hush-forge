@@ -1,6 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useState } from "react";
+import type { CurvePreviewMetric } from "../market-curve-preview";
+import type { MarketActivitySnapshot, MarketPairReadModel } from "../types";
 
 const PairChartSurfaceClient = dynamic(
   () =>
@@ -21,11 +24,23 @@ const PairChartSurfaceClient = dynamic(
 );
 
 interface Props {
-  pairLabel: string;
-  candlesEnabled: boolean;
+  pair: MarketPairReadModel;
+  activity: MarketActivitySnapshot | null;
+  activityLoading: boolean;
+  activityError: string | null;
 }
 
-export function PairChartPanel({ pairLabel, candlesEnabled }: Props) {
+type ChartSurfaceMode = "curve" | "onchain";
+
+export function PairChartPanel({
+  pair,
+  activity,
+  activityLoading,
+  activityError,
+}: Props) {
+  const [metric, setMetric] = useState<CurvePreviewMetric>("price");
+  const [surfaceMode, setSurfaceMode] = useState<ChartSurfaceMode>("onchain");
+
   return (
     <section
       className="rounded-[28px] p-6"
@@ -36,32 +51,56 @@ export function PairChartPanel({ pairLabel, candlesEnabled }: Props) {
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {["1m", "5m", "15m", "1h", "1d"].map((interval, index) => (
-            <button
-              key={interval}
-              type="button"
-              className="rounded-full px-3 py-1.5 text-sm font-medium"
-              style={{
-                background: index === 2
+          <button
+            type="button"
+            onClick={() => setSurfaceMode("curve")}
+            className="rounded-full px-3 py-1.5 text-sm font-medium"
+            style={{
+              background:
+                surfaceMode === "curve"
                   ? "rgba(255,107,53,0.14)"
                   : "rgba(255,255,255,0.04)",
-                color: index === 2
+              color:
+                surfaceMode === "curve"
                   ? "var(--forge-color-primary)"
                   : "var(--forge-text-muted)",
-              }}
-            >
-              {interval}
-            </button>
-          ))}
+            }}
+          >
+            Live curve
+          </button>
+          <button
+            type="button"
+            onClick={() => setSurfaceMode("onchain")}
+            className="rounded-full px-3 py-1.5 text-sm font-medium"
+            style={{
+              background:
+                surfaceMode === "onchain"
+                  ? "rgba(255,107,53,0.14)"
+                  : "rgba(255,255,255,0.04)",
+              color:
+                surfaceMode === "onchain"
+                  ? "var(--forge-color-primary)"
+                  : "var(--forge-text-muted)",
+            }}
+          >
+            On-chain preview
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             className="rounded-full px-3 py-1.5 text-sm font-medium"
+            onClick={() => setMetric("price")}
             style={{
-              background: "rgba(255,107,53,0.14)",
-              color: "var(--forge-color-primary)",
+              background:
+                metric === "price"
+                  ? "rgba(255,107,53,0.14)"
+                  : "rgba(255,255,255,0.04)",
+              color:
+                metric === "price"
+                  ? "var(--forge-color-primary)"
+                  : "var(--forge-text-muted)",
             }}
           >
             Price
@@ -69,20 +108,31 @@ export function PairChartPanel({ pairLabel, candlesEnabled }: Props) {
           <button
             type="button"
             className="rounded-full px-3 py-1.5 text-sm font-medium"
+            onClick={() => setMetric("market-cap")}
             style={{
-              background: "rgba(255,255,255,0.04)",
-              color: "var(--forge-text-muted)",
+              background:
+                metric === "market-cap"
+                  ? "rgba(255,107,53,0.14)"
+                  : "rgba(255,255,255,0.04)",
+              color:
+                metric === "market-cap"
+                  ? "var(--forge-color-primary)"
+                  : "var(--forge-text-muted)",
             }}
           >
-            Price / MCap
+            Price / FDV
           </button>
         </div>
       </div>
 
       <div className="mt-4">
         <PairChartSurfaceClient
-          pairLabel={pairLabel}
-          enabled={candlesEnabled}
+          pair={pair}
+          mode={surfaceMode}
+          metric={metric}
+          activity={activity}
+          activityLoading={activityLoading}
+          activityError={activityError}
         />
       </div>
     </section>

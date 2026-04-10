@@ -59,9 +59,10 @@ const samplePair: MarketPairReadModel = {
     status: "active",
     quoteAsset: "GAS",
     virtualQuote: 150_00000000n,
+    virtualTokens: 10_000n * TOKEN_FACTOR,
     realQuote: 40_00000000n,
     currentCurveInventory: 70_000n * TOKEN_FACTOR,
-    invariantK: 1n,
+    invariantK: (190_00000000n) * (80_000n * TOKEN_FACTOR),
     graduationThreshold: 60_00000000n,
     graduationReady: false,
     currentPrice: 100_000n,
@@ -189,6 +190,49 @@ describe("useMarketTradeFlow", () => {
       )
     );
     expect(result.current.submittedTxHash).toBe("0xbuytx");
+  });
+
+  it("adds buy-side GAS fees to the submitted wallet outflow", async () => {
+    vi.mocked(getBondingCurveBuyQuote).mockResolvedValue({
+      ...sampleBuyQuote,
+      quoteRefund: 0n,
+      burnAmount: 0n,
+      netTokenOut: 100n * TOKEN_FACTOR,
+      creatorFee: 5_000_000n,
+      platformFee: 1_000_000n,
+      nextPrice: 102_000n,
+      capped: false,
+    });
+    vi.mocked(invokeBondingCurveBuy).mockResolvedValue("0xbuytx");
+
+    const { result } = renderHook(() =>
+      useMarketTradeFlow(samplePair, "Nwallet11111111111111111111111111111111", 10_000_000n)
+    );
+
+    act(() => {
+      result.current.setAmountInput("1.25");
+    });
+
+    await waitFor(() => expect(result.current.quote).not.toBeNull());
+    expect(result.current.requiredGasFee).toBe(6_000_000n);
+
+    act(() => {
+      result.current.setImpactAcknowledged(true);
+    });
+
+    act(() => {
+      void result.current.submit();
+    });
+
+    await waitFor(() =>
+      expect(invokeBondingCurveBuy).toHaveBeenCalledWith(
+        "0xrouter",
+        "0xtoken1",
+        "GAS",
+        131_000_000n,
+        99n * TOKEN_FACTOR
+      )
+    );
   });
 
   it("opens a liquidity failure state for sells that exceed available quote reserve", async () => {

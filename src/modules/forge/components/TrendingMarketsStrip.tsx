@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import {
-  formatCompactMarketCount,
-  formatPairStatus,
-  formatQuoteAmount,
+  formatMarketPrice,
+  formatQuoteAmountSummary,
+  formatRelativeCreatedAt,
+  formatUsdCompactAmount,
+  formatUsdPrice,
+  marketPriceToUsd,
+  quoteAmountToUsd,
 } from "../market-formatting";
+import { useQuoteAssetUsdReference } from "../hooks/useQuoteAssetUsdReference";
+import { TokenIcon } from "./TokenIcon";
 import type { MarketDiscoveryItem } from "../types";
 
 interface Props {
@@ -28,92 +34,113 @@ function TrendingCardSkeleton() {
 }
 
 export function TrendingMarketsStrip({ items, loading = false }: Props) {
+  const { reference: gasUsdReference } = useQuoteAssetUsdReference("GAS");
+  const { reference: neoUsdReference } = useQuoteAssetUsdReference("NEO");
+
+  if (!loading && items.length === 0) {
+    return null;
+  }
+
+  function resolveQuoteAssetUsdPrice(quoteAsset: MarketDiscoveryItem["quoteAsset"]): number | null {
+    return quoteAsset === "GAS"
+      ? gasUsdReference?.priceUsd ?? null
+      : neoUsdReference?.priceUsd ?? null;
+  }
+
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p
-            className="text-xs uppercase tracking-[0.24em]"
-            style={{ color: "var(--forge-text-muted)" }}
-          >
-            Latest Pairs
-          </p>
-          <h2
-            className="text-2xl font-semibold"
-            style={{ color: "var(--forge-text-primary)" }}
-          >
-            Trending now
-          </h2>
-        </div>
-        <p className="text-sm" style={{ color: "var(--forge-text-muted)" }}>
-          Direct-RPC baseline: newest speculation pairs first
-        </p>
-      </div>
+      <h2
+        className="text-2xl font-semibold"
+        style={{ color: "var(--forge-text-primary)" }}
+      >
+        Trending now
+      </h2>
 
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      <div className="-mx-1 flex gap-4 overflow-x-auto px-1 py-2">
         {loading
           ? Array.from({ length: 4 }).map((_, index) => (
               <TrendingCardSkeleton key={index} />
             ))
           : items.map((item, index) => (
-              <Link
-                key={item.pairHash}
-                href={`/markets/${item.tokenHash}`}
-                className={`min-w-[220px] rounded-2xl p-4 transition-transform hover:-translate-y-1 ${
-                  index >= 3 ? "md:hidden lg:block" : ""
-                }`}
-                style={{
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                  border: "1px solid var(--forge-border-subtle)",
-                }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p
-                      className="text-sm font-semibold"
-                      style={{ color: "var(--forge-text-primary)" }}
-                    >
-                      {item.pairLabel}
-                    </p>
-                    <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-                      {item.token.name || item.token.symbol}
-                    </p>
-                  </div>
-                  <span
-                    className="rounded-full px-2 py-1 text-[11px] font-semibold"
+              (() => {
+                const quoteAssetUsdPrice = resolveQuoteAssetUsdPrice(item.quoteAsset);
+                const marketCap =
+                  item.lastPrice !== null && item.totalSupply !== null
+                    ? (item.lastPrice * item.totalSupply) / 1_000_000_000_000_000_000n
+                    : null;
+                const priceUsd = marketPriceToUsd(
+                  item.lastPrice,
+                  item.quoteAsset,
+                  item.token.decimals,
+                  quoteAssetUsdPrice
+                );
+                const marketCapUsd = quoteAmountToUsd(
+                  marketCap,
+                  item.quoteAsset,
+                  quoteAssetUsdPrice
+                );
+
+                return (
+                  <Link
+                    key={item.pairHash}
+                    href={`/markets/${item.tokenHash}`}
+                    className={`min-w-[240px] origin-center rounded-2xl p-4 transition-all duration-200 hover:scale-[1.02] ${
+                      index >= 3 ? "md:hidden lg:block" : ""
+                    }`}
                     style={{
-                      background: "rgba(255,107,53,0.14)",
-                      color: "var(--forge-color-primary)",
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      border: "1px solid var(--forge-border-subtle)",
+                      boxShadow: "0 16px 30px rgba(0,0,0,0.14)",
                     }}
                   >
-                    {formatPairStatus(item.status)}
-                  </span>
-                </div>
+                    <div className="flex items-center gap-3">
+                      <TokenIcon
+                        contractHash={item.token.contractHash}
+                        imageUrl={item.token.imageUrl}
+                        size={34}
+                      />
+                      <div className="min-w-0">
+                        <p
+                          className="truncate text-sm font-semibold"
+                          style={{ color: "var(--forge-text-primary)" }}
+                        >
+                          {item.pairLabel}
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+                          {formatRelativeCreatedAt(item.createdAt)}
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="mt-6 flex flex-col gap-2">
-                  <p
-                    className="text-lg font-semibold"
-                    style={{ color: "var(--forge-text-primary)" }}
-                  >
-                    {formatQuoteAmount(item.lastPrice, item.quoteAsset)}
-                  </p>
-                  <div
-                    className="flex items-center justify-between text-xs"
-                    style={{ color: "var(--forge-text-muted)" }}
-                  >
-                    <span>Trades</span>
-                    <span>{formatCompactMarketCount(item.totalTrades)}</span>
-                  </div>
-                  <div
-                    className="flex items-center justify-between text-xs"
-                    style={{ color: "var(--forge-text-muted)" }}
-                  >
-                    <span>Launch inventory</span>
-                    <span>{formatCompactMarketCount(item.launchCurveInventory)}</span>
-                  </div>
-                </div>
-              </Link>
+                    <div className="mt-5 flex flex-col gap-2">
+                      <p
+                        className="text-lg font-semibold"
+                        style={{ color: "var(--forge-text-primary)" }}
+                      >
+                        {priceUsd !== null
+                          ? formatUsdPrice(priceUsd)
+                          : formatMarketPrice(
+                              item.lastPrice,
+                              item.quoteAsset,
+                              item.token.decimals
+                            )}
+                      </p>
+                      <div
+                        className="flex items-center justify-between text-xs"
+                        style={{ color: "var(--forge-text-muted)" }}
+                      >
+                        <span>Market cap</span>
+                        <span>
+                          {marketCapUsd !== null
+                            ? formatUsdCompactAmount(marketCapUsd)
+                            : formatQuoteAmountSummary(marketCap, item.quoteAsset)}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })()
             ))}
       </div>
     </section>

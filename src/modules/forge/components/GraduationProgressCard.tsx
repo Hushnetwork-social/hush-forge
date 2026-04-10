@@ -1,5 +1,6 @@
 "use client";
 
+import { getLaunchProfileDefinition } from "../market-launch-profiles";
 import {
   formatProgressPercent,
   formatQuoteAmount,
@@ -19,6 +20,9 @@ function truncateCreator(value: string | null): string {
 export function GraduationProgressCard({ pair }: Props) {
   const progressBps = Math.min(pair.graduation.progressBps, 10_000);
   const isReady = pair.graduation.graduationReady;
+  const launchProfileLabel = pair.curve.launchProfile
+    ? getLaunchProfileDefinition(pair.curve.launchProfile).label
+    : "Starter";
 
   return (
     <section
@@ -28,32 +32,32 @@ export function GraduationProgressCard({ pair }: Props) {
         border: "1px solid var(--forge-border-subtle)",
       }}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p
-            className="text-xs uppercase tracking-[0.24em]"
-            style={{ color: "var(--forge-text-muted)" }}
-          >
-            Graduation
-          </p>
+      <div>
+        <p
+          className="text-xs uppercase tracking-[0.24em]"
+          style={{ color: "var(--forge-text-muted)" }}
+        >
+          Graduation
+        </p>
+        <div className="mt-2 flex items-center justify-between gap-3">
           <h2
-            className="mt-2 text-2xl font-semibold"
+            className="text-2xl font-semibold"
             style={{ color: "var(--forge-text-primary)" }}
           >
             {isReady ? "Graduation Ready" : "Curve progress"}
           </h2>
+          <span
+            className="mt-3 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
+            style={{
+              background: isReady
+                ? "rgba(32,201,151,0.14)"
+                : "rgba(255,107,53,0.14)",
+              color: isReady ? "#20c997" : "var(--forge-color-primary)",
+            }}
+          >
+            {formatProgressPercent(pair.graduation.progressBps)}
+          </span>
         </div>
-        <span
-          className="rounded-full px-3 py-1 text-xs font-semibold"
-          style={{
-            background: isReady
-              ? "rgba(32,201,151,0.14)"
-              : "rgba(255,107,53,0.14)",
-            color: isReady ? "#20c997" : "var(--forge-color-primary)",
-          }}
-        >
-          {formatProgressPercent(pair.graduation.progressBps)}
-        </span>
       </div>
 
       <div
@@ -81,6 +85,17 @@ export function GraduationProgressCard({ pair }: Props) {
             style={{ color: "var(--forge-text-primary)" }}
           >
             {formatQuoteAmount(pair.graduation.realQuote, pair.quoteAsset)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-sm" style={{ color: "var(--forge-text-muted)" }}>
+            Launch profile
+          </span>
+          <span
+            className="text-sm font-semibold"
+            style={{ color: "var(--forge-text-primary)" }}
+          >
+            {launchProfileLabel}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">

@@ -11,8 +11,10 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { ForgeErrorToast, ForgePendingToast } from "./ForgeToaster";
 import { useTokenPolling } from "../hooks/useTokenPolling";
+import { dispatchMarketDataInvalidated } from "../market-data-events";
 import { persistMarketLaunchSummary } from "../market-launch-banner-state";
-import type { MarketLaunchSummary } from "../types";
+import type { MarketLaunchSummary, TxStatus } from "../types";
+import { useWalletStore } from "../wallet-store";
 
 const STORAGE_KEY = "forge.pending.tx";
 
@@ -27,6 +29,8 @@ type PendingTxState = {
 type PendingTxContextValue = {
   setPendingTx: (pending: PendingTxState) => void;
   clearPendingTx: () => void;
+  pendingTx: PendingTxState | null;
+  pendingStatus: TxStatus | null;
 };
 
 const noop = () => {};
@@ -34,6 +38,8 @@ const noop = () => {};
 const PendingTxContext = createContext<PendingTxContextValue>({
   setPendingTx: noop,
   clearPendingTx: noop,
+  pendingTx: null,
+  pendingStatus: null,
 });
 
 export function usePendingTx() {
@@ -92,7 +98,10 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
       const isSameTokenDetail = confirmedHash.length > 0 && pathname === `/tokens/${confirmedHash}`;
       const isMarketsList = pathname === "/markets";
       const isSameMarketDetail = confirmedHash.length > 0 && pathname === `/markets/${confirmedHash}`;
-      if (isTokensList || isSameTokenDetail || isMarketsList || isSameMarketDetail) {
+      if (isSameMarketDetail) {
+        dispatchMarketDataInvalidated(confirmedHash, "trade_confirmation");
+        void useWalletStore.getState().refreshBalances();
+      } else if (isTokensList || isSameTokenDetail || isMarketsList) {
         window.location.reload();
       }
       queueMicrotask(() => setPending(null));
@@ -116,8 +125,10 @@ export function PendingTxProvider({ children }: { children: ReactNode }) {
       clearPendingTx() {
         setPending(null);
       },
+      pendingTx: pending,
+      pendingStatus: pending ? polling.status : null,
     }),
-    []
+    [pending, polling.status]
   );
 
   return (

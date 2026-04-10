@@ -11,6 +11,7 @@ export function serializeChangeModeParams(
     return [
       { type: "String", value: String(params[0] ?? "GAS") },
       { type: "Integer", value: String(params[1] ?? "0") },
+      { type: "String", value: String(params[2] ?? "starter") },
     ];
   }
 

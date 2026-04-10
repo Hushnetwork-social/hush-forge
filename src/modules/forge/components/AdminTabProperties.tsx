@@ -1,16 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   invokeChangeMode,
   invokeSetBurnRate,
   invokeSetCreatorFee,
 } from "../neo-dapi-adapter";
-import type { TokenInfo } from "../types";
+import type { MarketLaunchSummary, TokenInfo } from "../types";
 import type { StagedChange } from "./admin-types";
 import { InfoHint } from "./InfoHint";
 import { toUiErrorMessage } from "./error-utils";
-import { SpeculationActivationSheet } from "./SpeculationActivationSheet";
 
 interface Props {
   token: TokenInfo;
@@ -21,14 +21,7 @@ interface Props {
     options?: {
       targetTokenHash?: string;
       redirectPath?: string;
-      marketLaunchSummary?: {
-        tokenHash: string;
-        pairLabel: string;
-        quoteAsset: "GAS" | "NEO";
-        tokenSymbol: string;
-        curveInventoryRaw: string;
-        retainedInventoryRaw: string;
-      };
+      marketLaunchSummary?: MarketLaunchSummary;
     }
   ) => void;
   onStageChange?: (change: StagedChange) => void;
@@ -60,7 +53,6 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
   const [burnDisplay, setBurnDisplay] = useState(((token.burnRate ?? 0) / 100).toFixed(2));
   const [creatorFeeGas, setCreatorFeeGas] = useState(((token.creatorFeeRate ?? 0) / 100_000_000).toFixed(3));
   const [mode, setMode] = useState(initialMode);
-  const [showSpeculationSheet, setShowSpeculationSheet] = useState(false);
 
   const [burnError, setBurnError] = useState<string | null>(null);
   const [feeError, setFeeError] = useState<string | null>(null);
@@ -152,12 +144,6 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
 
     if (!modeChangeValid) {
       setModeError(`Cannot transition from ${initialMode}`);
-      return;
-    }
-
-    if (usesSpeculationReview) {
-      setModeError(null);
-      setShowSpeculationSheet(true);
       return;
     }
 
@@ -329,14 +315,28 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
         </p>
         {modeError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{modeError}</p>}
         <div className="flex gap-2">
-          <button
-            onClick={handleChangeMode}
-            disabled={savingMode || !modeChangeValid || mode === initialMode}
-            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-            style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-          >
-            {savingMode ? "Saving..." : usesSpeculationReview ? "Review Launch" : "Change Mode"}
-          </button>
+          {usesSpeculationReview ? (
+            <Link
+              href={`/tokens/${token.contractHash}/launch`}
+              className="px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{
+                background: "transparent",
+                border: "1px solid var(--forge-border-medium)",
+                color: "var(--forge-text-primary)",
+              }}
+            >
+              Review Launch
+            </Link>
+          ) : (
+            <button
+              onClick={handleChangeMode}
+              disabled={savingMode || !modeChangeValid || mode === initialMode}
+              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              {savingMode ? "Saving..." : "Change Mode"}
+            </button>
+          )}
           {!usesSpeculationReview && (
             <button
               onClick={handleStageMode}
@@ -349,14 +349,6 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
           )}
         </div>
       </div>
-
-      <SpeculationActivationSheet
-        open={showSpeculationSheet}
-        token={token}
-        factoryHash={factoryHash}
-        onClose={() => setShowSpeculationSheet(false)}
-        onTxSubmitted={onTxSubmitted}
-      />
     </section>
   );
 }

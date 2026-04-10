@@ -1,10 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { GAS_CONTRACT_HASH } from "../forge-config";
+import Link from "next/link";
+import { GAS_CONTRACT_HASH, PRIVATE_NET_RPC_URL } from "../forge-config";
 import { fetchFactoryConfig } from "../factory-governance-service";
+import {
+  deriveLaunchProfilePreview,
+  getLaunchProfileDefinition,
+  getRecommendedLaunchProfiles,
+  listLaunchProfiles,
+} from "../market-launch-profiles";
+import {
+  formatMarketPrice,
+  formatQuoteAmount,
+} from "../market-formatting";
 import { getTokenBalance } from "../neo-rpc-client";
-import { invokeChangeMode } from "../neo-dapi-adapter";
+import {
+  ensureDevnetSpeculationBootstrap,
+  invokeChangeMode,
+} from "../neo-dapi-adapter";
 import { quoteChangeModeCost } from "../token-admin-cost-service";
 import {
   formatDatoshiAsGas,
@@ -14,23 +28,42 @@ import {
 import { useWalletStore } from "../wallet-store";
 import { toUiErrorMessage } from "./error-utils";
 import type {
+  LaunchProfileId,
   PendingTxSubmissionOptions,
   TokenInfo,
 } from "../types";
 
 interface Props {
-  open: boolean;
+  open?: boolean;
   token: TokenInfo;
   factoryHash: string;
-  onClose: () => void;
+  onClose?: () => void;
   onTxSubmitted: (
     txHash: string,
     message: string,
     options?: PendingTxSubmissionOptions
   ) => void;
+  layout?: "modal" | "page";
+  backHref?: string;
+  pendingMessage?: string | null;
+  pendingTitle?: string;
 }
 
 type CurveInventoryMode = "all" | "partial";
+
+function formatReviewGasValue(datoshi: bigint | number): string {
+  const formatted = formatDatoshiAsGas(datoshi);
+  const [amount, unit] = formatted.split(" ");
+
+  if (!amount || !unit || !amount.includes(".")) {
+    return formatted;
+  }
+
+  const [whole, fraction] = amount.split(".");
+  const shortenedFraction = fraction.slice(0, 4).replace(/0+$/, "");
+
+  return shortenedFraction ? `${whole}.${shortenedFraction} ${unit}` : `${whole} ${unit}`;
+}
 
 export function SpeculationActivationSheet({
   open,
@@ -38,9 +71,15 @@ export function SpeculationActivationSheet({
   factoryHash,
   onClose,
   onTxSubmitted,
+  layout = "modal",
+  backHref,
+  pendingMessage = null,
+  pendingTitle = "Launching speculation market",
 }: Props) {
+  const isVisible = open ?? true;
   const address = useWalletStore((state) => state.address);
   const balances = useWalletStore((state) => state.balances);
+  const isLocalDevnet = PRIVATE_NET_RPC_URL === "/api/rpc";
   const gasBalance = useMemo(
     () =>
       balances.find((entry) => entry.contractHash === GAS_CONTRACT_HASH)?.amount ?? 0n,
@@ -48,6 +87,12 @@ export function SpeculationActivationSheet({
   );
 
   const [quoteAsset, setQuoteAsset] = useState<"GAS" | "NEO">("GAS");
+  const recommendedProfiles = useMemo(
+    () => getRecommendedLaunchProfiles(token.supply),
+    [token.supply]
+  );
+  const defaultLaunchProfile = recommendedProfiles[0] ?? "starter";
+  const [launchProfile, setLaunchProfile] = useState<LaunchProfileId>(defaultLaunchProfile);
   const [curveMode, setCurveMode] = useState<CurveInventoryMode>("all");
   const [partialInput, setPartialInput] = useState("");
   const [ownerBalance, setOwnerBalance] = useState<bigint | null>(null);
@@ -63,17 +108,20 @@ export function SpeculationActivationSheet({
   const [costQuoteError, setCostQuoteError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [bootstrapAttempted, setBootstrapAttempted] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!isVisible) return;
     setQuoteAsset("GAS");
+    setLaunchProfile(defaultLaunchProfile);
     setCurveMode("all");
     setPartialInput("");
     setSubmitError(null);
-  }, [open, token.contractHash]);
+    setBootstrapAttempted(false);
+  }, [defaultLaunchProfile, factoryHash, isVisible, token.contractHash]);
 
   useEffect(() => {
-    if (!open || !factoryHash) return;
+    if (!isVisible || !factoryHash) return;
 
     let cancelled = false;
     setOperationFeeLoading(true);
@@ -98,10 +146,10 @@ export function SpeculationActivationSheet({
     return () => {
       cancelled = true;
     };
-  }, [factoryHash, open]);
+  }, [factoryHash, isVisible]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!isVisible) return;
     if (!address) {
       setOwnerBalance(null);
       setOwnerBalanceLoading(false);
@@ -132,7 +180,7 @@ export function SpeculationActivationSheet({
     return () => {
       cancelled = true;
     };
-  }, [address, open, token.contractHash]);
+  }, [address, isVisible, token.contractHash]);
 
   const partialValue =
     curveMode === "partial"
@@ -183,16 +231,23 @@ export function SpeculationActivationSheet({
     ownerBalance !== null && selectedCurveInventory !== null
       ? ownerBalance - selectedCurveInventory
       : null;
+  const launchPreview = useMemo(
+    () =>
+      selectedCurveInventory !== null
+        ? deriveLaunchProfilePreview(launchProfile, quoteAsset, selectedCurveInventory)
+        : null,
+    [launchProfile, quoteAsset, selectedCurveInventory]
+  );
   const modeParams = useMemo(
     () =>
       validationMessage === null && selectedCurveInventory !== null
-        ? [quoteAsset, selectedCurveInventory.toString()]
+        ? [quoteAsset, selectedCurveInventory.toString(), launchProfile]
         : [],
-    [quoteAsset, selectedCurveInventory, validationMessage]
+    [launchProfile, quoteAsset, selectedCurveInventory, validationMessage]
   );
 
   useEffect(() => {
-    if (!open || !address || operationFee === null || validationMessage !== null) {
+    if (!isVisible || !address || operationFee === null || validationMessage !== null) {
       setCostQuote(null);
       setCostQuoteError(null);
       setCostQuoteLoading(false);
@@ -214,14 +269,48 @@ export function SpeculationActivationSheet({
       .then((quote) => {
         if (!cancelled) setCostQuote(quote);
       })
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
         if (cancelled) return;
-        setCostQuote(null);
-        setCostQuoteError(
+
+        const message =
           error instanceof Error
             ? error.message
-            : "Unable to estimate the launch transaction cost."
-        );
+            : "Unable to estimate the launch transaction cost.";
+
+        if (
+          isLocalDevnet &&
+          !bootstrapAttempted &&
+          /BondingCurveRouter not configured/i.test(message)
+        ) {
+          setBootstrapAttempted(true);
+
+          try {
+            await ensureDevnetSpeculationBootstrap(factoryHash);
+            if (cancelled) return;
+
+            const repairedQuote = await quoteChangeModeCost(
+              address,
+              factoryHash,
+              token.contractHash,
+              "speculation",
+              modeParams,
+              operationFee
+            );
+            if (cancelled) return;
+
+            setCostQuote(repairedQuote);
+            setCostQuoteError(null);
+            return;
+          } catch (bootstrapError) {
+            if (cancelled) return;
+            setCostQuote(null);
+            setCostQuoteError(toUiErrorMessage(bootstrapError));
+            return;
+          }
+        }
+
+        setCostQuote(null);
+        setCostQuoteError(message);
       })
       .finally(() => {
         if (!cancelled) setCostQuoteLoading(false);
@@ -232,20 +321,27 @@ export function SpeculationActivationSheet({
     };
   }, [
     address,
+    bootstrapAttempted,
     factoryHash,
+    isVisible,
+    isLocalDevnet,
     modeParams,
-    open,
     operationFee,
     token.contractHash,
     validationMessage,
   ]);
 
-  if (!open) return null;
+  if (!isVisible) return null;
+
+  const isPageLayout = layout === "page";
+  const resolvedBackHref = backHref ?? `/tokens/${token.contractHash}`;
+  const handleDismiss = onClose ?? (() => {});
+  const interactionLocked = submitting || pendingMessage !== null;
 
   const gasInsufficient =
     costQuote !== null && gasBalance < costQuote.estimatedTotalWalletOutflowDatoshi;
   const disableSubmit =
-    submitting ||
+    interactionLocked ||
     validationMessage !== null ||
     operationFeeLoading ||
     operationFee === null ||
@@ -276,12 +372,13 @@ export function SpeculationActivationSheet({
           tokenHash: token.contractHash,
           pairLabel: `${token.symbol}/${quoteAsset}`,
           quoteAsset,
+          launchProfile,
           tokenSymbol: token.symbol,
           curveInventoryRaw: selectedCurveInventory.toString(),
           retainedInventoryRaw: retainedInventory.toString(),
         },
       });
-      onClose();
+      handleDismiss();
     } catch (error) {
       setSubmitError(toUiErrorMessage(error));
     } finally {
@@ -289,23 +386,19 @@ export function SpeculationActivationSheet({
     }
   }
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.62)" }}
-      onClick={onClose}
+  const panel = (
+    <section
+      role={isPageLayout ? undefined : "dialog"}
+      aria-modal={isPageLayout ? undefined : true}
+      aria-label="Speculation activation review"
+      className="relative w-full rounded-[28px] p-5 sm:p-6"
+      aria-busy={interactionLocked}
+      style={{
+        background: "var(--forge-bg-card)",
+        border: "1px solid var(--forge-border-medium)",
+      }}
+      onClick={isPageLayout ? undefined : (event) => event.stopPropagation()}
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-label="Speculation activation review"
-        className="w-full max-w-5xl rounded-[28px] p-5 sm:p-6"
-        style={{
-          background: "var(--forge-bg-card)",
-          border: "1px solid var(--forge-border-medium)",
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <p
@@ -325,18 +418,21 @@ export function SpeculationActivationSheet({
             </p>
           </div>
 
-          <button
-            type="button"
-            aria-label="Close speculation activation review"
-            onClick={onClose}
-            className="rounded-full px-3 py-1.5 text-xs font-semibold"
-            style={{
-              border: "1px solid var(--forge-border-subtle)",
-              color: "var(--forge-text-muted)",
-            }}
-          >
-            Close
-          </button>
+          {!isPageLayout ? (
+            <button
+              type="button"
+              aria-label="Close speculation activation review"
+              onClick={handleDismiss}
+              disabled={interactionLocked}
+              className="rounded-full px-3 py-1.5 text-xs font-semibold"
+              style={{
+                border: "1px solid var(--forge-border-subtle)",
+                color: "var(--forge-text-muted)",
+              }}
+            >
+              Close
+            </button>
+          ) : null}
         </div>
 
         <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -356,6 +452,7 @@ export function SpeculationActivationSheet({
                         key={asset}
                         type="button"
                         onClick={() => setQuoteAsset(asset)}
+                        disabled={interactionLocked}
                         className="rounded-full px-4 py-2 text-sm font-semibold"
                         style={{
                           background:
@@ -377,15 +474,91 @@ export function SpeculationActivationSheet({
                 </div>
 
                 <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p
+                      className="text-xs font-semibold uppercase"
+                      style={{ color: "var(--forge-text-muted)" }}
+                    >
+                      Launch Profile
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+                      Recommended now:{" "}
+                      {recommendedProfiles
+                        .map((profile) => getLaunchProfileDefinition(profile).label)
+                        .join(" / ")}
+                    </p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {listLaunchProfiles().map((profile) => {
+                      const targets = profile.targets[quoteAsset];
+                      const active = profile.id === launchProfile;
+                      return (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onClick={() => setLaunchProfile(profile.id)}
+                          disabled={interactionLocked}
+                          className="rounded-2xl px-4 py-3 text-left transition hover:opacity-95"
+                          style={{
+                            background: active
+                              ? "rgba(255,107,53,0.14)"
+                              : "rgba(255,255,255,0.03)",
+                            border: `1px solid ${
+                              active
+                                ? "rgba(255,107,53,0.28)"
+                                : "var(--forge-border-subtle)"
+                            }`,
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span
+                              className="text-sm font-semibold"
+                              style={{ color: "var(--forge-text-primary)" }}
+                            >
+                              {profile.label}
+                            </span>
+                            {recommendedProfiles.includes(profile.id) && (
+                              <span
+                                className="rounded-full px-2 py-1 text-[11px] font-semibold"
+                                style={{
+                                  background: "rgba(32,201,151,0.14)",
+                                  color: "#20c997",
+                                }}
+                              >
+                                Recommended
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+                            {profile.description}
+                          </p>
+                          <div
+                            className="mt-3 flex flex-wrap gap-2 text-[11px]"
+                            style={{ color: "var(--forge-text-secondary)" }}
+                          >
+                            <span>{formatQuoteAmount(targets.initialLaunchCap, quoteAsset)} launch cap</span>
+                            <span>{formatQuoteAmount(targets.graduationThreshold, quoteAsset)} to graduate</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase" style={{ color: "var(--forge-text-muted)" }}>
                     Curve Inventory
                   </p>
                   <div className="space-y-2">
                     <label
-                      className="flex items-start gap-3 rounded-2xl px-4 py-3"
+                      className="flex items-start gap-3 rounded-2xl border px-4 py-3"
                       style={{
                         background:
                           curveMode === "all" ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
+                        borderColor:
+                          curveMode === "all"
+                            ? "rgba(255,255,255,0.1)"
+                            : "var(--forge-border-subtle)",
                       }}
                     >
                       <input
@@ -393,6 +566,7 @@ export function SpeculationActivationSheet({
                         name="curveInventoryMode"
                         checked={curveMode === "all"}
                         onChange={() => setCurveMode("all")}
+                        disabled={interactionLocked}
                       />
                       <span className="space-y-1">
                         <span className="block text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>
@@ -405,10 +579,14 @@ export function SpeculationActivationSheet({
                     </label>
 
                     <label
-                      className="space-y-3 rounded-2xl px-4 py-3"
+                      className="block rounded-2xl border px-4 py-3"
                       style={{
                         background:
                           curveMode === "partial" ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
+                        borderColor:
+                          curveMode === "partial"
+                            ? "rgba(255,255,255,0.1)"
+                            : "var(--forge-border-subtle)",
                       }}
                     >
                       <span className="flex items-start gap-3">
@@ -417,6 +595,7 @@ export function SpeculationActivationSheet({
                           name="curveInventoryMode"
                           checked={curveMode === "partial"}
                           onChange={() => setCurveMode("partial")}
+                          disabled={interactionLocked}
                         />
                         <span className="space-y-1">
                           <span className="block text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>
@@ -428,19 +607,23 @@ export function SpeculationActivationSheet({
                         </span>
                       </span>
 
-                      <input
-                        aria-label="Curve inventory input"
-                        value={partialInput}
-                        onChange={(event) => setPartialInput(event.target.value)}
-                        disabled={curveMode !== "partial"}
-                        placeholder={`${token.symbol} amount`}
-                        className="w-full rounded-2xl px-4 py-3 text-sm disabled:opacity-50"
-                        style={{
-                          background: "var(--forge-bg-primary)",
-                          border: "1px solid var(--forge-border-medium)",
-                          color: "var(--forge-text-primary)",
-                        }}
-                      />
+                      {curveMode === "partial" && (
+                        <div className="mt-3">
+                          <input
+                            aria-label="Curve inventory input"
+                            value={partialInput}
+                            onChange={(event) => setPartialInput(event.target.value)}
+                            placeholder={`${token.symbol} amount`}
+                            disabled={interactionLocked}
+                            className="w-full rounded-2xl px-4 py-3 text-sm"
+                            style={{
+                              background: "var(--forge-bg-primary)",
+                              border: "1px solid var(--forge-border-medium)",
+                              color: "var(--forge-text-primary)",
+                            }}
+                          />
+                        </div>
+                      )}
                     </label>
                   </div>
                 </div>
@@ -473,6 +656,7 @@ export function SpeculationActivationSheet({
                   </p>
                   <ul className="mt-2 space-y-2 text-xs leading-relaxed" style={{ color: "var(--forge-text-secondary)" }}>
                     <li>Trading starts on BondingCurveRouter and the pair becomes public at {`/markets/${token.contractHash}`}.</li>
+                    <li>The selected launch profile fixes the initial public curve shape and graduation target at activation time.</li>
                     <li>The selected quote asset is canonical for this market and cannot be changed from the pair page.</li>
                     <li>Retained owner inventory follows the same public market rules as any other holder inventory.</li>
                   </ul>
@@ -493,6 +677,10 @@ export function SpeculationActivationSheet({
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <PreviewStat label="Canonical pair" value={`${token.symbol}/${quoteAsset}`} />
                 <PreviewStat
+                  label="Launch profile"
+                  value={getLaunchProfileDefinition(launchProfile).label}
+                />
+                <PreviewStat
                   label="Curve inventory"
                   value={
                     selectedCurveInventory !== null
@@ -512,6 +700,42 @@ export function SpeculationActivationSheet({
                   label="Total supply"
                   value={`${formatTokenAmount(token.supply, token.decimals)} ${token.symbol}`}
                 />
+                <PreviewStat
+                  label="Public launch cap"
+                  value={
+                    launchPreview !== null
+                      ? formatQuoteAmount(launchPreview.initialLaunchCap, quoteAsset)
+                      : "-"
+                  }
+                />
+                <PreviewStat
+                  label="Target to graduate"
+                  value={
+                    launchPreview !== null
+                      ? formatQuoteAmount(launchPreview.graduationThreshold, quoteAsset)
+                      : "-"
+                  }
+                />
+                    <PreviewStat
+                      label="Initial price"
+                      value={
+                        launchPreview !== null
+                          ? formatMarketPrice(
+                              launchPreview.initialPrice,
+                              quoteAsset,
+                              token.decimals
+                            )
+                      : "-"
+                  }
+                />
+                <PreviewStat
+                  label="Curve sold by graduation"
+                  value={
+                    launchPreview !== null
+                      ? `${(launchPreview.soldAtGraduationBps / 100).toFixed(2)}%`
+                      : "-"
+                  }
+                />
               </div>
             </section>
 
@@ -530,7 +754,7 @@ export function SpeculationActivationSheet({
                     operationFeeLoading
                       ? "Loading..."
                       : operationFee !== null
-                        ? formatDatoshiAsGas(operationFee)
+                        ? formatReviewGasValue(operationFee)
                         : "Unavailable"
                   }
                 />
@@ -540,7 +764,7 @@ export function SpeculationActivationSheet({
                     costQuoteLoading
                       ? "Calculating..."
                       : costQuote !== null
-                        ? formatDatoshiAsGas(costQuote.estimatedChainFeeDatoshi)
+                        ? formatReviewGasValue(costQuote.estimatedChainFeeDatoshi)
                         : "Fill valid launch inputs"
                   }
                 />
@@ -550,13 +774,13 @@ export function SpeculationActivationSheet({
                     costQuoteLoading
                       ? "Calculating..."
                       : costQuote !== null
-                        ? formatDatoshiAsGas(costQuote.estimatedTotalWalletOutflowDatoshi)
+                        ? formatReviewGasValue(costQuote.estimatedTotalWalletOutflowDatoshi)
                         : "Fill valid launch inputs"
                   }
                 />
                 <CostRow
                   label="Your GAS balance"
-                  value={formatDatoshiAsGas(gasBalance)}
+                  value={formatReviewGasValue(gasBalance)}
                   tone={
                     gasInsufficient ? "error" : costQuote !== null ? "success" : "muted"
                   }
@@ -595,7 +819,7 @@ export function SpeculationActivationSheet({
           >
             {validationMessage ??
               (gasInsufficient
-                ? `Insufficient GAS. Need at least ${formatDatoshiAsGas(
+                ? `Insufficient GAS. Need at least ${formatReviewGasValue(
                     costQuote?.estimatedTotalWalletOutflowDatoshi ?? 0n
                   )} before requesting the signature.`
                 : submitError)}
@@ -603,17 +827,43 @@ export function SpeculationActivationSheet({
         )}
 
         <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full px-5 py-3 text-sm font-semibold"
-            style={{
-              border: "1px solid var(--forge-border-medium)",
-              color: "var(--forge-text-primary)",
-            }}
-          >
-            Cancel
-          </button>
+          {isPageLayout ? (
+            interactionLocked ? (
+              <span
+                className="rounded-full px-5 py-3 text-center text-sm font-semibold opacity-50"
+                style={{
+                  border: "1px solid var(--forge-border-medium)",
+                  color: "var(--forge-text-primary)",
+                }}
+              >
+                Cancel
+              </span>
+            ) : (
+              <Link
+                href={resolvedBackHref}
+                className="rounded-full px-5 py-3 text-center text-sm font-semibold"
+                style={{
+                  border: "1px solid var(--forge-border-medium)",
+                  color: "var(--forge-text-primary)",
+                }}
+              >
+                Cancel
+              </Link>
+            )
+          ) : (
+            <button
+              type="button"
+              onClick={handleDismiss}
+              disabled={interactionLocked}
+              className="rounded-full px-5 py-3 text-sm font-semibold"
+              style={{
+                border: "1px solid var(--forge-border-medium)",
+                color: "var(--forge-text-primary)",
+              }}
+            >
+              Cancel
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void handleSubmit()}
@@ -627,7 +877,73 @@ export function SpeculationActivationSheet({
             {submitting ? "Submitting..." : "Activate Speculation Market"}
           </button>
         </div>
-      </section>
+        {pendingMessage && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-[28px] px-6 text-center"
+            style={{
+              background: "rgba(12, 18, 31, 0.82)",
+              backdropFilter: "blur(2px)",
+            }}
+          >
+            <div
+              className="max-w-md rounded-[24px] px-6 py-5"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid var(--forge-border-medium)",
+              }}
+            >
+              <p
+                className="text-xs font-semibold uppercase tracking-[0.24em]"
+                style={{ color: "var(--forge-color-primary)" }}
+              >
+                Transaction Pending
+              </p>
+              <h3
+                className="mt-3 text-xl font-semibold"
+                style={{ color: "var(--forge-text-primary)" }}
+              >
+                {pendingTitle}
+              </h3>
+              <p
+                className="mt-3 text-sm leading-relaxed"
+                style={{ color: "var(--forge-text-muted)" }}
+              >
+                {pendingMessage}
+              </p>
+            </div>
+          </div>
+        )}
+    </section>
+  );
+
+  if (isPageLayout) {
+    return (
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        {interactionLocked ? (
+          <span className="text-sm opacity-60" style={{ color: "var(--forge-text-muted)" }}>
+            Back to Token
+          </span>
+        ) : (
+          <Link
+            href={resolvedBackHref}
+            className="text-sm transition-opacity hover:opacity-80"
+            style={{ color: "var(--forge-text-muted)" }}
+          >
+            Back to Token
+          </Link>
+        )}
+        {panel}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.62)" }}
+      onClick={handleDismiss}
+    >
+      <div className="w-full max-w-5xl">{panel}</div>
     </div>
   );
 }

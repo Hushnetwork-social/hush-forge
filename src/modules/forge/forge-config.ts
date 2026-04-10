@@ -75,6 +75,11 @@ export const FACTORY_HASH_UPDATED_EVENT = "forge:factory-hash-updated";
  */
 export function getRuntimeFactoryHash(): string {
   const envHash = process.env.NEXT_PUBLIC_FACTORY_CONTRACT_HASH ?? "";
+  const isLocalPrivateNet = PRIVATE_NET_RPC_URL === "/api/rpc";
+  if (isLocalPrivateNet && typeof localStorage !== "undefined") {
+    const saved = localStorage.getItem(FACTORY_HASH_STORAGE_KEY);
+    if (saved && saved !== "0x") return saved;
+  }
   if (envHash && envHash !== "0x") return envHash;
   if (typeof localStorage !== "undefined") {
     const saved = localStorage.getItem(FACTORY_HASH_STORAGE_KEY);
@@ -105,6 +110,11 @@ export function saveBondingCurveRouterHash(hash: string): void {
 /** Returns the configured BondingCurveRouter hash, or "" when not configured. */
 export function getRuntimeBondingCurveRouterHash(): string {
   const envHash = process.env.NEXT_PUBLIC_BONDING_CURVE_ROUTER_HASH ?? "";
+  const isLocalPrivateNet = PRIVATE_NET_RPC_URL === "/api/rpc";
+  if (isLocalPrivateNet && typeof localStorage !== "undefined") {
+    const saved = localStorage.getItem(BONDING_CURVE_ROUTER_HASH_STORAGE_KEY);
+    if (saved && saved !== "0x") return saved;
+  }
   if (envHash && envHash !== "0x") return envHash;
   if (typeof localStorage !== "undefined") {
     const saved = localStorage.getItem(BONDING_CURVE_ROUTER_HASH_STORAGE_KEY);

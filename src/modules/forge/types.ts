@@ -45,13 +45,16 @@ export interface TokenMetadata {
 export type MarketQuoteAsset = "GAS" | "NEO";
 export type MarketPairStatus = "active" | "graduation_ready" | "unknown";
 export type MarketDataSourceMode = "baseline" | "indexer";
+export type LaunchProfileId = "starter" | "standard" | "growth" | "flagship";
 
 export interface MarketCurveState {
   tokenHash: string;
   contractStatus: string;
   status: MarketPairStatus;
   quoteAsset: MarketQuoteAsset;
+  launchProfile?: LaunchProfileId | null;
   virtualQuote: bigint;
+  virtualTokens: bigint;
   realQuote: bigint;
   currentCurveInventory: bigint;
   invariantK: bigint;
@@ -145,7 +148,7 @@ export interface MarketPairReadModel {
   capabilities: MarketEnhancementCapabilities;
 }
 
-export type MarketCandleInterval = "1m" | "5m" | "1h" | "1d";
+export type MarketCandleInterval = "1m" | "5m" | "15m" | "1h" | "1d";
 
 export interface MarketCandle {
   time: number;
@@ -182,6 +185,17 @@ export interface MarketTopTraderEntry {
   buyVolume: bigint;
   sellVolume: bigint;
   netQuoteVolume: bigint;
+}
+
+export interface MarketActivitySnapshot {
+  tokenHash: string;
+  interval: "15m";
+  indexedThroughBlock: number;
+  indexedAt: number;
+  candles: MarketCandle[];
+  trades: MarketTradeHistoryEntry[];
+  holders: MarketHolderEntry[];
+  topTraders: MarketTopTraderEntry[];
 }
 
 export interface MarketLiveTradeEvent extends MarketTradeHistoryEntry {
@@ -262,6 +276,7 @@ export interface MarketLaunchSummary {
   tokenHash: string;
   pairLabel: string;
   quoteAsset: MarketQuoteAsset;
+  launchProfile?: LaunchProfileId | null;
   tokenSymbol: string;
   curveInventoryRaw: string;
   retainedInventoryRaw: string;

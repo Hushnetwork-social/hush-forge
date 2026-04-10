@@ -198,6 +198,32 @@ describe("TokenDetail", () => {
     );
   });
 
+  it("shows a launch speculation CTA for own community tokens", () => {
+    window.localStorage.setItem("forge.adminHintDismissed.0xabc123", "1");
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({ isOwnToken: true, isUpgradeable: true })
+    );
+
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+
+    expect(
+      screen.getByRole("link", { name: "Launch" })
+    ).toHaveAttribute("href", "/tokens/0xabc123/launch");
+  });
+
+  it("routes the speculation launch CTA to the dedicated launch page", () => {
+    window.localStorage.setItem("forge.adminHintDismissed.0xabc123", "1");
+    vi.mocked(useTokenDetail).mockReturnValue(
+      makeDetailResult({ isOwnToken: true, isUpgradeable: true })
+    );
+
+    render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);
+
+    expect(
+      screen.getByRole("link", { name: "Launch" })
+    ).toHaveAttribute("href", "/tokens/0xabc123/launch");
+  });
+
   it("shows lock badge when locked = true", () => {
     vi.mocked(useTokenDetail).mockReturnValue(makeDetailResult({ token: makeToken({ locked: true }) }));
     render(<TokenDetail contractHash="0xabc123" onTxSubmitted={vi.fn()} />);

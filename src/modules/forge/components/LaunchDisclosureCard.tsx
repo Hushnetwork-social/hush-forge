@@ -1,6 +1,8 @@
 "use client";
 
+import { getLaunchProfileDefinition } from "../market-launch-profiles";
 import {
+  formatMarketPrice,
   formatQuoteAmount,
   formatTokenDisplay,
 } from "../market-formatting";
@@ -63,6 +65,18 @@ export function LaunchDisclosureCard({ pair }: Props) {
       </div>
 
       <div className="mt-4">
+        {pair.curve.launchProfile && (
+          <DisclosureRow
+            label="Launch profile"
+            value={getLaunchProfileDefinition(pair.curve.launchProfile).label}
+          />
+        )}
+        {pair.curve.launchProfile && (
+          <DisclosureRow
+            label="Graduation target"
+            value={formatQuoteAmount(pair.curve.graduationThreshold, pair.quoteAsset)}
+          />
+        )}
         <DisclosureRow
           label="Initial curve inventory"
           value={formatTokenDisplay(
@@ -97,7 +111,11 @@ export function LaunchDisclosureCard({ pair }: Props) {
         />
         <DisclosureRow
           label="Current price"
-          value={formatQuoteAmount(pair.curve.currentPrice, pair.quoteAsset)}
+          value={formatMarketPrice(
+            pair.curve.currentPrice,
+            pair.quoteAsset,
+            pair.token.decimals
+          )}
         />
       </div>
     </section>

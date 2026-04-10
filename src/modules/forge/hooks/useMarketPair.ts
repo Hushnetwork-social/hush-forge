@@ -5,6 +5,11 @@ import {
   BASELINE_MARKET_ENHANCEMENT_CAPABILITIES,
   getBaselineMarketPair,
 } from "../market-data-service";
+import {
+  isMarketDataInvalidationForToken,
+  MARKET_DATA_INVALIDATED_EVENT,
+  type MarketDataInvalidatedDetail,
+} from "../market-data-events";
 import type { MarketEnhancementCapabilities, MarketPairReadModel } from "../types";
 
 export interface MarketPairResult {
@@ -21,11 +26,37 @@ interface MarketPairState {
 }
 
 export function useMarketPair(tokenHash: string): MarketPairResult {
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [state, setState] = useState<MarketPairState>({
     pair: null,
     resolvedTokenHash: null,
     error: null,
   });
+
+  useEffect(() => {
+    if (!tokenHash || typeof window === "undefined") {
+      return () => undefined;
+    }
+
+    function handleInvalidated(event: Event) {
+      const detail = (event as CustomEvent<MarketDataInvalidatedDetail>).detail;
+      if (isMarketDataInvalidationForToken(detail, tokenHash)) {
+        setRefreshVersion((current) => current + 1);
+      }
+    }
+
+    window.addEventListener(
+      MARKET_DATA_INVALIDATED_EVENT,
+      handleInvalidated as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        MARKET_DATA_INVALIDATED_EVENT,
+        handleInvalidated as EventListener
+      );
+    };
+  }, [tokenHash]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +88,7 @@ export function useMarketPair(tokenHash: string): MarketPairResult {
     return () => {
       cancelled = true;
     };
-  }, [tokenHash]);
+  }, [refreshVersion, tokenHash]);
 
   if (!tokenHash) {
     return {

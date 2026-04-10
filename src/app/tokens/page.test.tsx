@@ -18,6 +18,10 @@ vi.mock("@/modules/forge/hooks/useFactoryDeployment", () => ({
   useFactoryDeployment: vi.fn(),
 }));
 
+vi.mock("@/modules/forge/hooks/useFactoryAdminAccess", () => ({
+  useFactoryAdminAccess: vi.fn(),
+}));
+
 vi.mock("@/modules/forge/token-store", () => ({
   useTokenStore: vi.fn(),
 }));
@@ -78,6 +82,7 @@ vi.mock("@/modules/forge/components/WalletConnectModal", () => ({
 
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 import { useFactoryDeployment } from "@/modules/forge/hooks/useFactoryDeployment";
+import { useFactoryAdminAccess } from "@/modules/forge/hooks/useFactoryAdminAccess";
 import type { FactoryDeployStatus } from "@/modules/forge/hooks/useFactoryDeployment";
 import { useTokenStore } from "@/modules/forge/token-store";
 import type { TokenStore } from "@/modules/forge/token-store";
@@ -123,6 +128,22 @@ function setupMocks({
     clearPendingTx: vi.fn(),
   });
 
+  vi.mocked(useFactoryAdminAccess).mockReturnValue({
+    factoryHash: "0xfactory",
+    status: "ready",
+    config: null,
+    error: null,
+    access: {
+      connectedAddress: address,
+      connectedHash: address ? "0xuser" : null,
+      ownerHash: null,
+      isOwner: false,
+      navVisible: false,
+      routeAuthorized: false,
+    },
+    reload: vi.fn(),
+  });
+
   vi.mocked(useTokenStore).mockImplementation(
     (selector: (s: TokenStore) => unknown) =>
       selector({
@@ -165,15 +186,12 @@ describe("TokensPage", () => {
     );
   });
 
-  it("routes shell search into /markets", () => {
+  it("does not render the pairs search UI in the shared shell", () => {
     render(<TokensPage />);
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search markets" }), {
-      target: { value: "hush" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
-
-    expect(pushMock).toHaveBeenCalledWith("/markets?search=hush");
+    expect(
+      screen.queryByRole("searchbox", { name: "Search markets" })
+    ).not.toBeInTheDocument();
   });
 
   it("ForgeOverlay is not visible on load", () => {

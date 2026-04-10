@@ -32,6 +32,7 @@ import {
 vi.mock("./forge-config", () => ({
   GAS_CONTRACT_HASH: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
   PRIVATE_NET_RPC_URL: "",
+  saveBondingCurveRouterHash: vi.fn(),
   WALLET_STORAGE_KEY: "forge_wallet_type",
 }));
 
@@ -353,9 +354,9 @@ describe("lifecycle invoke functions", () => {
     );
   });
 
-  it("invokeChangeMode serializes speculation params as [String, Integer]", async () => {
+  it("invokeChangeMode serializes speculation params as [String, Integer, String]", async () => {
     const instance = await connectMock();
-    await invokeChangeMode("0xfactory", "0xtoken", "speculation", ["GAS", "600"]);
+    await invokeChangeMode("0xfactory", "0xtoken", "speculation", ["GAS", "600", "growth"]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = (instance.invoke.mock.calls[0] as any[])[0] as { operation: string; args: { type: string; value: unknown }[] };
     expect(call.operation).toBe("changeTokenMode");
@@ -364,6 +365,7 @@ describe("lifecycle invoke functions", () => {
     expect(call.args[2].value).toEqual([
       { type: "String", value: "GAS" },
       { type: "Integer", value: "600" },
+      { type: "String", value: "growth" },
     ]);
   });
 
@@ -499,7 +501,7 @@ describe("lifecycle invoke functions", () => {
       burnRate: 220,
       creatorFeeRate: 150000,
       newMode: "speculation",
-      modeParams: [],
+      modeParams: ["GAS", "700", "starter"],
       newMaxSupply: -1n,
       mintTo: null,
       mintAmount: 0n,
@@ -515,6 +517,14 @@ describe("lifecycle invoke functions", () => {
     expect(call.args[2]).toEqual({ type: "Integer", value: "220" });
     expect(call.args[3]).toEqual({ type: "Integer", value: "150000" });
     expect(call.args[4]).toEqual({ type: "String", value: "speculation" });
+    expect(call.args[5]).toEqual({
+      type: "Array",
+      value: [
+        { type: "String", value: "GAS" },
+        { type: "Integer", value: "700" },
+        { type: "String", value: "starter" },
+      ],
+    });
     expect(call.args[6]).toEqual({ type: "Integer", value: "-1" });
     expect(call.args[8]).toEqual({ type: "Integer", value: "0" });
     expect(call.args[9]).toEqual({ type: "Boolean", value: false });

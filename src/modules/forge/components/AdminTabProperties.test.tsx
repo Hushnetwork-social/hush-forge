@@ -13,14 +13,6 @@ vi.mock("../neo-dapi-adapter", () => ({
   WalletRejectedError: class WalletRejectedError extends Error {},
 }));
 
-vi.mock("./SpeculationActivationSheet", () => ({
-  SpeculationActivationSheet: ({
-    open,
-  }: {
-    open: boolean;
-  }) => (open ? <div>SPECULATION_ACTIVATION_SHEET</div> : null),
-}));
-
 function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
   return {
     contractHash: "0xtoken",
@@ -104,7 +96,7 @@ describe("AdminTabProperties", () => {
     expect(onTxSubmitted).toHaveBeenCalledWith("0xmode", "Changing token mode...");
   });
 
-  it("opens the speculation activation review instead of invoking change mode directly", () => {
+  it("routes speculation review to the dedicated launch page", () => {
     render(
       <AdminTabProperties
         token={makeToken({ mode: "community" })}
@@ -117,11 +109,12 @@ describe("AdminTabProperties", () => {
       target: { value: "speculative" },
     });
 
-    expect(screen.getByRole("button", { name: "Review Launch" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Review Launch" }));
+    expect(screen.getByRole("link", { name: "Review Launch" })).toBeInTheDocument();
 
     expect(invokeChangeMode).not.toHaveBeenCalled();
-    expect(screen.getByText("SPECULATION_ACTIVATION_SHEET")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review Launch" })).toHaveAttribute(
+      "href",
+      "/tokens/0xtoken/launch"
+    );
   });
 });

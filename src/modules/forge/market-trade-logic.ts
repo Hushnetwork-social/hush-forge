@@ -7,6 +7,7 @@ const NEO_CONTRACT_HASH = "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5";
 export const MARKET_TRADE_BUY_PRESETS = ["0.1", "0.5", "1"] as const;
 export const MARKET_TRADE_SELL_PRESETS = [25, 50, 75, 100] as const;
 export const MARKET_TRADE_SLIPPAGE_STORAGE_KEY = "forge.market.slippage";
+const MARKET_PRICE_SCALE = 1_000_000_000_000_000_000n;
 
 export type MarketTradeSide = "buy" | "sell";
 
@@ -81,11 +82,10 @@ export function getSellPresetAmount(balance: bigint, percentage: number): bigint
 
 export function calculateExecutionPriceRaw(
   quoteAmount: bigint,
-  tokenAmount: bigint,
-  tokenDecimals: number
+  tokenAmount: bigint
 ): bigint | null {
   if (quoteAmount <= 0n || tokenAmount <= 0n) return null;
-  return (quoteAmount * (10n ** BigInt(tokenDecimals))) / tokenAmount;
+  return (quoteAmount * MARKET_PRICE_SCALE) / tokenAmount;
 }
 
 export function calculatePriceImpactBps(

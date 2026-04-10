@@ -11,8 +11,20 @@ vi.mock("@/modules/forge/hooks/useMarketPair", () => ({
   useMarketPair: vi.fn(),
 }));
 
+vi.mock("@/modules/forge/hooks/useMarketActivity", () => ({
+  useMarketActivity: vi.fn(),
+}));
+
 vi.mock("@/modules/forge/hooks/useWallet", () => ({
   useWallet: vi.fn(),
+}));
+
+vi.mock("@/modules/forge/hooks/useQuoteAssetUsdReference", () => ({
+  useQuoteAssetUsdReference: vi.fn(() => ({
+    reference: null,
+    loading: false,
+    error: null,
+  })),
 }));
 
 vi.mock("@/modules/forge/components/PendingTxProvider", () => ({
@@ -41,11 +53,33 @@ vi.mock("@/modules/forge/components/TradeRail", () => ({
   TradeRail: () => <section data-testid="trade-rail">Trade rail</section>,
 }));
 
+vi.mock("@/modules/forge/components/PairChartPanel", () => ({
+  PairChartPanel: () => (
+    <section data-testid="pair-chart-panel">
+      <button type="button">Live curve</button>
+      <button type="button">On-chain preview</button>
+      <p>15m market preview</p>
+      <p>TradingView Lightweight Charts</p>
+    </section>
+  ),
+}));
+
+vi.mock("@/modules/forge/components/PairDataTabs", () => ({
+  PairDataTabs: () => (
+    <section data-testid="pair-data-tabs">
+      <button type="button">Trade History</button>
+      <button type="button">Holders</button>
+      <button type="button">Top Traders</button>
+    </section>
+  ),
+}));
+
 vi.mock("@/modules/forge/components/PostLaunchBanner", () => ({
   PostLaunchBanner: () => <section data-testid="post-launch-banner" />,
 }));
 
 import { useMarketPair } from "@/modules/forge/hooks/useMarketPair";
+import { useMarketActivity } from "@/modules/forge/hooks/useMarketActivity";
 import { useWallet } from "@/modules/forge/hooks/useWallet";
 
 const TOKEN_FACTOR = 100_000_000n;
@@ -73,9 +107,10 @@ const samplePair: MarketPairReadModel = {
     status: "active",
     quoteAsset: "GAS",
     virtualQuote: 150_00000000n,
+    virtualTokens: 10_000n * TOKEN_FACTOR,
     realQuote: 40_00000000n,
     currentCurveInventory: 70_000n * TOKEN_FACTOR,
-    invariantK: 1n,
+    invariantK: (190_00000000n) * (80_000n * TOKEN_FACTOR),
     graduationThreshold: 60_00000000n,
     graduationReady: false,
     currentPrice: 123_0000n,
@@ -115,6 +150,58 @@ function setupMocks({
     capabilities: samplePair.capabilities,
     loading,
     error,
+  });
+
+  vi.mocked(useMarketActivity).mockReturnValue({
+    activity: {
+      tokenHash: "0xtoken1",
+      interval: "15m",
+      indexedThroughBlock: 42,
+      indexedAt: Date.now(),
+      candles: [
+        {
+          time: 1_710_000_000,
+          open: 1_10000000n,
+          high: 1_25000000n,
+          low: 1_05000000n,
+          close: 1_20000000n,
+          volume: 4_00000000n,
+        },
+      ],
+      trades: [
+        {
+          id: "tx-1:0",
+          occurredAt: Date.now(),
+          side: "buy",
+          trader: "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+          quoteAsset: "GAS",
+          quoteAmount: 4_00000000n,
+          tokenAmount: 1_500_00000000n,
+          price: 1_20000000n,
+          txHash: "0xtx1",
+        },
+      ],
+      holders: [
+        {
+          rank: 1,
+          address: "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+          balance: 1_500_00000000n,
+          shareBps: 2500,
+        },
+      ],
+      topTraders: [
+        {
+          rank: 1,
+          address: "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+          totalTrades: 1,
+          buyVolume: 4_00000000n,
+          sellVolume: 0n,
+          netQuoteVolume: 4_00000000n,
+        },
+      ],
+    },
+    loading: false,
+    error: null,
   });
 
   vi.mocked(useWallet).mockReturnValue({
@@ -159,7 +246,11 @@ describe("MarketPairPage", () => {
     render(<MarketPairPage />);
 
     expect(
-      await screen.findByText("Available after indexer deployment")
+      await screen.findByText("15m market preview")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "On-chain preview" })).toBeInTheDocument();
+    expect(
+      screen.getByText("TradingView Lightweight Charts")
     ).toBeInTheDocument();
     expect(screen.getByTestId("trade-rail")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Trade History" })).toBeInTheDocument();

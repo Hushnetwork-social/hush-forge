@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getLaunchProfileDefinition } from "../market-launch-profiles";
 import {
   dismissMarketLaunchSummary,
   readMarketLaunchSummary,
@@ -34,6 +35,8 @@ export function PostLaunchBanner({ tokenHash, decimals }: Props) {
     BigInt(summary.retainedInventoryRaw),
     decimals
   );
+  const launchProfileLabel =
+    summary.launchProfile ? getLaunchProfileDefinition(summary.launchProfile).label : null;
 
   async function handleShare() {
     try {
@@ -76,6 +79,7 @@ export function PostLaunchBanner({ tokenHash, decimals }: Props) {
             {summary.pairLabel} created
           </h2>
           <p className="max-w-3xl text-sm leading-relaxed" style={{ color: "var(--forge-text-secondary)" }}>
+            {launchProfileLabel ? `${launchProfileLabel} profile activated. ` : ""}
             {curveInventory} {summary.tokenSymbol} committed to the curve.{" "}
             {retainedInventory} {summary.tokenSymbol} remained in the owner wallet.
             Retained tokens trade through the same public market as every other holder.

@@ -18,6 +18,7 @@ vi.mock("./forge-config", async () => {
 });
 
 const {
+  addressToHash160,
   calculateNetworkFee,
   getApplicationLog,
   getBlockCount,
@@ -102,6 +103,20 @@ describe("getBlockCount", () => {
     mockFetchNetworkError();
     await expect(getBlockCount()).rejects.toThrow(NeoRpcError);
     await expect(getBlockCount()).rejects.toThrow(/unreachable/i);
+  });
+});
+
+describe("addressToHash160", () => {
+  it("converts Neo N3 addresses to canonical script hashes", () => {
+    expect(addressToHash160("NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c")).toBe(
+      "0x88c48eaef7e64b646440da567cd85c9060efbf63"
+    );
+  });
+
+  it("normalizes hash inputs to lowercase", () => {
+    expect(addressToHash160("0x88C48EAEF7E64B646440DA567CD85C9060EFBF63")).toBe(
+      "0x88c48eaef7e64b646440da567cd85c9060efbf63"
+    );
   });
 });
 
@@ -448,11 +463,15 @@ describe("bonding curve tuple mappers", () => {
         integer("900000"),
         integer("100000"),
         integer("1000000"),
+        integer("50000"),
+        byteString("starter"),
       ])
     );
 
     expect(curve.quoteAsset).toBe("GAS");
+    expect(curve.launchProfile).toBe("starter");
     expect(curve.status).toBe("active");
+    expect(curve.virtualTokens).toBe(50000n);
     expect(curve.currentCurveInventory).toBe(750000n);
     expect(curve.curveInventory).toBe(900000n);
     expect(curve.retainedInventory).toBe(100000n);

@@ -176,8 +176,8 @@ describe("useMarketTradeFlow", () => {
       result.current.setImpactAcknowledged(true);
     });
 
-    act(() => {
-      void result.current.submit();
+    await act(async () => {
+      await result.current.submit();
     });
 
     await waitFor(() =>
@@ -220,8 +220,8 @@ describe("useMarketTradeFlow", () => {
       result.current.setImpactAcknowledged(true);
     });
 
-    act(() => {
-      void result.current.submit();
+    await act(async () => {
+      await result.current.submit();
     });
 
     await waitFor(() =>

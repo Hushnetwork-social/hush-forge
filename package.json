@@ -14,6 +14,7 @@
     "test:e2e:report": "playwright show-report",
     "test:integration": "playwright test --config e2e/integration/playwright.config.ts",
     "test:integration:report": "playwright show-report playwright-report-integration",
+    "verify:contracts": "node scripts/verify-contract-artifacts.mjs",
     "setup:test-profile": "powershell -ExecutionPolicy Bypass -File e2e/setup-test-profile.ps1",
     "setup:wallet-profile": "npx ts-node --project tsconfig.json e2e/setup-neoline-wallet.ts"
   },

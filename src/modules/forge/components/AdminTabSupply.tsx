@@ -129,7 +129,8 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
         factoryHash,
         token.contractHash,
         recipient.trim(),
-        amountRaw
+        amountRaw,
+        token.tokenProfile
       );
       onTxSubmitted(txHash, "Minting tokens...");
     } catch (err) {
@@ -152,7 +153,12 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
     setUpdatingMax(true);
     setMaxError(null);
     try {
-      const txHash = await invokeSetMaxSupply(factoryHash, token.contractHash, maxSupplyParsed);
+      const txHash = await invokeSetMaxSupply(
+        factoryHash,
+        token.contractHash,
+        maxSupplyParsed,
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Updating max supply...");
     } catch (err) {
       setMaxError(toUiErrorMessage(err));
@@ -238,14 +244,16 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
           >
             {minting ? "Minting..." : "Mint Tokens"}
           </button>
-          <button
-            onClick={handleStageMint}
-            disabled={!recipientValid || !mintAmountValid}
-            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-          >
-            Stage
-          </button>
+          {onStageChange && (
+            <button
+              onClick={handleStageMint}
+              disabled={!recipientValid || !mintAmountValid}
+              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              Stage
+            </button>
+          )}
         </div>
       </div>
 
@@ -277,14 +285,16 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
           >
             {updatingMax ? "Updating..." : "Set Max Supply"}
           </button>
-          <button
-            onClick={handleStageMaxSupply}
-            disabled={!maxSupplyValid}
-            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-          >
-            Stage
-          </button>
+          {onStageChange && (
+            <button
+              onClick={handleStageMaxSupply}
+              disabled={!maxSupplyValid}
+              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              Stage
+            </button>
+          )}
         </div>
       </div>
     </section>

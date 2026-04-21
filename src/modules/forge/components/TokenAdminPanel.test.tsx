@@ -123,6 +123,7 @@ function makeToken(overrides: Partial<TokenInfo> = {}): TokenInfo {
 
 describe("TokenAdminPanel", () => {
   beforeEach(() => {
+    localStorage.clear();
     invokeApplyTokenChanges.mockReset();
     invokeApplyTokenChanges.mockResolvedValue("0xtx");
     invokeClaimCreatorFee.mockReset();
@@ -143,7 +144,23 @@ describe("TokenAdminPanel", () => {
   it("shows locked banner when token is locked", () => {
     render(<TokenAdminPanel token={makeToken({ locked: true })} factoryHash="0xfactory" onTxSubmitted={vi.fn()} />);
     expect(screen.getByText(/Permanently Immutable/i)).toBeInTheDocument();
+    expect(screen.getByText(/Platform fee remains TokenFactoryOwner policy/i)).toBeInTheDocument();
     expect(screen.getByText("CREATOR FEE CLAIMS")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("keeps creator-fee claims available for locked lean tokens", () => {
+    render(
+      <TokenAdminPanel
+        token={makeToken({ locked: true, tokenProfile: "lean-nep17" })}
+        factoryHash="0xfactory"
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("CREATOR FEE CLAIMS")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Claim Partial" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Claim All" })).not.toBeDisabled();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
@@ -179,6 +196,31 @@ describe("TokenAdminPanel", () => {
     expect(screen.getByText("Update image URL")).toBeInTheDocument();
   });
 
+  it("hides staged factory batch controls for lean token-local mutations", () => {
+    render(
+      <TokenAdminPanel
+        token={makeToken({
+          tokenProfile: "lean-nep17",
+          authority: {
+            ownerMutationTarget: "token",
+            creatorFeeEditableByOwner: true,
+            burnRateEditableByOwner: true,
+            platformFeeEditableByOwner: false,
+            platformFeeEditableByPlatform: true,
+          },
+        })}
+        factoryHash="0xfactory"
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("LEAN TOKEN AUTHORITY")).toBeInTheDocument();
+    expect(screen.queryByText(/STAGED CHANGES/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Stage Mock"));
+    expect(screen.queryByText("Update image URL")).not.toBeInTheDocument();
+    expect(invokeApplyTokenChanges).not.toHaveBeenCalled();
+  });
+
   it("applies selected staged changes in one transaction", async () => {
     const onTxSubmitted = vi.fn();
     render(<TokenAdminPanel token={makeToken({ decimals: 2 })} factoryHash="0xfactory" onTxSubmitted={onTxSubmitted} />);
@@ -202,7 +244,8 @@ describe("TokenAdminPanel", () => {
         mintTo: null,
         mintAmount: 0n,
         lockToken: false,
-      })
+      }),
+      undefined
     );
     await waitFor(() =>
       expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Applying 2 staged changes...")
@@ -230,7 +273,8 @@ describe("TokenAdminPanel", () => {
         mintTo: "NwRecipient",
         mintAmount: 1000n,
         lockToken: true,
-      })
+      }),
+      undefined
     );
     await waitFor(() =>
       expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Applying 3 staged changes...")

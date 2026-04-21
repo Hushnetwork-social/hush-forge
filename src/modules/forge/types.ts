@@ -8,6 +8,17 @@
 // ---------------------------------------------------------------------------
 
 /** Token data from factory GetToken() registry. */
+export type TokenProfile = "full-nep17" | "lean-nep17";
+export type TokenOwnerMutationTarget = "factory" | "token";
+
+export interface TokenAuthority {
+  ownerMutationTarget: TokenOwnerMutationTarget;
+  creatorFeeEditableByOwner: boolean;
+  burnRateEditableByOwner: boolean;
+  platformFeeEditableByOwner: boolean;
+  platformFeeEditableByPlatform: boolean;
+}
+
 export interface TokenInfo {
   contractHash: string; // 0x-prefixed, 42 chars
   symbol: string;
@@ -27,6 +38,8 @@ export interface TokenInfo {
   creatorFeeRate?: number; // per-transfer GAS fee in datoshi
   platformFeeRate?: number; // per-transfer GAS fee in datoshi
   claimableCreatorFee?: bigint; // creator-fee GAS currently accrued in the token contract
+  tokenProfile?: TokenProfile | null; // factory deployment profile, null for external/native tokens
+  authority?: TokenAuthority | null; // owner/platform authority facts used by admin surfaces
 }
 
 /** NEP-17 token metadata fetched directly from the token contract. */

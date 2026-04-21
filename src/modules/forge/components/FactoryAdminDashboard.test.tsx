@@ -43,6 +43,7 @@ function renderDashboard(
 ) {
   const onSetCreationFee = vi.fn().mockResolvedValue(undefined);
   const onSetOperationFee = vi.fn().mockResolvedValue(undefined);
+  const onSetAllTokensPlatformFee = vi.fn().mockResolvedValue(undefined);
   const onSetPaused = vi.fn().mockResolvedValue(undefined);
   const onUpgradeTemplate = vi.fn().mockResolvedValue(undefined);
   const onClaimAll = vi.fn().mockResolvedValue(undefined);
@@ -62,6 +63,7 @@ function renderDashboard(
       onRetryAssets={vi.fn()}
       onSetCreationFee={onSetCreationFee}
       onSetOperationFee={onSetOperationFee}
+      onSetAllTokensPlatformFee={onSetAllTokensPlatformFee}
       onSetPaused={onSetPaused}
       onUpgradeTemplate={onUpgradeTemplate}
       onClaimAll={onClaimAll}
@@ -72,6 +74,7 @@ function renderDashboard(
   return {
     onSetCreationFee,
     onSetOperationFee,
+    onSetAllTokensPlatformFee,
     onSetPaused,
     onUpgradeTemplate,
     onClaimAll,
@@ -127,8 +130,43 @@ describe("FactoryAdminDashboard", () => {
 
     expect(screen.getByRole("button", { name: "Set Creation Fee" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Set Operation Fee" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Set Platform Fee Batch" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Pause Factory" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Upgrade Template" })).toBeDisabled();
+  });
+
+  it("submits platform fee propagation with offset and batch size", async () => {
+    const { onSetAllTokensPlatformFee } = renderDashboard();
+
+    fireEvent.change(screen.getByLabelText("Platform fee GAS input"), {
+      target: { value: "0.008" },
+    });
+    fireEvent.change(screen.getByLabelText("Platform fee offset input"), {
+      target: { value: "25" },
+    });
+    fireEvent.change(screen.getByLabelText("Platform fee batch size input"), {
+      target: { value: "50" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Set Platform Fee Batch" }));
+
+    await waitFor(() =>
+      expect(onSetAllTokensPlatformFee).toHaveBeenCalledWith(800_000n, 25n, 50n)
+    );
+    expect(screen.getByLabelText("Platform fee offset input")).toHaveValue("75");
+  });
+
+  it("blocks platform fee propagation above the contract maximum", () => {
+    const { onSetAllTokensPlatformFee } = renderDashboard();
+
+    fireEvent.change(screen.getByLabelText("Platform fee GAS input"), {
+      target: { value: "0.10000001" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Set Platform Fee Batch" }));
+
+    expect(onSetAllTokensPlatformFee).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Platform fee cannot exceed 0.1 GAS."
+    );
   });
 
   it("shows inline technical details for failed actions", () => {

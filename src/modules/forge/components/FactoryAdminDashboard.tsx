@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { getClaimableFactoryGasSummary } from "../factory-governance-service";
 import {
   isGovernanceMutationLocked,
+  parseGasToDatoshi,
   validateGovernanceFeeInput,
   validatePartialClaimAmount,
 } from "../factory-governance-logic";
@@ -38,6 +39,7 @@ interface Props {
   onRetryAssets: () => void;
   onSetCreationFee: (feeInDatoshi: bigint) => Promise<void>;
   onSetOperationFee: (feeInDatoshi: bigint) => Promise<void>;
+  onSetAllTokensPlatformFee: (feeInDatoshi: bigint, offset: bigint, batchSize: bigint) => Promise<void>;
   onSetPaused: (paused: boolean) => Promise<void>;
   onUpgradeTemplate: (nefBase64: string, manifestText: string) => Promise<void>;
   onClaimAll: (assetHash: string) => Promise<void>;
@@ -50,10 +52,61 @@ interface PendingConfirmation {
   onConfirm: () => Promise<void>;
 }
 
+const MAX_PLATFORM_FEE_DATOSHI = 10_000_000n;
+const MAX_PLATFORM_BATCH_SIZE = 50n;
+
 function formatGas(datoshi: bigint): string {
   const whole = datoshi / 100_000_000n;
   const fraction = (datoshi % 100_000_000n).toString().padStart(8, "0");
   return `${whole.toLocaleString("en-US")}.${fraction}`.replace(/\.?0+$/, "") + " GAS";
+}
+
+function validatePlatformFeeInput(
+  value: string
+): { valid: boolean; datoshi: bigint | null; reason: string | null } {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { valid: false, datoshi: null, reason: "Platform fee is required." };
+  }
+  if (trimmed.startsWith("-")) {
+    return { valid: false, datoshi: null, reason: "Platform fee cannot be negative." };
+  }
+
+  const datoshi = parseGasToDatoshi(trimmed);
+  if (datoshi === null) {
+    return {
+      valid: false,
+      datoshi: null,
+      reason: "Enter a valid GAS amount with up to 8 decimal places.",
+    };
+  }
+  if (datoshi > MAX_PLATFORM_FEE_DATOSHI) {
+    return {
+      valid: false,
+      datoshi,
+      reason: `Platform fee cannot exceed ${formatGas(MAX_PLATFORM_FEE_DATOSHI)}.`,
+    };
+  }
+
+  return { valid: true, datoshi, reason: null };
+}
+
+function validateWholeNumberInput(
+  value: string,
+  label: string,
+  max: bigint | null
+): { valid: boolean; value: bigint | null; reason: string | null } {
+  const trimmed = value.trim();
+  if (!trimmed) return { valid: false, value: null, reason: `${label} is required.` };
+  if (!/^\d+$/.test(trimmed)) {
+    return { valid: false, value: null, reason: `${label} must be a whole number.` };
+  }
+
+  const parsed = BigInt(trimmed);
+  if (max !== null && parsed > max) {
+    return { valid: false, value: parsed, reason: `${label} cannot exceed ${max.toString()}.` };
+  }
+  return { valid: true, value: parsed, reason: null };
 }
 
 function mutationSummary(state?: AdminMutationState) {
@@ -104,6 +157,7 @@ export function FactoryAdminDashboard({
   onRetryAssets,
   onSetCreationFee,
   onSetOperationFee,
+  onSetAllTokensPlatformFee,
   onSetPaused,
   onUpgradeTemplate,
   onClaimAll,
@@ -111,6 +165,9 @@ export function FactoryAdminDashboard({
 }: Props) {
   const [creationFeeInput, setCreationFeeInput] = useState("");
   const [operationFeeInput, setOperationFeeInput] = useState("");
+  const [platformFeeInput, setPlatformFeeInput] = useState("");
+  const [platformFeeOffsetInput, setPlatformFeeOffsetInput] = useState("0");
+  const [platformFeeBatchSizeInput, setPlatformFeeBatchSizeInput] = useState("50");
   const [partialClaims, setPartialClaims] = useState<Record<string, string>>({});
   const [nefFile, setNefFile] = useState<File | null>(null);
   const [manifestFile, setManifestFile] = useState<File | null>(null);
@@ -128,6 +185,18 @@ export function FactoryAdminDashboard({
   const operationFeeValidation = useMemo(
     () => validateGovernanceFeeInput(operationFeeInput, config.operationFee),
     [operationFeeInput, config.operationFee]
+  );
+  const platformFeeValidation = useMemo(
+    () => validatePlatformFeeInput(platformFeeInput),
+    [platformFeeInput]
+  );
+  const platformFeeOffsetValidation = useMemo(
+    () => validateWholeNumberInput(platformFeeOffsetInput, "Offset", null),
+    [platformFeeOffsetInput]
+  );
+  const platformFeeBatchSizeValidation = useMemo(
+    () => validateWholeNumberInput(platformFeeBatchSizeInput, "Batch size", MAX_PLATFORM_BATCH_SIZE),
+    [platformFeeBatchSizeInput]
   );
 
   function setError(key: string, value: string | null) {
@@ -152,6 +221,33 @@ export function FactoryAdminDashboard({
     setError("operation-fee", null);
     await onSetOperationFee(operationFeeValidation.datoshi);
     setOperationFeeInput("");
+  }
+
+  async function submitPlatformFeeBatch() {
+    if (!platformFeeValidation.valid || platformFeeValidation.datoshi === null) {
+      setError("platform-fee-batch", platformFeeValidation.reason ?? "Invalid platform fee.");
+      return;
+    }
+    if (!platformFeeOffsetValidation.valid || platformFeeOffsetValidation.value === null) {
+      setError("platform-fee-batch", platformFeeOffsetValidation.reason ?? "Invalid offset.");
+      return;
+    }
+    if (!platformFeeBatchSizeValidation.valid || platformFeeBatchSizeValidation.value === null) {
+      setError("platform-fee-batch", platformFeeBatchSizeValidation.reason ?? "Invalid batch size.");
+      return;
+    }
+
+    setError("platform-fee-batch", null);
+    await onSetAllTokensPlatformFee(
+      platformFeeValidation.datoshi,
+      platformFeeOffsetValidation.value,
+      platformFeeBatchSizeValidation.value
+    );
+    if (platformFeeBatchSizeValidation.value > 0n) {
+      setPlatformFeeOffsetInput(
+        (platformFeeOffsetValidation.value + platformFeeBatchSizeValidation.value).toString()
+      );
+    }
   }
 
   async function prepareTemplateUpgrade() {
@@ -324,6 +420,68 @@ export function FactoryAdminDashboard({
               </button>
             </div>
             {renderMutationStatus("operation-fee")}
+          </section>
+
+          <section className="rounded-2xl p-6" style={{ background: "var(--forge-bg-card)", border: "1px solid var(--forge-border-medium)" }}>
+            <h2 className="text-lg font-semibold">Platform Fee Propagation</h2>
+            <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+              TokenFactoryOwner sets the platform-fee default for future tokens and propagates
+              the same fee into existing token-local storage by registry batch.
+            </p>
+            <p className="mt-2 text-xs" style={{ color: "var(--forge-text-muted)" }}>
+              Maximum platform fee: {formatGas(MAX_PLATFORM_FEE_DATOSHI)}. Batch size is capped at {MAX_PLATFORM_BATCH_SIZE.toString()} tokens.
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_0.7fr_0.7fr_auto] md:items-end">
+              <label className="text-sm">
+                <span className="mb-2 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Platform fee
+                </span>
+                <input
+                  aria-label="Platform fee GAS input"
+                  value={platformFeeInput}
+                  onChange={(event) => setPlatformFeeInput(event.target.value)}
+                  placeholder="GAS amount"
+                  inputMode="decimal"
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)" }}
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-2 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Offset
+                </span>
+                <input
+                  aria-label="Platform fee offset input"
+                  value={platformFeeOffsetInput}
+                  onChange={(event) => setPlatformFeeOffsetInput(event.target.value)}
+                  inputMode="numeric"
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)" }}
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-2 block" style={{ color: "var(--forge-text-muted)" }}>
+                  Batch size
+                </span>
+                <input
+                  aria-label="Platform fee batch size input"
+                  value={platformFeeBatchSizeInput}
+                  onChange={(event) => setPlatformFeeBatchSizeInput(event.target.value)}
+                  inputMode="numeric"
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)" }}
+                />
+              </label>
+              <button
+                onClick={() => void submitPlatformFeeBatch()}
+                disabled={isGovernanceMutationLocked(activeMutationId, "platform-fee-batch")}
+                className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                style={{ background: "var(--forge-color-primary)", color: "var(--forge-text-primary)" }}
+              >
+                Set Platform Fee Batch
+              </button>
+            </div>
+            {renderMutationStatus("platform-fee-batch")}
           </section>
 
           <section className="rounded-2xl p-6" style={{ background: "var(--forge-bg-card)", border: "1px solid var(--forge-border-medium)" }}>

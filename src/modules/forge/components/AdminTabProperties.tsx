@@ -47,6 +47,14 @@ function toContractMode(mode: TokenInfo["mode"]): string {
   }
 }
 
+function formatDatoshiAsGas(datoshi: number | null | undefined): string {
+  if (datoshi === null || datoshi === undefined) return "Not reported";
+  const normalized = Math.max(0, Math.trunc(datoshi));
+  const whole = Math.floor(normalized / 100_000_000);
+  const fraction = (normalized % 100_000_000).toString().padStart(8, "0");
+  return `${whole.toLocaleString("en-US")}.${fraction}`.replace(/\.?0+$/, "") + " GAS";
+}
+
 export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageChange }: Props) {
   const initialMode = token.mode ?? "community";
   const [burnBps, setBurnBps] = useState(token.burnRate ?? 0);
@@ -66,6 +74,9 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
     () => VALID_TRANSITIONS[initialMode] ?? [],
     [initialMode]
   );
+  const ownerMutationsAreTokenLocal =
+    token.tokenProfile === "lean-nep17" || token.authority?.ownerMutationTarget === "token";
+  const supportsModeChange = !ownerMutationsAreTokenLocal;
   const usesSpeculationReview = initialMode === "community" && mode === "speculative";
 
   const modeChangeValid = mode === initialMode || allowedTransitions.includes(mode);
@@ -103,7 +114,12 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
     setSavingBurn(true);
     setBurnError(null);
     try {
-      const txHash = await invokeSetBurnRate(factoryHash, token.contractHash, burnBps);
+      const txHash = await invokeSetBurnRate(
+        factoryHash,
+        token.contractHash,
+        burnBps,
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Setting burn rate...");
     } catch (err) {
       setBurnError(toUiErrorMessage(err));
@@ -127,7 +143,12 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
     setFeeError(null);
     try {
       const datoshi = Math.round(creatorFeeValue * 100_000_000);
-      const txHash = await invokeSetCreatorFee(factoryHash, token.contractHash, datoshi);
+      const txHash = await invokeSetCreatorFee(
+        factoryHash,
+        token.contractHash,
+        datoshi,
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Setting creator fee...");
     } catch (err) {
       setFeeError(toUiErrorMessage(err));
@@ -195,6 +216,39 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
 
   return (
     <section className="space-y-6" aria-label="Admin Properties Tab">
+      <div
+        className="rounded-lg p-3"
+        aria-label="Economics authority"
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid var(--forge-border-subtle)",
+        }}
+      >
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-xs uppercase" style={{ color: "var(--forge-text-muted)" }}>
+              Owner Changes
+            </dt>
+            <dd className="mt-1 text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>
+              {ownerMutationsAreTokenLocal ? "Token-local contract" : "TokenFactory lifecycle"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase" style={{ color: "var(--forge-text-muted)" }}>
+              Platform Fee
+            </dt>
+            <dd className="mt-1 text-sm font-semibold" style={{ color: "var(--forge-text-primary)" }}>
+              {formatDatoshiAsGas(token.platformFeeRate)}
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3 text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+          TokenOwners can edit creator fee and burn rate here. Platform fee is TokenFactoryOwner policy,
+          so this panel does not submit platform-fee changes. READ-ONLY locks TokenOwner settings only;
+          platform policy can still be propagated by TokenFactory governance.
+        </p>
+      </div>
+
       <div className="space-y-2">
         <InfoHint
           label="Burn Rate"
@@ -230,13 +284,15 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
           >
             {savingBurn ? "Saving..." : "Set Burn Rate"}
           </button>
-          <button
-            onClick={handleStageBurnRate}
-            className="px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-          >
-            Stage
-          </button>
+          {onStageChange && (
+            <button
+              onClick={handleStageBurnRate}
+              className="px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              Stage
+            </button>
+          )}
         </div>
       </div>
 
@@ -276,13 +332,15 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
           >
             {savingFee ? "Saving..." : "Set Creator Fee"}
           </button>
-          <button
-            onClick={handleStageCreatorFee}
-            className="px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-          >
-            Stage
-          </button>
+          {onStageChange && (
+            <button
+              onClick={handleStageCreatorFee}
+              className="px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              Stage
+            </button>
+          )}
         </div>
       </div>
 
@@ -291,63 +349,81 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
           label="Token Mode"
           hint="Controls token behavior profile. Some transitions are one-way and cannot be undone."
         />
-        <select
-          aria-label="Mode selector"
-          value={mode}
-          onChange={(e) => setMode(e.target.value as TokenInfo["mode"] ?? "community")}
-          className="w-full rounded-lg px-3 py-2 text-sm"
-          style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-        >
-          {["community", "speculative", "crowdfund"].map((candidate) => {
-            const disabled =
-              candidate !== initialMode && !allowedTransitions.includes(candidate);
-            return (
-              <option key={candidate} value={candidate} disabled={disabled}>
-                {candidate}
-              </option>
-            );
-          })}
-        </select>
+        {supportsModeChange ? (
+          <select
+            aria-label="Mode selector"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as TokenInfo["mode"] ?? "community")}
+            className="w-full rounded-lg px-3 py-2 text-sm"
+            style={{ background: "var(--forge-bg-primary)", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            {["community", "speculative", "crowdfund"].map((candidate) => {
+              const disabled =
+                candidate !== initialMode && !allowedTransitions.includes(candidate);
+              return (
+                <option key={candidate} value={candidate} disabled={disabled}>
+                  {candidate}
+                </option>
+              );
+            })}
+          </select>
+        ) : (
+          <div
+            aria-label="Current token mode"
+            className="w-full rounded-lg px-3 py-2 text-sm"
+            style={{
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid var(--forge-border-subtle)",
+              color: "var(--forge-text-primary)",
+            }}
+          >
+            {initialMode}
+          </div>
+        )}
         <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-          {usesSpeculationReview
+          {!supportsModeChange
+            ? "Lean-token economics are updated directly on the token contract; TokenFactory mode transitions are not part of this token-local panel."
+            : usesSpeculationReview
             ? "Launching speculation requires quote-asset and curve-inventory review before signature."
             : "Mode transitions are permanent and may unlock or disable protocol features."}
         </p>
         {modeError && <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>{modeError}</p>}
-        <div className="flex gap-2">
-          {usesSpeculationReview ? (
-            <Link
-              href={`/tokens/${token.contractHash}/launch`}
-              className="px-4 py-2 rounded-lg text-sm font-semibold"
-              style={{
-                background: "transparent",
-                border: "1px solid var(--forge-border-medium)",
-                color: "var(--forge-text-primary)",
-              }}
-            >
-              Review Launch
-            </Link>
-          ) : (
-            <button
-              onClick={handleChangeMode}
-              disabled={savingMode || !modeChangeValid || mode === initialMode}
-              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-              style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-            >
-              {savingMode ? "Saving..." : "Change Mode"}
-            </button>
-          )}
-          {!usesSpeculationReview && (
-            <button
-              onClick={handleStageMode}
-              disabled={!modeChangeValid || mode === initialMode}
-              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-            >
-              Stage
-            </button>
-          )}
-        </div>
+        {supportsModeChange && (
+          <div className="flex gap-2">
+            {usesSpeculationReview ? (
+              <Link
+                href={`/tokens/${token.contractHash}/launch`}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{
+                  background: "transparent",
+                  border: "1px solid var(--forge-border-medium)",
+                  color: "var(--forge-text-primary)",
+                }}
+              >
+                Review Launch
+              </Link>
+            ) : (
+              <button
+                onClick={handleChangeMode}
+                disabled={savingMode || !modeChangeValid || mode === initialMode}
+                className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                style={{ background: "transparent", border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+              >
+                {savingMode ? "Saving..." : "Change Mode"}
+              </button>
+            )}
+            {!usesSpeculationReview && onStageChange && (
+              <button
+                onClick={handleStageMode}
+                disabled={!modeChangeValid || mode === initialMode}
+                className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+              >
+                Stage
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

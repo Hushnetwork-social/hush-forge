@@ -18,6 +18,7 @@ import { useWallet } from "@/modules/forge/hooks/useWallet";
 import {
   invokeClaim,
   invokeClaimAll,
+  invokeSetAllTokensPlatformFee,
   invokeSetCreationFee,
   invokeSetOperationFee,
   invokeSetPaused,
@@ -315,6 +316,14 @@ export default function FactoryAdminPage() {
             () => invokeSetOperationFee(accessState.factoryHash, feeInDatoshi),
             "Operation fee transaction submitted.",
             "Operation fee updated and config refreshed."
+          );
+        }}
+        onSetAllTokensPlatformFee={async (feeInDatoshi, offset, batchSize) => {
+          await runMutation(
+            "platform-fee-batch",
+            () => invokeSetAllTokensPlatformFee(accessState.factoryHash, feeInDatoshi, offset, batchSize),
+            `Platform fee batch transaction submitted (offset ${offset.toString()}, size ${batchSize.toString()}).`,
+            "Platform fee default updated and selected token batch propagated."
           );
         }}
         onSetPaused={async (paused) => {

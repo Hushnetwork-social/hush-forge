@@ -106,18 +106,22 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageC
         >
           {submitting ? "Locking..." : "Lock Token Forever"}
         </button>
-        <button
-          onClick={handleStageLock}
-          disabled={!canLock}
-          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-        >
-          Stage
-        </button>
+        {onStageChange && (
+          <button
+            onClick={handleStageLock}
+            disabled={!canLock}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Stage
+          </button>
+        )}
       </div>
-      <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-        `Stage` queues this action for later batch apply. `Lock Token Forever` submits immediately.
-      </p>
+      {onStageChange && (
+        <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+          `Stage` queues this action for later batch apply. `Lock Token Forever` submits immediately.
+        </p>
+      )}
     </section>
   );
 }

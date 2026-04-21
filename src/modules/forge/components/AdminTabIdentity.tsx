@@ -161,14 +161,16 @@ export function AdminTabIdentity({ token, factoryHash, onTxSubmitted, onStageCha
         >
           {submitting ? "Updating..." : "Update Image URL"}
         </button>
-        <button
-          onClick={handleStage}
-          disabled={!isDirty}
-          className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-        >
-          Stage
-        </button>
+        {onStageChange && (
+          <button
+            onClick={handleStage}
+            disabled={!isDirty}
+            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+          >
+            Stage
+          </button>
+        )}
       </div>
     </section>
   );

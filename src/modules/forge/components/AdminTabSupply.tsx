@@ -244,14 +244,16 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
           >
             {minting ? "Minting..." : "Mint Tokens"}
           </button>
-          <button
-            onClick={handleStageMint}
-            disabled={!recipientValid || !mintAmountValid}
-            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-          >
-            Stage
-          </button>
+          {onStageChange && (
+            <button
+              onClick={handleStageMint}
+              disabled={!recipientValid || !mintAmountValid}
+              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              Stage
+            </button>
+          )}
         </div>
       </div>
 
@@ -283,14 +285,16 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
           >
             {updatingMax ? "Updating..." : "Set Max Supply"}
           </button>
-          <button
-            onClick={handleStageMaxSupply}
-            disabled={!maxSupplyValid}
-            className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-            style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-          >
-            Stage
-          </button>
+          {onStageChange && (
+            <button
+              onClick={handleStageMaxSupply}
+              disabled={!maxSupplyValid}
+              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
+            >
+              Stage
+            </button>
+          )}
         </div>
       </div>
     </section>

@@ -62,6 +62,9 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
   }, [storageKey, activeTab]);
 
   const showSupply = token.mintable !== false;
+  const ownerMutationsAreTokenLocal =
+    token.tokenProfile === "lean-nep17" || token.authority?.ownerMutationTarget === "token";
+  const supportsStagedBatch = !ownerMutationsAreTokenLocal;
   const [stagedChanges, setStagedChanges] = useState<StagedChange[]>([]);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [batchInfo, setBatchInfo] = useState<string | null>(null);
@@ -318,7 +321,9 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
             Permanently Immutable
           </h3>
           <p className="text-xs mt-1" style={{ color: "var(--forge-text-muted)" }}>
-            This token has been permanently locked. Lifecycle setters are blocked on-chain, but accrued creator fees remain claimable.
+            This token has been permanently locked. TokenOwner lifecycle setters are blocked
+            on-chain, but accrued creator fees remain claimable. Platform fee remains
+            TokenFactoryOwner policy and can still be propagated by TokenFactory governance.
           </p>
         </section>
       )}
@@ -398,6 +403,21 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
 
       {!token.locked && (
         <>
+          {ownerMutationsAreTokenLocal && (
+            <section
+              className="rounded-lg p-3"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--forge-border-subtle)" }}
+            >
+              <h4 className="text-xs font-semibold" style={{ color: "var(--forge-text-primary)" }}>
+                LEAN TOKEN AUTHORITY
+              </h4>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--forge-text-muted)" }}>
+                TokenOwner changes submit directly to this token contract. Staged TokenFactory
+                batch apply is unavailable for lean tokens; use each token-local action individually.
+              </p>
+            </section>
+          )}
+
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Token admin tabs">
             {tabs.map((tab) => (
               <button
@@ -428,7 +448,7 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
               token={token}
               factoryHash={factoryHash}
               onTxSubmitted={onTxSubmitted}
-              onStageChange={stageChange}
+              onStageChange={supportsStagedBatch ? stageChange : undefined}
             />
           )}
           {activeTab === "supply" && showSupply && (
@@ -436,7 +456,7 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
               token={token}
               factoryHash={factoryHash}
               onTxSubmitted={onTxSubmitted}
-              onStageChange={stageChange}
+              onStageChange={supportsStagedBatch ? stageChange : undefined}
             />
           )}
           {activeTab === "properties" && (
@@ -444,7 +464,7 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
               token={token}
               factoryHash={factoryHash}
               onTxSubmitted={onTxSubmitted}
-              onStageChange={stageChange}
+              onStageChange={supportsStagedBatch ? stageChange : undefined}
             />
           )}
           {activeTab === "danger" && (
@@ -452,91 +472,93 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
               token={token}
               factoryHash={factoryHash}
               onTxSubmitted={onTxSubmitted}
-              onStageChange={stageChange}
+              onStageChange={supportsStagedBatch ? stageChange : undefined}
             />
           )}
 
-          <section
-            className="rounded-lg p-3 space-y-3"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--forge-border-subtle)" }}
-          >
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold" style={{ color: "var(--forge-text-primary)" }}>
-                STAGED CHANGES ({stagedChanges.length})
-              </h4>
-              <div className="flex gap-2">
-                <button
-                  onClick={applySelected}
-                  disabled={applyingBatch}
-                  className="px-2 py-1 rounded text-xs"
-                  style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
-                >
-                  Apply Selected
-                </button>
-                <button
-                  onClick={applyAll}
-                  disabled={applyingBatch}
-                  className="px-2 py-1 rounded text-xs"
-                  style={{
-                    background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",
-                    color: "var(--forge-text-primary)",
-                  }}
-                >
-                  Apply All
-                </button>
-              </div>
-            </div>
-
-            {stagedChanges.length === 0 ? (
-              <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-                No staged changes yet. Use the Stage buttons in each tab.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {stagedChanges.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between gap-2 rounded px-2 py-1"
-                    style={{ background: "rgba(255,255,255,0.03)" }}
+          {supportsStagedBatch && (
+            <section
+              className="rounded-lg p-3 space-y-3"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--forge-border-subtle)" }}
+            >
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold" style={{ color: "var(--forge-text-primary)" }}>
+                  STAGED CHANGES ({stagedChanges.length})
+                </h4>
+                <div className="flex gap-2">
+                  <button
+                    onClick={applySelected}
+                    disabled={applyingBatch}
+                    className="px-2 py-1 rounded text-xs"
+                    style={{ border: "1px solid var(--forge-border-medium)", color: "var(--forge-text-primary)" }}
                   >
-                    <label
-                      className="flex items-center gap-2 text-xs min-w-0 flex-1"
-                      style={{ color: "var(--forge-text-primary)" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(selectedIds[entry.id])}
-                        onChange={(event) =>
-                          setSelectedIds((prev) => ({ ...prev, [entry.id]: event.target.checked }))
-                        }
-                      />
-                      <span className="truncate" title={entry.label} style={{ maxWidth: "100%" }}>
-                        {entry.label}
-                      </span>
-                    </label>
-                    <button
-                      onClick={() => removeChange(entry.id)}
-                      className="text-xs px-2 py-0.5 rounded flex-shrink-0"
-                      style={{ border: "1px solid var(--forge-border-subtle)", color: "var(--forge-text-muted)" }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
+                    Apply Selected
+                  </button>
+                  <button
+                    onClick={applyAll}
+                    disabled={applyingBatch}
+                    className="px-2 py-1 rounded text-xs"
+                    style={{
+                      background: "linear-gradient(135deg, var(--forge-color-secondary), var(--forge-color-primary))",
+                      color: "var(--forge-text-primary)",
+                    }}
+                  >
+                    Apply All
+                  </button>
+                </div>
               </div>
-            )}
 
-            {batchInfo && (
-              <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
-                {batchInfo}
-              </p>
-            )}
-            {batchError && (
-              <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>
-                {batchError}
-              </p>
-            )}
-          </section>
+              {stagedChanges.length === 0 ? (
+                <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+                  No staged changes yet. Use the Stage buttons in each tab.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {stagedChanges.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center justify-between gap-2 rounded px-2 py-1"
+                      style={{ background: "rgba(255,255,255,0.03)" }}
+                    >
+                      <label
+                        className="flex items-center gap-2 text-xs min-w-0 flex-1"
+                        style={{ color: "var(--forge-text-primary)" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedIds[entry.id])}
+                          onChange={(event) =>
+                            setSelectedIds((prev) => ({ ...prev, [entry.id]: event.target.checked }))
+                          }
+                        />
+                        <span className="truncate" title={entry.label} style={{ maxWidth: "100%" }}>
+                          {entry.label}
+                        </span>
+                      </label>
+                      <button
+                        onClick={() => removeChange(entry.id)}
+                        className="text-xs px-2 py-0.5 rounded flex-shrink-0"
+                        style={{ border: "1px solid var(--forge-border-subtle)", color: "var(--forge-text-muted)" }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {batchInfo && (
+                <p className="text-xs" style={{ color: "var(--forge-text-muted)" }}>
+                  {batchInfo}
+                </p>
+              )}
+              {batchError && (
+                <p role="alert" className="text-xs" style={{ color: "var(--forge-error)" }}>
+                  {batchError}
+                </p>
+              )}
+            </section>
+          )}
         </>
       )}
     </section>

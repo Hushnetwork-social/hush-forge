@@ -61,6 +61,7 @@ vi.mock("@/modules/forge/forge-service", () => ({
 vi.mock("@/modules/forge/neo-dapi-adapter", () => ({
   invokeClaim: vi.fn(),
   invokeClaimAll: vi.fn(),
+  invokeSetAllTokensPlatformFee: vi.fn(),
   invokeSetCreationFee: vi.fn(),
   invokeSetOperationFee: vi.fn(),
   invokeSetPaused: vi.fn(),

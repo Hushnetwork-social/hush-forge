@@ -69,6 +69,38 @@ describe("AdminTabProperties", () => {
     expect(screen.getByText("Creator transfer fee must be between 0 and 0.05 GAS.")).toBeInTheDocument();
   });
 
+  it("shows lean platform fee as platform-controlled and leaves owner economics actionable", () => {
+    render(
+      <AdminTabProperties
+        token={makeToken({
+          tokenProfile: "lean-nep17",
+          platformFeeRate: 800_000,
+          creatorFeeRate: 300_000,
+          authority: {
+            ownerMutationTarget: "token",
+            creatorFeeEditableByOwner: true,
+            burnRateEditableByOwner: true,
+            platformFeeEditableByOwner: false,
+            platformFeeEditableByPlatform: true,
+          },
+        })}
+        factoryHash="0xfactory"
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText("Economics authority")).toHaveTextContent("Token-local contract");
+    expect(screen.getByLabelText("Economics authority")).toHaveTextContent("0.008 GAS");
+    expect(
+      screen.getByText(/Platform fee is TokenFactoryOwner policy/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set Burn Rate" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Set Creator Fee" })).not.toBeDisabled();
+    expect(screen.queryByRole("button", { name: /platform fee/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mode selector")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Current token mode")).toHaveTextContent("community");
+  });
+
   it("non-speculation mode transition calls invokeChangeMode with contract mode names", async () => {
     invokeChangeMode.mockResolvedValue("0xmode");
     const onTxSubmitted = vi.fn();

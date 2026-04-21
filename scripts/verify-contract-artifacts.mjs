@@ -21,6 +21,16 @@ const artifactPairs = [
     published: path.join(publicContractsDir, "LeanTokenTemplate.manifest.json"),
   },
   {
+    label: "LeanTokenEngine.nef",
+    source: path.join(compiledContractsDir, "LeanTokenEngine", "bin", "sc", "LeanTokenEngine.nef"),
+    published: path.join(publicContractsDir, "LeanTokenEngine.nef"),
+  },
+  {
+    label: "LeanTokenEngine.manifest.json",
+    source: path.join(compiledContractsDir, "LeanTokenEngine", "bin", "sc", "LeanTokenEngine.manifest.json"),
+    published: path.join(publicContractsDir, "LeanTokenEngine.manifest.json"),
+  },
+  {
     label: "TokenFactory.nef",
     source: path.join(compiledContractsDir, "TokenFactory", "bin", "sc", "TokenFactory.nef"),
     published: path.join(publicContractsDir, "TokenFactory.nef"),
@@ -71,6 +81,15 @@ function assertMethods(manifest, methods, label) {
   }
 }
 
+function assertEvents(manifest, events, label) {
+  const exposed = new Set((manifest.abi?.events ?? []).map((event) => event.name));
+  for (const event of events) {
+    if (!exposed.has(event)) {
+      throw new Error(`${label} missing ABI event: ${event}`);
+    }
+  }
+}
+
 function assertLeanManifest() {
   const manifest = parseManifest("LeanTokenTemplate.manifest.json");
   const standards = new Set(manifest.supportedstandards ?? []);
@@ -105,6 +124,83 @@ function assertLeanManifest() {
     ],
     "LeanTokenTemplate"
   );
+
+  assertEvents(
+    manifest,
+    [
+      "Transfer",
+      "OwnerChanged",
+      "MetadataUriSet",
+      "Locked",
+      "BurnRateSet",
+      "MaxSupplySet",
+      "CreatorFeeRateSet",
+      "PlatformFeeRateSet",
+      "FactoryAuthorized",
+      "CreatorFeesClaimed",
+    ],
+    "LeanTokenTemplate"
+  );
+}
+
+function assertEngineManifest() {
+  const manifest = parseManifest("LeanTokenEngine.manifest.json");
+  assertMethods(
+    manifest,
+    [
+      "isTokenRegistered",
+      "getTokenIdByFacade",
+      "getFacade",
+      "getToken",
+      "getTokenOwner",
+      "getName",
+      "getSymbol",
+      "getDecimals",
+      "getMintable",
+      "getMaxSupply",
+      "isUpgradeable",
+      "isLocked",
+      "isPausable",
+      "isPaused",
+      "getMetadataUri",
+      "getAuthorizedFactory",
+      "getPlatformFeeRate",
+      "getCreatorFeeRate",
+      "getBurnRate",
+      "getClaimableCreatorFee",
+      "getCreatorClaimant",
+      "balanceOf",
+      "totalSupply",
+      "quoteTransfer",
+      "registerToken",
+      "setOwner",
+      "lock",
+      "setMetadataUri",
+      "setMaxSupply",
+      "setBurnRate",
+      "setCreatorFee",
+      "setPlatformFeeRate",
+      "setPausable",
+      "pause",
+      "unpause",
+      "authorizeFactory",
+      "mint",
+      "mintByFactory",
+      "transfer",
+      "transferByFactory",
+      "addCreatorClaimable",
+      "recordTransferEconomics",
+      "claimCreatorFee",
+      "setEngineOwner",
+    ],
+    "LeanTokenEngine"
+  );
+
+  assertEvents(
+    manifest,
+    ["TokenRegistered", "TokenTransfer", "TokenEconomicsApplied", "TokenOwnerChanged"],
+    "LeanTokenEngine"
+  );
 }
 
 function assertFactoryManifest() {
@@ -116,6 +212,8 @@ function assertFactoryManifest() {
       "isLeanInitialized",
       "getLeanTemplateConfig",
       "setLeanNefAndManifest",
+      "setLeanEngine",
+      "getLeanEngine",
       "upgradeLeanTemplate",
       "getPlatformFeeRate",
       "setAllTokensPlatformFee",
@@ -138,7 +236,8 @@ for (const pair of artifactPairs) {
 }
 
 assertLeanManifest();
+assertEngineManifest();
 assertFactoryManifest();
 assertFullTemplateStillAvailable();
 
-console.log("[ok] Published contract artifacts are current for FEAT-109.");
+console.log("[ok] Published contract artifacts are current for FEAT-111.");

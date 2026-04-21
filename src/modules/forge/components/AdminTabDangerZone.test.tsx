@@ -49,7 +49,7 @@ describe("AdminTabDangerZone", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Confirmation" }), { target: { value: "MYTOK" } });
     fireEvent.click(screen.getByRole("button", { name: /Lock Token Forever/i }));
 
-    await waitFor(() => expect(invokeLockToken).toHaveBeenCalledWith("0xfactory", "0xtoken"));
+    await waitFor(() => expect(invokeLockToken).toHaveBeenCalledWith("0xfactory", "0xtoken", undefined));
     expect(onTxSubmitted).toHaveBeenCalledWith("0xlock", "Locking token...");
   });
 });

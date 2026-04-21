@@ -12,7 +12,7 @@
 
 import { getRuntimeFactoryHash } from "./forge-config";
 import { invokeFunction } from "./neo-rpc-client";
-import type { RpcStackItem, TokenInfo } from "./types";
+import type { RpcStackItem, TokenAuthority, TokenInfo, TokenProfile } from "./types";
 
 // ---------------------------------------------------------------------------
 // Native Neo N3 contracts — these don't expose standard NEP-17 methods via
@@ -70,6 +70,24 @@ function decodeStr(base64: string): string {
   return atob(base64);
 }
 
+function parseStackItemAsString(item: RpcStackItem | undefined): string {
+  if (!item) return "";
+
+  if (item.type === "ByteString" || item.type === "ByteArray") {
+    try {
+      return decodeStr(String(item.value ?? ""));
+    } catch {
+      return "";
+    }
+  }
+
+  if (item.type === "String") {
+    return String(item.value ?? "");
+  }
+
+  return "";
+}
+
 /**
  * Parses a Neo RPC stack item that represents an integer (supply, etc.).
  * Neo VM may return integers as type "Integer" or as type "ByteString"
@@ -103,6 +121,10 @@ function parseStackItemAsBigInt(item: RpcStackItem | undefined): bigint {
   return 0n;
 }
 
+function parseStackItemAsBigIntOrUndefined(item: RpcStackItem | undefined): bigint | undefined {
+  return item ? parseStackItemAsBigInt(item) : undefined;
+}
+
 function parseStackItemAsNumber(item: RpcStackItem | undefined): number | undefined {
   if (!item) return undefined;
 
@@ -131,6 +153,15 @@ function parseStackItemAsNumber(item: RpcStackItem | undefined): number | undefi
   }
 
   return undefined;
+}
+
+function parseStackItemAsBoolean(item: RpcStackItem | undefined): boolean | undefined {
+  if (!item) return undefined;
+
+  if (item.type === "Boolean") return Boolean(item.value);
+
+  const value = parseStackItemAsNumber(item);
+  return value === undefined ? undefined : value !== 0;
 }
 
 function peek(stack: RpcStackItem[]): RpcStackItem | undefined {
@@ -193,35 +224,87 @@ function parseFactoryToken(
 
 type TokenEconomics = Pick<
   TokenInfo,
-  "burnRate" | "creatorFeeRate" | "platformFeeRate" | "claimableCreatorFee"
+  | "burnRate"
+  | "creatorFeeRate"
+  | "platformFeeRate"
+  | "claimableCreatorFee"
+  | "maxSupply"
+  | "locked"
+  | "mintable"
+  | "imageUrl"
 >;
 
+function stackTopFromSettled(
+  settled: PromiseSettledResult<{ stack: RpcStackItem[] } | undefined>
+): RpcStackItem | undefined {
+  return settled.status === "fulfilled"
+    ? peek(settled.value?.stack ?? [])
+    : undefined;
+}
+
 async function readTokenEconomics(contractHash: string): Promise<TokenEconomics> {
-  const [burnSettled, creatorFeeSettled, platformFeeSettled, claimableCreatorFeeSettled] =
+  const [
+    burnSettled,
+    creatorFeeSettled,
+    platformFeeSettled,
+    claimableCreatorFeeSettled,
+    maxSupplySettled,
+    lockedSettled,
+    mintableSettled,
+    metadataUriSettled,
+  ] =
     await Promise.allSettled([
-    invokeFunction(contractHash, "getBurnRate", []),
-    invokeFunction(contractHash, "getCreatorFeeRate", []),
-    invokeFunction(contractHash, "getPlatformFeeRate", []),
-    invokeFunction(contractHash, "getClaimableCreatorFee", []),
-  ]);
+      invokeFunction(contractHash, "getBurnRate", []),
+      invokeFunction(contractHash, "getCreatorFeeRate", []),
+      invokeFunction(contractHash, "getPlatformFeeRate", []),
+      invokeFunction(contractHash, "getClaimableCreatorFee", []),
+      invokeFunction(contractHash, "getMaxSupply", []),
+      invokeFunction(contractHash, "isLocked", []),
+      invokeFunction(contractHash, "getMintable", []),
+      invokeFunction(contractHash, "getMetadataUri", []),
+    ]);
+
+  const claimableCreatorFee = parseStackItemAsBigIntOrUndefined(
+    stackTopFromSettled(claimableCreatorFeeSettled)
+  );
+  const maxSupply = parseStackItemAsBigIntOrUndefined(
+    stackTopFromSettled(maxSupplySettled)
+  );
+  const metadataUri = parseStackItemAsString(stackTopFromSettled(metadataUriSettled));
 
   return {
-    burnRate:
-      burnSettled.status === "fulfilled"
-        ? parseStackItemAsNumber(peek(burnSettled.value.stack))
-        : undefined,
-    creatorFeeRate:
-      creatorFeeSettled.status === "fulfilled"
-        ? parseStackItemAsNumber(peek(creatorFeeSettled.value.stack))
-        : undefined,
-    platformFeeRate:
-      platformFeeSettled.status === "fulfilled"
-        ? parseStackItemAsNumber(peek(platformFeeSettled.value.stack))
-        : undefined,
-    claimableCreatorFee:
-      claimableCreatorFeeSettled.status === "fulfilled"
-        ? parseStackItemAsBigInt(peek(claimableCreatorFeeSettled.value.stack))
-        : undefined,
+    burnRate: parseStackItemAsNumber(stackTopFromSettled(burnSettled)),
+    creatorFeeRate: parseStackItemAsNumber(stackTopFromSettled(creatorFeeSettled)),
+    platformFeeRate: parseStackItemAsNumber(stackTopFromSettled(platformFeeSettled)),
+    claimableCreatorFee,
+    maxSupply: maxSupply === undefined ? undefined : maxSupply.toString(),
+    locked: parseStackItemAsBoolean(stackTopFromSettled(lockedSettled)),
+    mintable: parseStackItemAsBoolean(stackTopFromSettled(mintableSettled)),
+    imageUrl: metadataUri || undefined,
+  };
+}
+
+function normalizeTokenProfile(value: string): TokenProfile | null {
+  return value === "full-nep17" || value === "lean-nep17" ? value : null;
+}
+
+async function readTokenProfile(factoryHash: string, contractHash: string): Promise<TokenProfile | null> {
+  const result = await invokeFunction(factoryHash, "getTokenProfile", [
+    { type: "Hash160", value: contractHash },
+  ]);
+
+  return normalizeTokenProfile(parseStackItemAsString(peek(result.stack)));
+}
+
+function buildTokenAuthority(tokenProfile: TokenProfile | null): TokenAuthority | null {
+  if (tokenProfile === null) return null;
+
+  return {
+    ownerMutationTarget: tokenProfile === "lean-nep17" ? "token" : "factory",
+    creatorFeeEditableByOwner: true,
+    burnRateEditableByOwner: true,
+    platformFeeEditableByOwner: false,
+    platformFeeEditableByPlatform: true,
   };
 }
 
@@ -255,8 +338,9 @@ export async function resolveTokenMetadata(
 
   // Step 1: Factory registry
   let factoryData: Partial<TokenInfo> | null = null;
+  const factoryHash = getRuntimeFactoryHash();
   try {
-    const result = await invokeFunction(getRuntimeFactoryHash(), "getToken", [
+    const result = await invokeFunction(factoryHash, "getToken", [
       { type: "Hash160", value: contractHash },
     ]);
     factoryData = parseFactoryToken(contractHash, result.stack);
@@ -311,11 +395,20 @@ export async function resolveTokenMetadata(
     console.warn("[metadata] direct contract calls failed for", contractHash, ":", String(err));
   }
 
+  let tokenProfile: TokenProfile | null = null;
   if (factoryData) {
     try {
-      tokenEconomics = await readTokenEconomics(contractHash);
+      const [economicsSettled, profileSettled] = await Promise.allSettled([
+        readTokenEconomics(contractHash),
+        readTokenProfile(factoryHash, contractHash),
+      ]);
+
+      tokenEconomics =
+        economicsSettled.status === "fulfilled" ? economicsSettled.value : null;
+      tokenProfile =
+        profileSettled.status === "fulfilled" ? profileSettled.value : null;
     } catch (err) {
-      console.warn("[metadata] token economics calls failed for", contractHash, ":", String(err));
+      console.warn("[metadata] token economics/profile calls failed for", contractHash, ":", String(err));
     }
   }
 
@@ -348,14 +441,17 @@ export async function resolveTokenMetadata(
     mode: factoryData?.mode ?? null,
     tier: factoryData?.tier ?? null,
     createdAt: factoryData?.createdAt ?? null,
-    imageUrl: factoryData?.imageUrl,
+    imageUrl: tokenEconomics?.imageUrl ?? factoryData?.imageUrl,
     burnRate:
       tokenEconomics?.burnRate ??
       (factoryData ? factoryData.burnRate ?? 0 : undefined),
-    maxSupply: factoryData?.maxSupply ?? "0",
-    locked: factoryData?.locked ?? false,
+    maxSupply: tokenEconomics?.maxSupply ?? factoryData?.maxSupply ?? "0",
+    locked: tokenEconomics?.locked ?? factoryData?.locked ?? false,
+    mintable: tokenEconomics?.mintable,
     creatorFeeRate: tokenEconomics?.creatorFeeRate,
     platformFeeRate: tokenEconomics?.platformFeeRate,
     claimableCreatorFee: tokenEconomics?.claimableCreatorFee,
+    tokenProfile,
+    authority: buildTokenAuthority(tokenProfile),
   };
 }

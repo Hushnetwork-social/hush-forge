@@ -129,7 +129,8 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
         factoryHash,
         token.contractHash,
         recipient.trim(),
-        amountRaw
+        amountRaw,
+        token.tokenProfile
       );
       onTxSubmitted(txHash, "Minting tokens...");
     } catch (err) {
@@ -152,7 +153,12 @@ export function AdminTabSupply({ token, factoryHash, onTxSubmitted, onStageChang
     setUpdatingMax(true);
     setMaxError(null);
     try {
-      const txHash = await invokeSetMaxSupply(factoryHash, token.contractHash, maxSupplyParsed);
+      const txHash = await invokeSetMaxSupply(
+        factoryHash,
+        token.contractHash,
+        maxSupplyParsed,
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Updating max supply...");
     } catch (err) {
       setMaxError(toUiErrorMessage(err));

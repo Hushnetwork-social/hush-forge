@@ -103,7 +103,12 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
     setSavingBurn(true);
     setBurnError(null);
     try {
-      const txHash = await invokeSetBurnRate(factoryHash, token.contractHash, burnBps);
+      const txHash = await invokeSetBurnRate(
+        factoryHash,
+        token.contractHash,
+        burnBps,
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Setting burn rate...");
     } catch (err) {
       setBurnError(toUiErrorMessage(err));
@@ -127,7 +132,12 @@ export function AdminTabProperties({ token, factoryHash, onTxSubmitted, onStageC
     setFeeError(null);
     try {
       const datoshi = Math.round(creatorFeeValue * 100_000_000);
-      const txHash = await invokeSetCreatorFee(factoryHash, token.contractHash, datoshi);
+      const txHash = await invokeSetCreatorFee(
+        factoryHash,
+        token.contractHash,
+        datoshi,
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Setting creator fee...");
     } catch (err) {
       setFeeError(toUiErrorMessage(err));

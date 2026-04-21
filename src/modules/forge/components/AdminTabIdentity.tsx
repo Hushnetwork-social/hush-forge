@@ -40,7 +40,12 @@ export function AdminTabIdentity({ token, factoryHash, onTxSubmitted, onStageCha
     setSubmitting(true);
     setError(null);
     try {
-      const txHash = await invokeUpdateMetadata(factoryHash, token.contractHash, imageUrl.trim());
+      const txHash = await invokeUpdateMetadata(
+        factoryHash,
+        token.contractHash,
+        imageUrl.trim(),
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Updating image URL...");
     } catch (err) {
       setError(toUiErrorMessage(err));

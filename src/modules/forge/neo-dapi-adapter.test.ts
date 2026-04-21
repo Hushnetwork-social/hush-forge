@@ -21,6 +21,7 @@ import {
   invokeApplyTokenChanges,
   invokeSetCreationFee,
   invokeSetOperationFee,
+  invokeSetAllTokensPlatformFee,
   invokeSetPaused,
   invokeUpgradeTemplate,
   invokeClaimAll,
@@ -354,6 +355,36 @@ describe("lifecycle invoke functions", () => {
     );
   });
 
+  it("invokeSetBurnRate routes lean profile calls to the token contract", async () => {
+    const instance = await connectMock();
+    await invokeSetBurnRate("0xfactory", "0xlean", 200, "lean-nep17");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string }[];
+      signers: { scopes: string }[];
+    };
+    expect(call.scriptHash).toBe("0xlean");
+    expect(call.operation).toBe("setBurnRate");
+    expect(call.args).toEqual([{ type: "Integer", value: "200" }]);
+    expect(call.signers[0].scopes).toBe("Global");
+  });
+
+  it("invokeSetCreatorFee routes lean profile calls to the token contract", async () => {
+    const instance = await connectMock();
+    await invokeSetCreatorFee("0xfactory", "0xlean", 5_000_000, "lean-nep17");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.scriptHash).toBe("0xlean");
+    expect(call.operation).toBe("setCreatorFee");
+    expect(call.args).toEqual([{ type: "Integer", value: "5000000" }]);
+  });
+
   it("invokeChangeMode serializes speculation params as [String, Integer, String]", async () => {
     const instance = await connectMock();
     await invokeChangeMode("0xfactory", "0xtoken", "speculation", ["GAS", "600", "growth"]);
@@ -530,6 +561,22 @@ describe("lifecycle invoke functions", () => {
     expect(call.args[9]).toEqual({ type: "Boolean", value: false });
   });
 
+  it("invokeApplyTokenChanges rejects lean staged batch routing explicitly", async () => {
+    await expect(
+      invokeApplyTokenChanges("0xfactory", "0xlean", {
+        imageUrl: "",
+        burnRate: 100,
+        creatorFeeRate: -1,
+        newMode: "",
+        modeParams: [],
+        newMaxSupply: -1n,
+        mintTo: null,
+        mintAmount: 0n,
+        lockToken: false,
+      }, "lean-nep17")
+    ).rejects.toThrow(/lean token staged batch apply/i);
+  });
+
   it("all lifecycle functions use Global witness scope", async () => {
     const instance = await connectMock();
     await invokeSetBurnRate("0xfactory", "0xtoken", 100);
@@ -586,6 +633,23 @@ describe("factory governance invoke functions", () => {
     };
     expect(call.operation).toBe("setOperationFee");
     expect(call.args).toEqual([{ type: "Integer", value: "50000000" }]);
+  });
+
+  it("invokeSetAllTokensPlatformFee sends paginated platform fee propagation args", async () => {
+    const instance = await connectMock();
+    await invokeSetAllTokensPlatformFee("0xfactory", 800_000n, 25n, 50n);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.operation).toBe("setAllTokensPlatformFee");
+    expect(call.args).toEqual([
+      { type: "Integer", value: "800000" },
+      { type: "Integer", value: "25" },
+      { type: "Integer", value: "50" },
+    ]);
   });
 
   it("invokeSetPaused sends a boolean flag", async () => {

@@ -32,7 +32,11 @@ export function AdminTabDangerZone({ token, factoryHash, onTxSubmitted, onStageC
     setSubmitting(true);
     setError(null);
     try {
-      const txHash = await invokeLockToken(factoryHash, token.contractHash);
+      const txHash = await invokeLockToken(
+        factoryHash,
+        token.contractHash,
+        token.tokenProfile
+      );
       onTxSubmitted(txHash, "Locking token...");
     } catch (err) {
       setError(toUiErrorMessage(err));

@@ -23,6 +23,19 @@ function haltResult(stack: unknown[]) {
   };
 }
 
+function littleEndianInteger(value: bigint): string {
+  if (value === 0n) return "";
+
+  const bytes: number[] = [];
+  let remaining = value;
+  while (remaining > 0n) {
+    bytes.push(Number(remaining & 0xffn));
+    remaining >>= 8n;
+  }
+
+  return btoa(String.fromCharCode(...bytes));
+}
+
 describe("quoteTokenTransfer", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -93,5 +106,44 @@ describe("quoteTokenTransfer", () => {
         10_000n
       )
     ).rejects.toThrow(/unexpected stack shape/i);
+  });
+
+  it("parses lean quote values returned as little-endian ByteString items", async () => {
+    vi.mocked(invokeFunction).mockResolvedValue(
+      haltResult([
+        {
+          type: "Array",
+          value: [
+            { type: "ByteString", value: littleEndianInteger(10_000n) },
+            { type: "ByteString", value: littleEndianInteger(9_900n) },
+            { type: "ByteString", value: littleEndianInteger(100n) },
+            { type: "ByteString", value: littleEndianInteger(100n) },
+            { type: "ByteString", value: littleEndianInteger(800_000n) },
+            { type: "ByteString", value: littleEndianInteger(200_000n) },
+            { type: "ByteString", value: littleEndianInteger(1_000_000n) },
+            { type: "ByteString", value: littleEndianInteger(0n) },
+            { type: "ByteString", value: littleEndianInteger(0n) },
+          ],
+        },
+      ])
+    );
+
+    const result = await quoteTokenTransfer(
+      "0xlean",
+      "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+      "NhJX9eCbkKtgDrh1S4xMTRaHUGbZ5Be7uU",
+      10_000n
+    );
+
+    expect(result).toMatchObject({
+      grossAmountRaw: 10_000n,
+      recipientAmountRaw: 9_900n,
+      transferBurnAmountRaw: 100n,
+      platformFeeDatoshi: 800_000n,
+      creatorFeeDatoshi: 200_000n,
+      totalGasFeeDatoshi: 1_000_000n,
+      isMint: false,
+      isDirectBurn: false,
+    });
   });
 });

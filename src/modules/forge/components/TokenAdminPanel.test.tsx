@@ -202,7 +202,8 @@ describe("TokenAdminPanel", () => {
         mintTo: null,
         mintAmount: 0n,
         lockToken: false,
-      })
+      }),
+      undefined
     );
     await waitFor(() =>
       expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Applying 2 staged changes...")
@@ -230,7 +231,8 @@ describe("TokenAdminPanel", () => {
         mintTo: "NwRecipient",
         mintAmount: 1000n,
         lockToken: true,
-      })
+      }),
+      undefined
     );
     await waitFor(() =>
       expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Applying 3 staged changes...")

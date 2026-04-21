@@ -206,7 +206,8 @@ export function TokenAdminPanel({ token, factoryHash, onTxSubmitted }: Props) {
       const txHash = await invokeApplyTokenChanges(
         factoryHash,
         token.contractHash,
-        buildBatchParams(entries)
+        buildBatchParams(entries),
+        token.tokenProfile
       );
       onTxSubmitted(txHash, `Applying ${entries.length} staged changes...`);
       const appliedIds = new Set(entries.map((entry) => entry.id));

@@ -280,6 +280,11 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("MaxToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000000000000000000" }]))
       .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xmax");
@@ -295,6 +300,12 @@ describe("resolveTokenMetadata", () => {
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LockToken") }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Boolean", value: true }]))
       .mockResolvedValue(haltResult([{ type: "Integer", value: "0" }]));
 
     const result = await resolveTokenMetadata("0xlck");
@@ -452,7 +463,7 @@ describe("resolveTokenMetadata", () => {
   it("falls back to factory burnRate when the live getter is unavailable", async () => {
     vi.mocked(mockInvokeFunction)
       .mockResolvedValueOnce(
-        factoryArrayResult("FBR", 0xab, "1000", "community", "1", "100", "", "125")
+        factoryArrayResult("FBR", 0xab, "1000", "community", "1", "100", "", "125", "987654321")
       )
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FBR") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FallbackBurn") }]))
@@ -461,13 +472,59 @@ describe("resolveTokenMetadata", () => {
       .mockRejectedValueOnce(new Error("burn getter unavailable"))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "100000" }]))
       .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "200000" }]))
-      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "300000" }]));
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "300000" }]))
+      .mockRejectedValueOnce(new Error("max supply getter unavailable"));
 
     const result = await resolveTokenMetadata("0xfbr");
 
     expect(result.burnRate).toBe(125);
+    expect(result.maxSupply).toBe("987654321");
     expect(result.creatorFeeRate).toBe(100000);
     expect(result.platformFeeRate).toBe(200000);
     expect(result.claimableCreatorFee).toBe(300000n);
+  });
+
+  it("loads lean token profile, live local fields, and authority flags", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("LEN", 0xab, "1000", "community", "1", "100", "https://factory/icon.png", "0", "0", "0")
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LEN") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LeanToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "750" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "125" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "150000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "250000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "123456" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Boolean", value: true }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Boolean", value: true }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("https://live/icon.png") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("lean-nep17") }]));
+
+    const result = await resolveTokenMetadata("0xlean");
+
+    expect(result).toMatchObject({
+      symbol: "LEN",
+      name: "LeanToken",
+      supply: 750n,
+      burnRate: 125,
+      creatorFeeRate: 150000,
+      platformFeeRate: 250000,
+      claimableCreatorFee: 123456n,
+      maxSupply: "1000000",
+      locked: true,
+      mintable: true,
+      imageUrl: "https://live/icon.png",
+      tokenProfile: "lean-nep17",
+      authority: {
+        ownerMutationTarget: "token",
+        creatorFeeEditableByOwner: true,
+        burnRateEditableByOwner: true,
+        platformFeeEditableByOwner: false,
+        platformFeeEditableByPlatform: true,
+      },
+    });
   });
 });

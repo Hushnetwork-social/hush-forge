@@ -53,7 +53,7 @@ describe("AdminTabSupply", () => {
     fireEvent.change(screen.getByLabelText("Mint amount"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: /Mint Tokens/i }));
 
-    await waitFor(() => expect(invokeMintTokens).toHaveBeenCalledWith("0xfactory", "0xtoken", "NwValid", 5n));
+    await waitFor(() => expect(invokeMintTokens).toHaveBeenCalledWith("0xfactory", "0xtoken", "NwValid", 5n, undefined));
     expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Minting tokens...");
   });
 
@@ -71,7 +71,7 @@ describe("AdminTabSupply", () => {
     fireEvent.change(screen.getByLabelText("New max supply"), { target: { value: "2000" } });
     fireEvent.click(screen.getByRole("button", { name: /Set Max Supply/i }));
 
-    await waitFor(() => expect(invokeSetMaxSupply).toHaveBeenCalledWith("0xfactory", "0xtoken", 2000n));
+    await waitFor(() => expect(invokeSetMaxSupply).toHaveBeenCalledWith("0xfactory", "0xtoken", 2000n, undefined));
     expect(onTxSubmitted).toHaveBeenCalledWith("0xtx2", "Updating max supply...");
   });
 
@@ -82,7 +82,7 @@ describe("AdminTabSupply", () => {
     fireEvent.change(screen.getByLabelText("New max supply"), { target: { value: "1.000.000" } });
     fireEvent.click(screen.getByRole("button", { name: /Set Max Supply/i }));
 
-    await waitFor(() => expect(invokeSetMaxSupply).toHaveBeenCalledWith("0xfactory", "0xtoken", 1000000n));
+    await waitFor(() => expect(invokeSetMaxSupply).toHaveBeenCalledWith("0xfactory", "0xtoken", 1000000n, undefined));
   });
 
   it("shows max supply input as whole tokens when token has decimals", () => {

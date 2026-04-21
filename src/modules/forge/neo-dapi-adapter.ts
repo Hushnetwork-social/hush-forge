@@ -14,7 +14,7 @@ import {
 } from "./forge-config";
 import { getTokenBalance } from "./neo-rpc-client";
 import { serializeChangeModeParams } from "./token-mode-params";
-import type { ForgeParams, MarketQuoteAsset, WalletBalance, WalletType } from "./types";
+import type { ForgeParams, MarketQuoteAsset, TokenProfile, WalletBalance, WalletType } from "./types";
 
 const NEO_CONTRACT_HASH = "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5";
 
@@ -388,6 +388,10 @@ async function invokeConnectedOperation(
   }
 }
 
+function isLeanTokenProfile(tokenProfile?: TokenProfile | null): boolean {
+  return tokenProfile === "lean-nep17";
+}
+
 async function invokeConnectedTransfer(
   assetHash: string,
   toHash: string,
@@ -689,8 +693,18 @@ export async function addNEP17Token(
 export async function invokeUpdateMetadata(
   factoryHash: string,
   tokenHash: string,
-  imageUrl: string
+  imageUrl: string,
+  tokenProfile?: TokenProfile | null
 ): Promise<string> {
+  if (isLeanTokenProfile(tokenProfile)) {
+    return invokeConnectedOperation(
+      tokenHash,
+      "setMetadataUri",
+      [{ type: "String", value: imageUrl }],
+      "Update lean token image URL"
+    );
+  }
+
   if (!_dapi) throw new WalletNotConnectedError();
   try {
     const result = await _dapi.invoke({
@@ -718,8 +732,21 @@ export async function invokeMintTokens(
   factoryHash: string,
   tokenHash: string,
   to: string,
-  amount: bigint
+  amount: bigint,
+  tokenProfile?: TokenProfile | null
 ): Promise<string> {
+  if (isLeanTokenProfile(tokenProfile)) {
+    return invokeConnectedOperation(
+      tokenHash,
+      "mint",
+      [
+        { type: "Hash160", value: addressToScriptHash(to) },
+        { type: "Integer", value: amount.toString() },
+      ],
+      `Mint ${amount} lean token units`
+    );
+  }
+
   if (!_dapi) throw new WalletNotConnectedError();
   try {
     const result = await _dapi.invoke({
@@ -748,8 +775,18 @@ export async function invokeMintTokens(
 export async function invokeSetBurnRate(
   factoryHash: string,
   tokenHash: string,
-  basisPoints: number
+  basisPoints: number,
+  tokenProfile?: TokenProfile | null
 ): Promise<string> {
+  if (isLeanTokenProfile(tokenProfile)) {
+    return invokeConnectedOperation(
+      tokenHash,
+      "setBurnRate",
+      [{ type: "Integer", value: basisPoints.toString() }],
+      `Set lean token burn rate to ${basisPoints} bps`
+    );
+  }
+
   if (!_dapi) throw new WalletNotConnectedError();
   try {
     const result = await _dapi.invoke({
@@ -777,8 +814,18 @@ export async function invokeSetBurnRate(
 export async function invokeSetMaxSupply(
   factoryHash: string,
   tokenHash: string,
-  newMax: bigint
+  newMax: bigint,
+  tokenProfile?: TokenProfile | null
 ): Promise<string> {
+  if (isLeanTokenProfile(tokenProfile)) {
+    return invokeConnectedOperation(
+      tokenHash,
+      "setMaxSupply",
+      [{ type: "Integer", value: newMax.toString() }],
+      `Set lean token max supply to ${newMax}`
+    );
+  }
+
   if (!_dapi) throw new WalletNotConnectedError();
   try {
     const result = await _dapi.invoke({
@@ -806,8 +853,18 @@ export async function invokeSetMaxSupply(
 export async function invokeSetCreatorFee(
   factoryHash: string,
   tokenHash: string,
-  datoshi: number
+  datoshi: number,
+  tokenProfile?: TokenProfile | null
 ): Promise<string> {
+  if (isLeanTokenProfile(tokenProfile)) {
+    return invokeConnectedOperation(
+      tokenHash,
+      "setCreatorFee",
+      [{ type: "Integer", value: datoshi.toString() }],
+      `Set lean token creator fee to ${datoshi} datoshi`
+    );
+  }
+
   if (!_dapi) throw new WalletNotConnectedError();
   try {
     const result = await _dapi.invoke({
@@ -869,8 +926,18 @@ export async function invokeChangeMode(
  */
 export async function invokeLockToken(
   factoryHash: string,
-  tokenHash: string
+  tokenHash: string,
+  tokenProfile?: TokenProfile | null
 ): Promise<string> {
+  if (isLeanTokenProfile(tokenProfile)) {
+    return invokeConnectedOperation(
+      tokenHash,
+      "lock",
+      [],
+      "Lock lean token permanently"
+    );
+  }
+
   if (!_dapi) throw new WalletNotConnectedError();
   try {
     const result = await _dapi.invoke({
@@ -915,8 +982,15 @@ export async function invokeApplyTokenChanges(
     mintTo: string | null;
     mintAmount: bigint;
     lockToken: boolean;
-  }
+  },
+  tokenProfile?: TokenProfile | null
 ): Promise<string> {
+  if (isLeanTokenProfile(tokenProfile)) {
+    throw new Error(
+      "Lean token staged batch apply is not available; submit token-local actions individually."
+    );
+  }
+
   if (!_dapi) throw new WalletNotConnectedError();
   try {
     const mintToValue = params.mintTo
@@ -1073,6 +1147,24 @@ export async function invokeSetOperationFee(
     "setOperationFee",
     [{ type: "Integer", value: feeInDatoshi.toString() }],
     `Set operation fee to ${feeInDatoshi} datoshi`
+  );
+}
+
+export async function invokeSetAllTokensPlatformFee(
+  factoryHash: string,
+  feeInDatoshi: bigint,
+  offset: bigint,
+  batchSize: bigint
+): Promise<string> {
+  return invokeConnectedOperation(
+    factoryHash,
+    "setAllTokensPlatformFee",
+    [
+      { type: "Integer", value: feeInDatoshi.toString() },
+      { type: "Integer", value: offset.toString() },
+      { type: "Integer", value: batchSize.toString() },
+    ],
+    `Set platform fee to ${feeInDatoshi} datoshi for token batch`
   );
 }
 

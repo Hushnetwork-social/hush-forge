@@ -59,7 +59,7 @@ describe("AdminTabProperties", () => {
     fireEvent.change(screen.getByLabelText("Burn rate input"), { target: { value: "3.00" } });
     fireEvent.click(screen.getByRole("button", { name: /Set Burn Rate/i }));
 
-    await waitFor(() => expect(invokeSetBurnRate).toHaveBeenCalledWith("0xfactory", "0xtoken", 300));
+    await waitFor(() => expect(invokeSetBurnRate).toHaveBeenCalledWith("0xfactory", "0xtoken", 300, undefined));
     expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Setting burn rate...");
   });
 

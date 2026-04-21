@@ -56,7 +56,7 @@ describe("AdminTabIdentity", () => {
     fireEvent.change(screen.getByLabelText("Image URL"), { target: { value: "https://new.png" } });
     fireEvent.click(screen.getByRole("button", { name: /Update Image URL/i }));
 
-    await waitFor(() => expect(invokeUpdateMetadata).toHaveBeenCalledWith("0xfactory", "0xtoken", "https://new.png"));
+    await waitFor(() => expect(invokeUpdateMetadata).toHaveBeenCalledWith("0xfactory", "0xtoken", "https://new.png", undefined));
     expect(onTxSubmitted).toHaveBeenCalledWith("0xtx", "Updating image URL...");
   });
 });

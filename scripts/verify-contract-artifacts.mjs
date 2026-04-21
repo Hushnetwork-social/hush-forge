@@ -80,7 +80,29 @@ function assertLeanManifest() {
 
   assertMethods(
     manifest,
-    ["symbol", "decimals", "totalSupply", "balanceOf", "transfer", "getOwner", "mint", "lock"],
+    [
+      "symbol",
+      "decimals",
+      "totalSupply",
+      "balanceOf",
+      "transfer",
+      "quoteTransfer",
+      "getOwner",
+      "mint",
+      "lock",
+      "getMaxSupply",
+      "setMaxSupply",
+      "getBurnRate",
+      "setBurnRate",
+      "getCreatorFeeRate",
+      "setCreatorFee",
+      "getPlatformFeeRate",
+      "setPlatformFeeRate",
+      "getClaimableCreatorFee",
+      "claimCreatorFee",
+      "claimCreatorFees",
+      "setMetadataUri",
+    ],
     "LeanTokenTemplate"
   );
 }
@@ -95,6 +117,8 @@ function assertFactoryManifest() {
       "getLeanTemplateConfig",
       "setLeanNefAndManifest",
       "upgradeLeanTemplate",
+      "getPlatformFeeRate",
+      "setAllTokensPlatformFee",
     ],
     "TokenFactory"
   );
@@ -117,4 +141,4 @@ assertLeanManifest();
 assertFactoryManifest();
 assertFullTemplateStillAvailable();
 
-console.log("[ok] Published contract artifacts are current for FEAT-108.");
+console.log("[ok] Published contract artifacts are current for FEAT-109.");

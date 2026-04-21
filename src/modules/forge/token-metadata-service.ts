@@ -164,6 +164,19 @@ function parseStackItemAsBoolean(item: RpcStackItem | undefined): boolean | unde
   return value === undefined ? undefined : value !== 0;
 }
 
+function parseStackItemAsHash(item: RpcStackItem | undefined): string | null {
+  if (!item || (item.type !== "ByteString" && item.type !== "ByteArray")) {
+    return null;
+  }
+
+  try {
+    const hash = decodeHash(String(item.value ?? ""));
+    return /^0x0{40}$/i.test(hash) ? null : hash;
+  } catch {
+    return null;
+  }
+}
+
 function peek(stack: RpcStackItem[]): RpcStackItem | undefined {
   return stack[0];
 }
@@ -216,6 +229,7 @@ function parseFactoryToken(
       burnRate: v[7] !== undefined ? Number(v[7].value) || 0 : 0,
       maxSupply: v[8] !== undefined ? String(v[8].value ?? "0") : "0",
       locked: v[9] !== undefined ? Number(v[9].value) !== 0 : false,
+      leanEngineHash: parseStackItemAsHash(v[10]),
     };
   } catch {
     return null;
@@ -428,6 +442,8 @@ export async function resolveTokenMetadata(
   }
 
   const symbol = factoryData?.symbol ?? contractData?.symbol ?? "";
+  const leanRouting = tokenProfile === "lean-nep17";
+
   return {
     contractHash,
     symbol,
@@ -452,6 +468,8 @@ export async function resolveTokenMetadata(
     platformFeeRate: tokenEconomics?.platformFeeRate,
     claimableCreatorFee: tokenEconomics?.claimableCreatorFee,
     tokenProfile,
+    tokenId: leanRouting ? contractHash : null,
+    leanEngineHash: leanRouting ? factoryData?.leanEngineHash ?? null : null,
     authority: buildTokenAuthority(tokenProfile),
   };
 }

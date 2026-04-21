@@ -1,5 +1,10 @@
 import { addressToHash160, invokeFunction } from "./neo-rpc-client";
-import type { RpcStackItem, TransferQuote } from "./types";
+import { resolveTokenRuntimeRoute } from "./token-routing";
+import type { RpcStackItem, TokenInfo, TransferQuote } from "./types";
+
+type TransferQuoteTokenInput =
+  | string
+  | Pick<TokenInfo, "contractHash" | "tokenProfile" | "tokenId" | "leanEngineHash">;
 
 function parseStackItemAsBigInt(item: RpcStackItem | undefined): bigint {
   if (!item) return 0n;
@@ -40,11 +45,16 @@ function readArrayItem(items: RpcStackItem[], index: number): RpcStackItem | und
 }
 
 export async function quoteTokenTransfer(
-  tokenHash: string,
+  token: TransferQuoteTokenInput,
   fromAddress: string,
   toAddress: string,
   amountRaw: bigint
 ): Promise<TransferQuote> {
+  const tokenHash =
+    typeof token === "string"
+      ? token
+      : resolveTokenRuntimeRoute(token).transferQuoteScriptHash;
+
   const result = await invokeFunction(tokenHash, "quoteTransfer", [
     { type: "Hash160", value: addressToHash160(fromAddress) },
     { type: "Hash160", value: addressToHash160(toAddress) },

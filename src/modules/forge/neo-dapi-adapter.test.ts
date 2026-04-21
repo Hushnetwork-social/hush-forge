@@ -385,6 +385,57 @@ describe("lifecycle invoke functions", () => {
     expect(call.args).toEqual([{ type: "Integer", value: "5000000" }]);
   });
 
+  it("invokeUpdateMetadata routes lean profile calls to the token contract", async () => {
+    const instance = await connectMock();
+    await invokeUpdateMetadata("0xfactory", "0xlean", "https://img.png", "lean-nep17");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.scriptHash).toBe("0xlean");
+    expect(call.operation).toBe("setMetadataUri");
+    expect(call.args).toEqual([{ type: "String", value: "https://img.png" }]);
+  });
+
+  it("invokeMintTokens routes lean profile calls to the token contract", async () => {
+    const instance = await connectMock();
+    await invokeMintTokens(
+      "0xfactory",
+      "0xlean",
+      "0x1111111111111111111111111111111111111111",
+      500n,
+      "lean-nep17"
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.scriptHash).toBe("0xlean");
+    expect(call.operation).toBe("mint");
+    expect(call.args).toEqual([
+      { type: "Hash160", value: "0x1111111111111111111111111111111111111111" },
+      { type: "Integer", value: "500" },
+    ]);
+  });
+
+  it("invokeSetMaxSupply routes lean profile calls to the token contract", async () => {
+    const instance = await connectMock();
+    await invokeSetMaxSupply("0xfactory", "0xlean", 1_000_000n, "lean-nep17");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: { type: string; value: string }[];
+    };
+    expect(call.scriptHash).toBe("0xlean");
+    expect(call.operation).toBe("setMaxSupply");
+    expect(call.args).toEqual([{ type: "Integer", value: "1000000" }]);
+  });
+
   it("invokeChangeMode serializes speculation params as [String, Integer, String]", async () => {
     const instance = await connectMock();
     await invokeChangeMode("0xfactory", "0xtoken", "speculation", ["GAS", "600", "growth"]);
@@ -406,6 +457,20 @@ describe("lifecycle invoke functions", () => {
     expect(instance.invoke).toHaveBeenCalledWith(
       expect.objectContaining({ operation: "lockToken" })
     );
+  });
+
+  it("invokeLockToken routes lean profile calls to the token contract", async () => {
+    const instance = await connectMock();
+    await invokeLockToken("0xfactory", "0xlean", "lean-nep17");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const call = (instance.invoke.mock.calls[0] as any[])[0] as {
+      scriptHash: string;
+      operation: string;
+      args: unknown[];
+    };
+    expect(call.scriptHash).toBe("0xlean");
+    expect(call.operation).toBe("lock");
+    expect(call.args).toEqual([]);
   });
 
   it("invokeBurn calls the token contract with burn and Global scope", async () => {

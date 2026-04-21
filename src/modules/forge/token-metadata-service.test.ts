@@ -59,7 +59,8 @@ function factoryArrayResult(
   imageUrl = "",
   burnRate?: string,
   maxSupply?: string,
-  locked?: string
+  locked?: string,
+  leanEngineByte?: number
 ): HaltResult {
   const items: { type: string; value: unknown }[] = [
     { type: "ByteString", value: b64(symbol) },
@@ -73,6 +74,9 @@ function factoryArrayResult(
   if (burnRate !== undefined) items.push({ type: "Integer", value: burnRate });
   if (maxSupply !== undefined) items.push({ type: "Integer", value: maxSupply });
   if (locked !== undefined) items.push({ type: "Integer", value: locked });
+  if (leanEngineByte !== undefined) {
+    items.push({ type: "ByteString", value: b64Hash(leanEngineByte) });
+  }
   return haltResult([{ type: "Array", value: items }]);
 }
 
@@ -487,7 +491,7 @@ describe("resolveTokenMetadata", () => {
   it("loads lean token profile, live local fields, and authority flags", async () => {
     vi.mocked(mockInvokeFunction)
       .mockResolvedValueOnce(
-        factoryArrayResult("LEN", 0xab, "1000", "community", "1", "100", "https://factory/icon.png", "0", "0", "0")
+        factoryArrayResult("LEN", 0xab, "1000", "community", "1", "100", "https://factory/icon.png", "0", "0", "0", 0xcd)
       )
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LEN") }]))
       .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("LeanToken") }]))
@@ -518,6 +522,8 @@ describe("resolveTokenMetadata", () => {
       mintable: true,
       imageUrl: "https://live/icon.png",
       tokenProfile: "lean-nep17",
+      tokenId: "0xlean",
+      leanEngineHash: expectedHash(0xcd),
       authority: {
         ownerMutationTarget: "token",
         creatorFeeEditableByOwner: true,
@@ -526,5 +532,31 @@ describe("resolveTokenMetadata", () => {
         platformFeeEditableByPlatform: true,
       },
     });
+  });
+
+  it("keeps full token routing metadata null even when registry carries a zero engine hash", async () => {
+    vi.mocked(mockInvokeFunction)
+      .mockResolvedValueOnce(
+        factoryArrayResult("FUL", 0xab, "1000", "community", "1", "100", "", "0", "0", "0", 0x00)
+      )
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FUL") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("FullToken") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "8" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "1000" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Integer", value: "0" }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Boolean", value: false }]))
+      .mockResolvedValueOnce(haltResult([{ type: "Boolean", value: true }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("") }]))
+      .mockResolvedValueOnce(haltResult([{ type: "ByteString", value: b64("full-nep17") }]));
+
+    const result = await resolveTokenMetadata("0xfull");
+
+    expect(result.tokenProfile).toBe("full-nep17");
+    expect(result.tokenId).toBeNull();
+    expect(result.leanEngineHash).toBeNull();
   });
 });

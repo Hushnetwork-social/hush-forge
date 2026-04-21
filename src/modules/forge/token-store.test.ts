@@ -204,6 +204,33 @@ describe("TokenStore.addToken", () => {
     const displayTokens = selectDisplayTokens(useTokenStore.getState());
     expect(displayTokens.map((t) => t.symbol)).toEqual(["ALPHA", "GAMMA", "OTHER"]);
   });
+
+  it("keeps two LEAN tokens separate when they share the same engine", () => {
+    const TOKEN_A = {
+      ...makeToken("0xlean-a", "LEANA"),
+      tokenProfile: "lean-nep17" as const,
+      tokenId: "0xlean-a",
+      leanEngineHash: "0xshared-engine",
+    };
+    const TOKEN_B = {
+      ...makeToken("0xlean-b", "LEANB"),
+      tokenProfile: "lean-nep17" as const,
+      tokenId: "0xlean-b",
+      leanEngineHash: "0xshared-engine",
+    };
+
+    useTokenStore.setState({ tokens: [TOKEN_A] });
+    useTokenStore.getState().addToken(TOKEN_B);
+
+    const state = useTokenStore.getState();
+    expect(state.tokens).toHaveLength(2);
+    expect(state.tokens.map((token) => token.contractHash)).toEqual([
+      "0xlean-b",
+      "0xlean-a",
+    ]);
+    expect(new Set(state.tokens.map((token) => token.tokenId)).size).toBe(2);
+    expect(state.tokens.every((token) => token.leanEngineHash === "0xshared-engine")).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

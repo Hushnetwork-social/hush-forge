@@ -5,8 +5,9 @@ import {
   getBlockCount,
   invokeScript,
 } from "./neo-rpc-client";
+import { resolveTokenOwnerMutationRoute } from "./token-routing";
 import { serializeChangeModeParams } from "./token-mode-params";
-import type { ContractChangeCostQuote } from "./types";
+import type { ContractChangeCostQuote, TokenInfo } from "./types";
 
 const DUMMY_FEE_ESTIMATION_PUBLIC_KEY =
   "02607a38b8010a8f401c25dd01df1b74af1827dd16b821fc07451f2ef7f02da60f";
@@ -50,18 +51,74 @@ function buildChangeModeScript(
   return builder.build();
 }
 
-export async function quoteChangeModeCost(
-  address: string,
-  factoryHash: string,
-  tokenHash: string,
-  newMode: string,
-  modeParams: unknown[],
-  operationFeeDatoshi: bigint
-): Promise<ContractChangeCostQuote> {
-  const fromAccount = addressToHash160(address);
-  const script = buildChangeModeScript(factoryHash, tokenHash, newMode, modeParams);
-  const signer = { account: fromAccount, scopes: "Global" as const };
+export type TokenOwnerMutationOperation =
+  | "setMetadataUri"
+  | "mint"
+  | "setBurnRate"
+  | "setMaxSupply"
+  | "setCreatorFee"
+  | "lock";
 
+export type TokenOwnerMutationArg =
+  | { type: "Hash160"; value: string }
+  | { type: "Integer"; value: string | number | bigint }
+  | { type: "String"; value: string };
+
+export interface ResolvedTokenOwnerMutationCall {
+  scriptHash: string;
+  operation: string;
+  args: TokenOwnerMutationArg[];
+  ownerMutationTarget: "factory" | "token";
+  tokenHashArgRequired: boolean;
+  tokenId: string | null;
+  leanEngineHash: string | null;
+}
+
+const FULL_OWNER_MUTATION_OPERATIONS: Record<TokenOwnerMutationOperation, string> = {
+  setMetadataUri: "updateTokenMetadata",
+  mint: "mintTokens",
+  setBurnRate: "setTokenBurnRate",
+  setMaxSupply: "setTokenMaxSupply",
+  setCreatorFee: "setCreatorFee",
+  lock: "lockToken",
+};
+
+function toContractParam(arg: TokenOwnerMutationArg) {
+  if (arg.type === "Hash160") {
+    return Neon.sc.ContractParam.hash160(arg.value);
+  }
+
+  if (arg.type === "Integer") {
+    return Neon.sc.ContractParam.integer(String(arg.value));
+  }
+
+  return Neon.sc.ContractParam.string(arg.value);
+}
+
+function buildContractCallScript(
+  scriptHash: string,
+  operation: string,
+  args: TokenOwnerMutationArg[]
+): string {
+  const builder = new Neon.sc.ScriptBuilder();
+  builder.emitContractCall({
+    scriptHash,
+    operation,
+    callFlags: Neon.sc.CallFlags.All,
+    args: args.map(toContractParam),
+  });
+  return builder.build();
+}
+
+async function estimateChainCost(
+  script: string,
+  fromAccount: string
+): Promise<{
+  estimatedSystemFeeDatoshi: bigint;
+  estimatedNetworkFeeDatoshi: bigint;
+  estimatedChainFeeDatoshi: bigint;
+}> {
+  const signer = { account: fromAccount, scopes: "Global" as const };
   const [dryRun, currentHeight] = await Promise.all([
     invokeScript(script, [signer]),
     getBlockCount(),
@@ -99,6 +156,80 @@ export async function quoteChangeModeCost(
   const estimatedNetworkFeeDatoshi = await calculateNetworkFee(tx);
   const estimatedChainFeeDatoshi =
     estimatedSystemFeeDatoshi + estimatedNetworkFeeDatoshi;
+
+  return {
+    estimatedSystemFeeDatoshi,
+    estimatedNetworkFeeDatoshi,
+    estimatedChainFeeDatoshi,
+  };
+}
+
+export function resolveTokenOwnerMutationCall(
+  factoryHash: string,
+  token: Pick<TokenInfo, "contractHash" | "tokenProfile" | "tokenId" | "leanEngineHash">,
+  operation: TokenOwnerMutationOperation,
+  args: TokenOwnerMutationArg[] = []
+): ResolvedTokenOwnerMutationCall {
+  const route = resolveTokenOwnerMutationRoute(token, factoryHash);
+  const fullOperation = FULL_OWNER_MUTATION_OPERATIONS[operation];
+
+  if (route.ownerMutationTarget === "token") {
+    return {
+      ...route,
+      operation,
+      args,
+    };
+  }
+
+  return {
+    ...route,
+    operation: fullOperation,
+    args: [{ type: "Hash160", value: token.contractHash }, ...args],
+  };
+}
+
+export async function quoteTokenOwnerMutationCost(
+  address: string,
+  factoryHash: string,
+  token: Pick<TokenInfo, "contractHash" | "tokenProfile" | "tokenId" | "leanEngineHash">,
+  operation: TokenOwnerMutationOperation,
+  args: TokenOwnerMutationArg[],
+  operationFeeDatoshi: bigint
+): Promise<ContractChangeCostQuote> {
+  const fromAccount = addressToHash160(address);
+  const call = resolveTokenOwnerMutationCall(factoryHash, token, operation, args);
+  const script = buildContractCallScript(call.scriptHash, call.operation, call.args);
+  const {
+    estimatedSystemFeeDatoshi,
+    estimatedNetworkFeeDatoshi,
+    estimatedChainFeeDatoshi,
+  } = await estimateChainCost(script, fromAccount);
+
+  return {
+    operationFeeDatoshi,
+    estimatedSystemFeeDatoshi,
+    estimatedNetworkFeeDatoshi,
+    estimatedChainFeeDatoshi,
+    estimatedTotalWalletOutflowDatoshi:
+      operationFeeDatoshi + estimatedChainFeeDatoshi,
+  };
+}
+
+export async function quoteChangeModeCost(
+  address: string,
+  factoryHash: string,
+  tokenHash: string,
+  newMode: string,
+  modeParams: unknown[],
+  operationFeeDatoshi: bigint
+): Promise<ContractChangeCostQuote> {
+  const fromAccount = addressToHash160(address);
+  const script = buildChangeModeScript(factoryHash, tokenHash, newMode, modeParams);
+  const {
+    estimatedSystemFeeDatoshi,
+    estimatedNetworkFeeDatoshi,
+    estimatedChainFeeDatoshi,
+  } = await estimateChainCost(script, fromAccount);
 
   return {
     operationFeeDatoshi,

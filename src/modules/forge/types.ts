@@ -39,6 +39,8 @@ export interface TokenInfo {
   platformFeeRate?: number; // per-transfer GAS fee in datoshi
   claimableCreatorFee?: bigint; // creator-fee GAS currently accrued in the token contract
   tokenProfile?: TokenProfile | null; // factory deployment profile, null for external/native tokens
+  tokenId?: string | null; // LEAN engine token id; facade hash for FEAT-111 LEAN tokens
+  leanEngineHash?: string | null; // shared LEAN engine backing this facade token
   authority?: TokenAuthority | null; // owner/platform authority facts used by admin surfaces
 }
 

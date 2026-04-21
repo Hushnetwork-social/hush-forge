@@ -146,4 +146,43 @@ describe("quoteTokenTransfer", () => {
       isDirectBurn: false,
     });
   });
+
+  it("quotes LEAN transfers against the wallet-visible facade hash", async () => {
+    vi.mocked(invokeFunction).mockResolvedValue(
+      haltResult([
+        {
+          type: "Array",
+          value: [
+            { type: "Integer", value: "10000" },
+            { type: "Integer", value: "10000" },
+            { type: "Integer", value: "0" },
+            { type: "Integer", value: "0" },
+            { type: "Integer", value: "0" },
+            { type: "Integer", value: "0" },
+            { type: "Integer", value: "0" },
+            { type: "Integer", value: "0" },
+            { type: "Integer", value: "0" },
+          ],
+        },
+      ])
+    );
+
+    await quoteTokenTransfer(
+      {
+        contractHash: "0xleanfacade",
+        tokenProfile: "lean-nep17",
+        tokenId: "0xleanfacade",
+        leanEngineHash: "0xsharedengine",
+      },
+      "NV1Q1dTdvzPbThPbSFz7zudTmsmgnCwX6c",
+      "NhJX9eCbkKtgDrh1S4xMTRaHUGbZ5Be7uU",
+      10_000n
+    );
+
+    expect(invokeFunction).toHaveBeenCalledWith(
+      "0xleanfacade",
+      "quoteTransfer",
+      expect.any(Array)
+    );
+  });
 });

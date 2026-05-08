@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useWalletStore } from "@/modules/forge/wallet-store";
 
@@ -56,9 +57,18 @@ export function ForgeHeader({
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-6 gap-y-3">
           <Link
             href={homeHref}
-            className="shrink-0 text-xl font-bold tracking-wide"
+            className="flex shrink-0 items-center gap-2 text-xl font-bold tracking-wide"
             style={{ color: "var(--forge-color-primary)" }}
           >
+            <Image
+              src="/forge-logo.png?v=transparent"
+              alt=""
+              aria-hidden
+              width={32}
+              height={32}
+              unoptimized
+              className="h-8 w-8 object-contain"
+            />
             Forge
           </Link>
 

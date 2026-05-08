@@ -39,6 +39,12 @@ export function MarketsPageClient({ initialSearch }: Props) {
     setSearchValue(initialSearch);
   }, [initialSearch]);
 
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      setShowConnectModal(false);
+    }
+  }, [connectionStatus]);
+
   function handleSearchChange(nextValue: string) {
     setSearchValue(nextValue);
     const trimmed = nextValue.trim();
@@ -120,7 +126,9 @@ export function MarketsPageClient({ initialSearch }: Props) {
           error={errorMessage}
           onConnect={(walletType) => {
             void connect(walletType);
-            setShowConnectModal(false);
+            if (walletType !== "WalletConnect") {
+              setShowConnectModal(false);
+            }
           }}
           onClose={() => setShowConnectModal(false)}
         />

@@ -48,6 +48,38 @@ export const PRIVATE_NET_RPC_URL =
   process.env.NEXT_PUBLIC_NEO_RPC_URL ?? "";
 
 /**
+ * Feature flag for the FEAT-122 WalletConnect/AppKit PoC connector surface.
+ * The runtime still requires a Reown project id and relay URL to create a
+ * WalletConnect session.
+ */
+export function isWalletConnectAppKitEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_FORGE_WALLETCONNECT_APPKIT_ENABLED === "true";
+}
+
+/** Reown project id used by the AppKit runtime. */
+export const REOWN_PROJECT_ID =
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ?? "";
+
+/** WalletConnect relay URL. Defaults to Reown's public relay. */
+export const REOWN_RELAY_URL =
+  process.env.NEXT_PUBLIC_REOWN_RELAY_URL ?? "wss://relay.walletconnect.com";
+
+/**
+ * Optional local harness endpoint for demos/E2E. When set, FORGE posts the
+ * WalletConnect display URI to this URL so the local harness can pair.
+ */
+export const WALLETCONNECT_HARNESS_PAIR_URL =
+  process.env.NEXT_PUBLIC_FORGE_WALLETCONNECT_HARNESS_PAIR_URL ?? "";
+
+/** Expected Neo private-network magic for local WalletConnect sanity checks. */
+export const EXPECTED_NEO_PRIVATE_NETWORK_MAGIC = Number(
+  process.env.NEXT_PUBLIC_NEO_PRIVATE_NETWORK_MAGIC ?? "5195086"
+);
+
+export const WALLETCONNECT_APPKIT_BLOCKED_REASON =
+  "WalletConnect/AppKit requires NEXT_PUBLIC_REOWN_PROJECT_ID before it can create a session.";
+
+/**
  * BondingCurveRouter contract hash (0x-prefixed, 42 chars).
  * Required for FEAT-075 market reads and trading pages.
  */

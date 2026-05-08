@@ -252,6 +252,17 @@ export interface Nep17BalancesResult {
   balance: Nep17BalanceEntry[];
 }
 
+export interface ContractState {
+  id: number;
+  hash: string;
+  manifest?: {
+    name?: string;
+    abi?: {
+      methods?: Array<{ name?: string }>;
+    };
+  };
+}
+
 async function rpcCall<T>(
   method: string,
   params: unknown[],
@@ -314,11 +325,16 @@ export async function getBlockCount(): Promise<number> {
  */
 export async function isContractDeployed(contractHash: string): Promise<boolean> {
   if (!contractHash || contractHash === "0x") return false;
+  return (await getContractState(contractHash)) !== null;
+}
+
+export async function getContractState(
+  contractHashOrId: string | number
+): Promise<ContractState | null> {
   try {
-    await rpcCall<unknown>("getcontractstate", [contractHash]);
-    return true;
+    return await rpcCall<ContractState>("getcontractstate", [contractHashOrId]);
   } catch {
-    return false;
+    return null;
   }
 }
 

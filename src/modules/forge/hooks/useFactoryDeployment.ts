@@ -25,9 +25,11 @@ import {
   invokeFunction,
   isContractDeployed,
   addressToHash160,
+  getContractState,
 } from "../neo-rpc-client";
 import { computeContractHash } from "../utils/neo-hash";
 import type { ApplicationLog } from "../types";
+import type { ContractState } from "../neo-rpc-client";
 
 export type FactoryDeployStatus =
   | "idle"
@@ -101,20 +103,35 @@ export function useFactoryDeployment(
         return;
       }
 
-      const hash = getRuntimeFactoryHash();
+      let hash = getRuntimeFactoryHash();
       if (!hash) {
-        // No hash configured and nothing in localStorage â€” factory has never been deployed.
-        setStatus("not-deployed");
-        return;
+        const recoveredHash = await discoverTokenFactoryHash();
+        if (cancelled) return;
+        if (!recoveredHash) {
+          // No hash configured and nothing discoverable on-chain.
+          setStatus("not-deployed");
+          return;
+        }
+        saveFactoryHash(recoveredHash);
+        setFactoryHash(recoveredHash);
+        hash = recoveredHash;
       }
 
       setStatus("checking");
-      const deployed = await isContractDeployed(hash);
+      let deployed = await isContractDeployed(hash);
       if (cancelled) return;
 
       if (!deployed) {
-        setStatus("not-deployed");
-        return;
+        const recoveredHash = await discoverTokenFactoryHash();
+        if (cancelled) return;
+        if (!recoveredHash) {
+          setStatus("not-deployed");
+          return;
+        }
+        saveFactoryHash(recoveredHash);
+        setFactoryHash(recoveredHash);
+        hash = recoveredHash;
+        deployed = true;
       }
 
       // Contract exists â€” check if initialized (NEF stored in factory)
@@ -195,7 +212,9 @@ export function useFactoryDeployment(
         if (isContractAlreadyExistsError(deployErr)) {
           // Contract already at this address+NEF combination (e.g. after app restart on an
           // existing chain). The error message from NeoLine contains the actual hash.
-          deployedHash = extractHashFromAlreadyExistsError(deployErr);
+          deployedHash =
+            await resolveAlreadyDeployedFactoryHash(deployErr) ??
+            await discoverTokenFactoryHash();
           console.log(
             "[factory] contract already exists at:",
             deployedHash ?? "(unknown hash)",
@@ -316,6 +335,47 @@ async function waitUntilContractDeployed(hash: string, timeoutMs: number): Promi
   );
 }
 
+const TOKEN_FACTORY_DISCOVERY_MAX_CONTRACT_ID = 50;
+
+async function discoverTokenFactoryHash(): Promise<string | null> {
+  for (let contractId = 1; contractId <= TOKEN_FACTORY_DISCOVERY_MAX_CONTRACT_ID; contractId += 1) {
+    const state = await getContractState(contractId);
+    if (isTokenFactoryContract(state)) {
+      return state.hash.toLowerCase();
+    }
+  }
+  return null;
+}
+
+function isTokenFactoryContract(state: ContractState | null): state is ContractState {
+  const methods = new Set(
+    state?.manifest?.abi?.methods
+      ?.map((method) => method.name?.toLowerCase())
+      .filter((name): name is string => Boolean(name)) ?? []
+  );
+  return (
+    state?.manifest?.name === "TokenFactory" &&
+    methods.has("isinitialized") &&
+    methods.has("gettokencount")
+  );
+}
+
+async function resolveAlreadyDeployedFactoryHash(err: unknown): Promise<string | null> {
+  const extracted = extractHashFromAlreadyExistsError(err);
+  if (!extracted) return null;
+
+  if (await isContractDeployed(extracted)) {
+    return extracted.toLowerCase();
+  }
+
+  const reversed = reverseHashBytes(extracted);
+  if (await isContractDeployed(reversed)) {
+    return reversed.toLowerCase();
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // ApplicationLog helpers
 // ---------------------------------------------------------------------------
@@ -366,14 +426,7 @@ function extractDeployedHashFromLog(log: ApplicationLog): string | null {
  * error message emitted by NeoLine / the RPC node.
  */
 function extractHashFromAlreadyExistsError(err: unknown): string | null {
-  if (typeof err !== "object" || err === null) return null;
-  const obj = err as Record<string, unknown>;
-  const desc =
-    typeof obj.description === "string"
-      ? obj.description
-      : typeof (obj.description as Record<string, unknown> | null)?.message === "string"
-      ? ((obj.description as Record<string, unknown>).message as string)
-      : "";
+  const desc = getErrorDescription(err);
   const match = /0x[0-9a-fA-F]{40}/i.exec(desc);
   return match ? match[0].toLowerCase() : null;
 }
@@ -383,15 +436,23 @@ function extractHashFromAlreadyExistsError(err: unknown): string | null {
 // ---------------------------------------------------------------------------
 
 function isContractAlreadyExistsError(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const obj = err as Record<string, unknown>;
-  const desc =
-    typeof obj.description === "string"
-      ? obj.description
-      : typeof (obj.description as Record<string, unknown> | null)?.message === "string"
-      ? ((obj.description as Record<string, unknown>).message as string)
-      : "";
+  const desc = getErrorDescription(err);
   return desc.toLowerCase().includes("contract already exists");
+}
+
+function getErrorDescription(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  if (typeof err !== "object" || err === null) return "";
+
+  const obj = err as Record<string, unknown>;
+  if (typeof obj.description === "string") return obj.description;
+
+  const desc = obj.description as Record<string, unknown> | null | undefined;
+  if (typeof desc?.message === "string") return desc.message;
+  if (typeof desc?.error === "string") return desc.error;
+
+  return "";
 }
 
 function formatDeployError(err: unknown): string {

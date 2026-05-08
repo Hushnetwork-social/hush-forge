@@ -57,6 +57,12 @@ export default function FactoryAdminPage() {
   const [mutations, setMutations] = useState<Record<string, AdminMutationState>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
 
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      setShowConnectModal(false);
+    }
+  }, [connectionStatus]);
+
   const factoryAddress = useMemo(() => {
     if (!accessState.factoryHash) return "";
     try {
@@ -191,7 +197,9 @@ export default function FactoryAdminPage() {
       error={errorMessage}
       onConnect={(walletType) => {
         void connect(walletType);
-        setShowConnectModal(false);
+        if (walletType !== "WalletConnect") {
+          setShowConnectModal(false);
+        }
       }}
       onClose={() => setShowConnectModal(false)}
     />

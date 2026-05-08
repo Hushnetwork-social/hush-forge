@@ -299,7 +299,12 @@ export interface MarketLaunchSummary {
 // Wallet state
 // ---------------------------------------------------------------------------
 
-export type WalletType = "NeoLine" | "OneGate" | "Neon" | "disconnected";
+export type WalletType =
+  | "NeoLine"
+  | "OneGate"
+  | "Neon"
+  | "WalletConnect"
+  | "disconnected";
 
 /** Single NEP-17 balance entry for a connected wallet. */
 export interface WalletBalance {

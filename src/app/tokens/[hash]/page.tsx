@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ForgeHeader } from "@/components/layout/ForgeHeader";
 import { TokenDetail } from "@/modules/forge/components/TokenDetail";
@@ -17,6 +17,12 @@ export default function TokenDetailPage() {
   const { setPendingTx } = usePendingTx();
 
   const [showConnectModal, setShowConnectModal] = useState(false);
+
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      setShowConnectModal(false);
+    }
+  }, [connectionStatus]);
 
   function handleTxSubmitted(
     txHash: string,
@@ -51,7 +57,9 @@ export default function TokenDetailPage() {
           error={errorMessage}
           onConnect={(walletType) => {
             void connect(walletType);
-            setShowConnectModal(false);
+            if (walletType !== "WalletConnect") {
+              setShowConnectModal(false);
+            }
           }}
           onClose={() => setShowConnectModal(false)}
         />

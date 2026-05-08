@@ -9,7 +9,10 @@ import type {
 
 vi.mock("./forge-config", () => ({
   GAS_CONTRACT_HASH: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
-  getRuntimeBondingCurveRouterHash: vi.fn(),
+}));
+
+vi.mock("./bonding-curve-router-service", () => ({
+  resolveBondingCurveRouterHash: vi.fn(),
 }));
 
 vi.mock("./neo-rpc-client", () => ({
@@ -23,7 +26,7 @@ vi.mock("./neo-dapi-adapter", () => ({
   invokeBondingCurveSell: vi.fn(),
 }));
 
-import { getRuntimeBondingCurveRouterHash } from "./forge-config";
+import { resolveBondingCurveRouterHash } from "./bonding-curve-router-service";
 import {
   getBondingCurveBuyQuote,
   getBondingCurveSellQuote,
@@ -122,7 +125,7 @@ const sampleSellQuote: MarketSellQuote = {
 describe("useMarketTradeFlow", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getRuntimeBondingCurveRouterHash).mockReturnValue("0xrouter");
+    vi.mocked(resolveBondingCurveRouterHash).mockResolvedValue("0xrouter");
     vi.mocked(getTokenBalance)
       .mockResolvedValueOnce(2_000_000_000n)
       .mockResolvedValueOnce(250n * TOKEN_FACTOR);

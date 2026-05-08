@@ -244,6 +244,35 @@ describe("WalletStore.tryAutoReconnect", () => {
     expect(localStorage.getItem("forge_wallet_address")).toBeNull();
   });
 
+  it("does not auto-start WalletConnect without a visible pairing modal", async () => {
+    localStorage.setItem("forge_wallet_type", "WalletConnect");
+    localStorage.setItem("forge_wallet_address", "NwTestAddress");
+
+    await useWalletStore.getState().tryAutoReconnect();
+
+    expect(vi.mocked(mockConnect)).not.toHaveBeenCalled();
+    expect(useWalletStore.getState().connectionStatus).toBe("disconnected");
+    expect(localStorage.getItem("forge_wallet_type")).toBeNull();
+    expect(localStorage.getItem("forge_wallet_address")).toBeNull();
+  });
+
+  it("does not clear an active WalletConnect session during retry timers", async () => {
+    localStorage.setItem("forge_wallet_type", "WalletConnect");
+    localStorage.setItem("forge_wallet_address", "NwTestAddress");
+    useWalletStore.setState({
+      walletType: "WalletConnect",
+      address: "NwTestAddress",
+      connectionStatus: "connected",
+    });
+
+    await useWalletStore.getState().tryAutoReconnect();
+
+    expect(vi.mocked(mockConnect)).not.toHaveBeenCalled();
+    expect(useWalletStore.getState().connectionStatus).toBe("connected");
+    expect(useWalletStore.getState().address).toBe("NwTestAddress");
+    expect(localStorage.getItem("forge_wallet_type")).toBe("WalletConnect");
+  });
+
   it("stays disconnected when wallet returns a different account than saved", async () => {
     localStorage.setItem("forge_wallet_type", "NeoLine");
     localStorage.setItem("forge_wallet_address", "NwOriginalAddress");

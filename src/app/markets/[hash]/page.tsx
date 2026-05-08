@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ForgeHeader } from "@/components/layout/ForgeHeader";
 import { LaunchDisclosureCard } from "@/modules/forge/components/LaunchDisclosureCard";
@@ -63,6 +63,12 @@ export default function MarketPairPage() {
   } = useMarketActivity(pair?.tokenHash ?? null);
   const { address, gasBalance, connectionStatus, errorMessage, installedWallets, connect } = useWallet();
   const { setPendingTx } = usePendingTx();
+
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      setShowConnectModal(false);
+    }
+  }, [connectionStatus]);
 
   function handleTxSubmitted(txHash: string, message: string) {
     setPendingTx({
@@ -167,7 +173,9 @@ export default function MarketPairPage() {
           error={errorMessage}
           onConnect={(walletType) => {
             void connect(walletType);
-            setShowConnectModal(false);
+            if (walletType !== "WalletConnect") {
+              setShowConnectModal(false);
+            }
           }}
           onClose={() => setShowConnectModal(false)}
         />

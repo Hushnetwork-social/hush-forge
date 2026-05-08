@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getRuntimeBondingCurveRouterHash } from "../forge-config";
+import { resolveBondingCurveRouterHash } from "../bonding-curve-router-service";
 import {
   isMarketDataInvalidationForToken,
   MARKET_DATA_INVALIDATED_EVENT,
@@ -118,7 +118,7 @@ export function useMarketActivity(tokenHash: string | null): UseMarketActivityRe
 
       requestInFlight = true;
       try {
-        const routerHash = getRuntimeBondingCurveRouterHash();
+        const routerHash = await resolveBondingCurveRouterHash();
         const query = routerHash
           ? `?routerHash=${encodeURIComponent(routerHash)}`
           : "";

@@ -51,6 +51,35 @@ describe("WalletConnectModal", () => {
     expect(onConnect).toHaveBeenCalledWith("NeoLine");
   });
 
+  it("renders unavailable wallets as disabled connector options", () => {
+    const onConnect = vi.fn();
+    render(
+      <WalletConnectModal
+        installedWallets={[
+          {
+            type: "WalletConnect",
+            name: "WalletConnect / Neon Wallet",
+            available: false,
+            disabledReason: "Waiting on CoZ private-network validation.",
+          },
+        ]}
+        onConnect={onConnect}
+        onClose={vi.fn()}
+      />
+    );
+
+    const button = screen.getByRole("button", {
+      name: "WalletConnect / Neon Wallet",
+    });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByText("Waiting on CoZ private-network validation.")
+    ).toBeInTheDocument();
+
+    fireEvent.click(button);
+    expect(onConnect).not.toHaveBeenCalled();
+  });
+
   it("calls onClose when Escape key is pressed", () => {
     const onClose = vi.fn();
     render(
@@ -87,5 +116,40 @@ describe("WalletConnectModal", () => {
       />
     );
     expect(screen.getByText(/Connection failed/i)).toBeInTheDocument();
+  });
+
+  it("shows the WalletConnect URI when the AppKit runtime emits it", () => {
+    render(
+      <WalletConnectModal
+        installedWallets={wallets}
+        onConnect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent(
+      window,
+      new CustomEvent("forge:walletconnect-uri", { detail: "wc:test-uri" })
+    );
+
+    expect(screen.getByLabelText("WalletConnect URI")).toHaveValue(
+      "wc:test-uri"
+    );
+  });
+
+  it("shows a cached WalletConnect URI when it mounted after the runtime emitted it", () => {
+    window.__FORGE_LAST_WALLETCONNECT_URI = "wc:cached-uri";
+
+    render(
+      <WalletConnectModal
+        installedWallets={wallets}
+        onConnect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText("WalletConnect URI")).toHaveValue(
+      "wc:cached-uri"
+    );
   });
 });

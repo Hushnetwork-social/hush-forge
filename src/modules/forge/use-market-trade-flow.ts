@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { getRuntimeBondingCurveRouterHash } from "./forge-config";
+import { resolveBondingCurveRouterHash } from "./bonding-curve-router-service";
 import {
   calculateExecutionPriceRaw,
   calculateMinimumOutput,
@@ -248,7 +248,7 @@ export function useMarketTradeFlow(
   connectedAddress: string | null,
   gasBalance: bigint
 ): UseMarketTradeFlowResult {
-  const routerHash = getRuntimeBondingCurveRouterHash();
+  const [routerHash, setRouterHash] = useState<string | null>(null);
   const [side, setSideState] = useState<MarketTradeSide>("buy");
   const [amountInput, setAmountInputState] = useState("");
   const [slippageInput, setSlippageInputState] = useState(() => {
@@ -299,6 +299,25 @@ export function useMarketTradeFlow(
     if (typeof window === "undefined") return;
     localStorage.setItem(MARKET_TRADE_SLIPPAGE_STORAGE_KEY, slippageInput);
   }, [slippageInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setRouterHash(null);
+    void resolveBondingCurveRouterHash()
+      .then((resolvedRouterHash) => {
+        if (cancelled) return;
+        setRouterHash(resolvedRouterHash);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRouterHash("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pair.tokenHash, refreshVersion]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -360,6 +379,15 @@ export function useMarketTradeFlow(
 
   useEffect(() => {
     let cancelled = false;
+
+    if (routerHash === null) {
+      setQuote(null);
+      setQuoteLoading(false);
+      setQuoteError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     if (!routerHash) {
       setQuote(null);

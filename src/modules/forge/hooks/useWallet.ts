@@ -11,7 +11,10 @@ import {
   detectInstalledWallets,
   type InstalledWallet,
 } from "../neo-dapi-adapter";
-import { useWalletStore } from "../wallet-store";
+import {
+  WALLET_CONNECTION_TIMEOUT_MS,
+  useWalletStore,
+} from "../wallet-store";
 
 export function useWallet() {
   const walletType = useWalletStore((s) => s.walletType);
@@ -58,10 +61,10 @@ export function useWallet() {
     const t1 = setTimeout(tryReconnect, 100);
     const t2 = setTimeout(tryReconnect, 500);
     const t3 = setTimeout(tryReconnect, 1500);
-    // t4 fires after the 10s connect() timeout in wallet-store has had time
+    // t4 fires after the connect() timeout in wallet-store has had time
     // to set "error" state.  This covers the MV3 service-worker restart race:
     // the initial connect() hangs â†’ times out at 10s â†’ "error" â†’ t4 retries.
-    const t4 = setTimeout(tryReconnect, 10_000);
+    const t4 = setTimeout(tryReconnect, WALLET_CONNECTION_TIMEOUT_MS);
 
     return () => {
       window.removeEventListener("NEOLine:DomReady", onNeoLineReady);

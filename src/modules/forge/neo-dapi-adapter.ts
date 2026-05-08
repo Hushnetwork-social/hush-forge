@@ -10,11 +10,22 @@ import {
   GAS_CONTRACT_HASH,
   PRIVATE_NET_RPC_URL,
   WALLET_STORAGE_KEY,
+  WALLETCONNECT_APPKIT_BLOCKED_REASON,
+  isWalletConnectAppKitEnabled,
   saveBondingCurveRouterHash,
 } from "./forge-config";
 import { getTokenBalance } from "./neo-rpc-client";
 import { serializeChangeModeParams } from "./token-mode-params";
 import type { ForgeParams, MarketQuoteAsset, TokenProfile, WalletBalance, WalletType } from "./types";
+import {
+  connectWalletConnectAppKit,
+  isWalletConnectRuntimeConfigured,
+} from "./walletconnect-appkit-adapter";
+import {
+  addressToScriptHash,
+  buildForgeTokenCreationRequest,
+  type NeoWalletInvokeArg,
+} from "./wallet-invocation-requests";
 
 const NEO_CONTRACT_HASH = "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5";
 
@@ -81,11 +92,6 @@ interface NeoDapi {
   AddNEP17(params: { scriptHash: string; symbol: string; decimals: number }): Promise<void>;
 }
 
-interface NeoDapiInvokeArg {
-  type: "Hash160" | "Integer" | "String" | "Boolean" | "Array" | "ByteArray" | "Any";
-  value: unknown;
-}
-
 declare global {
   interface Window {
     NEOLine?: { Neo: new () => NeoDapi };
@@ -106,6 +112,8 @@ declare global {
 export interface InstalledWallet {
   type: WalletType;
   name: string;
+  available?: boolean;
+  disabledReason?: string;
 }
 
 /** Returns all Neo dAPI-compatible wallets currently detected in `window`. */
@@ -116,6 +124,15 @@ export function detectInstalledWallets(): InstalledWallet[] {
   if (window.NEOLineN3 ?? window.NEOLine) wallets.push({ type: "NeoLine", name: "NeoLine" });
   if (window.OneGate) wallets.push({ type: "OneGate", name: "OneGate" });
   if (window.neon) wallets.push({ type: "Neon", name: "Neon Wallet" });
+  if (isWalletConnectAppKitEnabled()) {
+    const available = isWalletConnectRuntimeConfigured();
+    wallets.push({
+      type: "WalletConnect",
+      name: "WalletConnect / Neon Wallet",
+      available,
+      disabledReason: available ? undefined : WALLETCONNECT_APPKIT_BLOCKED_REASON,
+    });
+  }
   return wallets;
 }
 
@@ -146,7 +163,7 @@ export function getActiveRpcUrl(): string {
   return _activeRpcUrl;
 }
 
-function getDapi(type: WalletType): NeoDapi {
+function getDapi(type: WalletType): NeoDapi | Promise<NeoDapi> {
   switch (type) {
     case "NeoLine": {
       // NeoLine N3 uses `.Init`; legacy NeoLine uses `.Neo`
@@ -162,6 +179,8 @@ function getDapi(type: WalletType): NeoDapi {
     case "Neon":
       if (!window.neon) throw new WalletNotConnectedError();
       return window.neon;
+    case "WalletConnect":
+      return connectWalletConnectAppKit() as Promise<NeoDapi>;
     default:
       throw new WalletNotConnectedError();
   }
@@ -174,7 +193,7 @@ function getDapi(type: WalletType): NeoDapi {
 /** Connects to the specified wallet and returns the user's address. */
 export async function connect(type: WalletType): Promise<string> {
   console.log("[dapi] connect called — type:", type);
-  const dapi = getDapi(type);
+  const dapi = await getDapi(type);
   console.log("[dapi] dapi instance:", dapi);
   const account = await dapi.getAccount();
   console.log("[dapi] getAccount result:", account);
@@ -323,29 +342,6 @@ function formatBalance(raw: bigint, decimals: number): string {
 // Address utilities
 // ---------------------------------------------------------------------------
 
-const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-/**
- * Converts a Neo N3 Base58Check address to the 0x-prefixed little-endian
- * script hash that NeoLine's dAPI expects in `signers[].account`.
- */
-function addressToScriptHash(address: string): string {
-  if (/^0x[0-9a-fA-F]{40}$/.test(address)) return address;
-  let n = 0n;
-  for (const ch of address) {
-    const idx = BASE58_ALPHABET.indexOf(ch);
-    if (idx < 0) throw new Error(`Invalid Base58 character: ${ch}`);
-    n = n * 58n + BigInt(idx);
-  }
-  const bytes: number[] = [];
-  for (let i = 0; i < 25; i++) {
-    bytes.unshift(Number(n & 0xffn));
-    n >>= 8n;
-  }
-  const hashBytes = bytes.slice(1, 21).reverse();
-  return "0x" + hashBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 // ---------------------------------------------------------------------------
 // Invoke helpers
 // ---------------------------------------------------------------------------
@@ -368,7 +364,7 @@ function isWalletRejection(err: unknown): boolean {
 async function invokeConnectedOperation(
   scriptHash: string,
   operation: string,
-  args: NeoDapiInvokeArg[],
+  args: NeoWalletInvokeArg[],
   description: string
 ): Promise<string> {
   if (!_dapi) throw new WalletNotConnectedError();
@@ -396,7 +392,7 @@ async function invokeConnectedTransfer(
   assetHash: string,
   toHash: string,
   amount: bigint,
-  data: NeoDapiInvokeArg,
+  data: NeoWalletInvokeArg,
   description: string
 ): Promise<string> {
   if (!_dapi) throw new WalletNotConnectedError();
@@ -438,33 +434,12 @@ export async function invokeForge(
   console.log("[dapi] invokeForge — factoryHash:", factoryHash, "feeAmount:", feeAmount.toString());
   console.log("[dapi] invokeForge — params:", params);
 
-  // GAS.transfer expects the sender hash160; use script hash and keep signer
-  // scope conservative for NeoLine compatibility.
-  const fromAccount = addressToScriptHash(_connectedAddress!);
-
-  const invokeArgs = {
-    scriptHash: "0xd2a4cff31913016155e38e474a2c06d08be276cf", // GAS hash
-    operation: "transfer",
-    args: [
-      { type: "Hash160", value: fromAccount },
-      { type: "Hash160", value: factoryHash },
-      { type: "Integer", value: feeAmount.toString() },
-      {
-        type: "Array",
-        value: [
-          { type: "String", value: params.name },
-          { type: "String", value: params.symbol },
-          { type: "Integer", value: params.supply.toString() },
-          { type: "Integer", value: params.decimals.toString() },
-          { type: "String", value: params.mode },
-          { type: "String", value: params.imageUrl ?? "" },
-          { type: "Integer", value: String(params.creatorFeeRate ?? 0) },
-        ],
-      },
-    ],
-    signers: [{ account: fromAccount, scopes: "CalledByEntry" as const }],
-    description: `Forge token: ${params.name} (${params.symbol})`,
-  };
+  const invokeArgs = buildForgeTokenCreationRequest({
+    fromAddress: _connectedAddress!,
+    factoryHash,
+    feeAmount,
+    forgeParams: params,
+  });
 
   console.log("[dapi] invokeForge — dapi.invoke args:", JSON.stringify(invokeArgs));
 

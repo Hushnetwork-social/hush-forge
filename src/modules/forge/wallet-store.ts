@@ -44,27 +44,28 @@ export const WALLET_INITIAL_STATE: WalletState = {
   errorMessage: null,
 };
 
+export const WALLET_CONNECTION_TIMEOUT_MS = 12_000;
+export const WALLETCONNECT_WALLET_CONNECTION_TIMEOUT_MS = 180_000;
+
+const WALLET_CONNECTION_TIMEOUT_MESSAGE =
+  "Wallet connection timed out - please try again";
+
 export const useWalletStore = create<WalletStore>()((set, get) => ({
   ...WALLET_INITIAL_STATE,
 
   async connect(walletType: WalletType) {
     set({ connectionStatus: "connecting", errorMessage: null });
     try {
-      // Race the dAPI connect against a 10s deadline.  NeoLine's background
+      // Race the dAPI connect against a bounded deadline.  NeoLine's background
       // service worker (MV3) can restart mid-flight, silently dropping the
       // getAccount() message.  Without a timeout the store is permanently
       // stuck in "connecting".  On timeout we fall into the catch block which
       // sets "error" state, allowing the t4 retry timer in useWallet to fire
       // after the SW has restarted and recovered.
-      const address = await Promise.race([
+      const address = await withWalletConnectionTimeout(
         dapiConnect(walletType),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Wallet connection timed out â€” please try again")),
-            10_000
-          )
-        ),
-      ]);
+        getWalletConnectionTimeoutMs(walletType)
+      );
       const balances = await dapiGetBalances(address);
       set({ walletType, address, balances, connectionStatus: "connected" });
       if (typeof localStorage !== "undefined") {
@@ -111,12 +112,21 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
     // Already connected or connecting â€” nothing to do
     const { connectionStatus } = get();
     if (connectionStatus === "connected" || connectionStatus === "connecting") return;
+    if (saved === "WalletConnect") {
+      localStorage.removeItem(WALLET_STORAGE_KEY);
+      localStorage.removeItem(WALLET_ADDRESS_STORAGE_KEY);
+      set({ ...WALLET_INITIAL_STATE });
+      return;
+    }
 
     const savedAddress = localStorage.getItem(WALLET_ADDRESS_STORAGE_KEY);
 
     set({ connectionStatus: "connecting" });
     try {
-      const address = await dapiConnect(saved);
+      const address = await withWalletConnectionTimeout(
+        dapiConnect(saved),
+        getWalletConnectionTimeoutMs(saved)
+      );
 
       // If the wallet's active account has changed since the last explicit
       // connect, do NOT silently reconnect as a different account. Clear the
@@ -156,3 +166,23 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
   },
 }));
 
+function getWalletConnectionTimeoutMs(walletType: WalletType): number {
+  return walletType === "WalletConnect"
+    ? WALLETCONNECT_WALLET_CONNECTION_TIMEOUT_MS
+    : WALLET_CONNECTION_TIMEOUT_MS;
+}
+
+function withWalletConnectionTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs = WALLET_CONNECTION_TIMEOUT_MS
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(WALLET_CONNECTION_TIMEOUT_MESSAGE)),
+        timeoutMs
+      )
+    ),
+  ]);
+}

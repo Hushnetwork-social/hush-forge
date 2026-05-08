@@ -28,13 +28,29 @@ import {
   invokeClaim,
   WalletRejectedError,
 } from "./neo-dapi-adapter";
+import {
+  isWalletConnectRuntimeConfigured as mockIsWalletConnectRuntimeConfigured,
+  connectWalletConnectAppKit as mockConnectWalletConnectAppKit,
+} from "./walletconnect-appkit-adapter";
+import {
+  isWalletConnectAppKitEnabled as mockIsWalletConnectAppKitEnabled,
+  WALLETCONNECT_APPKIT_BLOCKED_REASON,
+} from "./forge-config";
 
 // Mock forge-config
 vi.mock("./forge-config", () => ({
   GAS_CONTRACT_HASH: "0xd2a4cff31913016155e38e474a2c06d08be276cf",
   PRIVATE_NET_RPC_URL: "",
   saveBondingCurveRouterHash: vi.fn(),
+  isWalletConnectAppKitEnabled: vi.fn(() => false),
+  WALLETCONNECT_APPKIT_BLOCKED_REASON:
+    "WalletConnect/AppKit is waiting on private-network validation.",
   WALLET_STORAGE_KEY: "forge_wallet_type",
+}));
+
+vi.mock("./walletconnect-appkit-adapter", () => ({
+  connectWalletConnectAppKit: vi.fn(),
+  isWalletConnectRuntimeConfigured: vi.fn(() => false),
 }));
 
 // ---------------------------------------------------------------------------
@@ -43,11 +59,16 @@ vi.mock("./forge-config", () => ({
 
 function makeMockDapi(overrides: Partial<{
   getAccount: () => Promise<{ address: string }>;
+  getNetworks: () => Promise<{ networks: string[]; defaultNetwork: string }>;
   invoke: () => Promise<{ txid: string }>;
   getBalance: () => Promise<unknown[]>;
 }> = {}) {
   return {
     getAccount: vi.fn().mockResolvedValue({ address: "NwTestAddress" }),
+    getNetworks: vi.fn().mockResolvedValue({
+      networks: ["N3TestNet"],
+      defaultNetwork: "N3TestNet",
+    }),
     getBalance: vi.fn().mockResolvedValue([
       { address: "NwTestAddress", balances: [] },
     ]),
@@ -72,6 +93,11 @@ function makeMockNeo(instance: ReturnType<typeof makeMockDapi>): new () => any {
 // ---------------------------------------------------------------------------
 
 describe("detectInstalledWallets", () => {
+  beforeEach(() => {
+    vi.mocked(mockIsWalletConnectAppKitEnabled).mockReturnValue(false);
+    vi.mocked(mockIsWalletConnectRuntimeConfigured).mockReturnValue(false);
+  });
+
   afterEach(() => {
     // Clean up window mocks
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,6 +143,33 @@ describe("detectInstalledWallets", () => {
     w.neon = {};
     const wallets = detectInstalledWallets();
     expect(wallets.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("adds a disabled WalletConnect option when the AppKit flag is enabled", () => {
+    vi.mocked(mockIsWalletConnectAppKitEnabled).mockReturnValue(true);
+
+    const wallets = detectInstalledWallets();
+
+    expect(wallets).toContainEqual({
+      type: "WalletConnect",
+      name: "WalletConnect / Neon Wallet",
+      available: false,
+      disabledReason: WALLETCONNECT_APPKIT_BLOCKED_REASON,
+    });
+  });
+
+  it("adds an available WalletConnect option when the AppKit runtime is configured", () => {
+    vi.mocked(mockIsWalletConnectAppKitEnabled).mockReturnValue(true);
+    vi.mocked(mockIsWalletConnectRuntimeConfigured).mockReturnValue(true);
+
+    const wallets = detectInstalledWallets();
+
+    expect(wallets).toContainEqual({
+      type: "WalletConnect",
+      name: "WalletConnect / Neon Wallet",
+      available: true,
+      disabledReason: undefined,
+    });
   });
 });
 
@@ -165,6 +218,19 @@ describe("connect and disconnect", () => {
 
     expect(getAddress()).toBeNull();
     expect(localStorage.getItem("forge_wallet_type")).toBeNull();
+  });
+
+  it("connect can use the WalletConnect/AppKit dAPI bridge", async () => {
+    const instance = makeMockDapi({
+      getAccount: vi.fn().mockResolvedValue({ address: "NwWalletConnect" }),
+    });
+    vi.mocked(mockConnectWalletConnectAppKit).mockResolvedValue(instance);
+
+    const address = await connect("WalletConnect");
+
+    expect(address).toBe("NwWalletConnect");
+    expect(getAddress()).toBe("NwWalletConnect");
+    expect(localStorage.getItem("forge_wallet_type")).toBe("WalletConnect");
   });
 });
 

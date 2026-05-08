@@ -40,6 +40,12 @@ export default function TokensPage() {
   const previousFactoryStatusRef = useRef(factory.status);
 
   useEffect(() => {
+    if (connectionStatus === "connected") {
+      setShowConnectModal(false);
+    }
+  }, [connectionStatus]);
+
+  useEffect(() => {
     if (address && connectionStatus === "connected") {
       void loadTokensForAddress(address);
     }
@@ -150,7 +156,9 @@ export default function TokensPage() {
           error={errorMessage}
           onConnect={(walletType) => {
             void connect(walletType);
-            setShowConnectModal(false);
+            if (walletType !== "WalletConnect") {
+              setShowConnectModal(false);
+            }
           }}
           onClose={() => setShowConnectModal(false)}
         />

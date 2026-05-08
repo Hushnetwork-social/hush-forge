@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ForgeHeader } from "@/components/layout/ForgeHeader";
@@ -85,12 +85,6 @@ export default function TokenLaunchPage() {
       ? "Forge is registering this token on the bonding curve and preparing the public market. The trading page will open automatically after confirmation."
       : null;
 
-  useEffect(() => {
-    if (connectionStatus === "connected") {
-      setShowConnectModal(false);
-    }
-  }, [connectionStatus]);
-
   function handleTxSubmitted(
     txHash: string,
     message: string,
@@ -158,7 +152,7 @@ export default function TokenLaunchPage() {
         </div>
       </main>
 
-      {showConnectModal && (
+      {showConnectModal && connectionStatus !== "connected" && (
         <WalletConnectModal
           installedWallets={installedWallets}
           connecting={connectionStatus === "connecting"}

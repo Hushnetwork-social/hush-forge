@@ -40,12 +40,6 @@ export default function TokensPage() {
   const previousFactoryStatusRef = useRef(factory.status);
 
   useEffect(() => {
-    if (connectionStatus === "connected") {
-      setShowConnectModal(false);
-    }
-  }, [connectionStatus]);
-
-  useEffect(() => {
     if (address && connectionStatus === "connected") {
       void loadTokensForAddress(address);
     }
@@ -149,7 +143,7 @@ export default function TokensPage() {
         />
       )}
 
-      {showConnectModal && (
+      {showConnectModal && connectionStatus !== "connected" && (
         <WalletConnectModal
           installedWallets={installedWallets}
           connecting={connectionStatus === "connecting"}

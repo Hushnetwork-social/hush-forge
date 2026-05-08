@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".codex-temp/**",
+    ".features-gen/**",
+    ".tmp/**",
+    "playwright-report/**",
+    "test-results/**",
     // Playwright E2E fixtures and step definitions are not React code
     "e2e/**",
     ".bdd-gen/**",

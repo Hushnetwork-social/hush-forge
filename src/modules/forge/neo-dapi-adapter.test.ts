@@ -491,7 +491,7 @@ describe("lifecycle invoke functions", () => {
     expect(call.signers[0].scopes).toBe("Global");
   });
 
-  it("invokeTokenTransfer calls the token contract with transfer and Global scope", async () => {
+  it("invokeTokenTransfer calls the token contract with transfer and CalledByEntry scope", async () => {
     const instance = await connectMock();
     await invokeTokenTransfer("0xtoken", "NhJX9eCbkKtgDrh1S4xMTRaHUGbZ5Be7uU", 125n);
 
@@ -510,7 +510,7 @@ describe("lifecycle invoke functions", () => {
       { type: "Integer", value: "125" },
       { type: "Any", value: null },
     ]);
-    expect(call.signers[0].scopes).toBe("Global");
+    expect(call.signers[0].scopes).toBe("CalledByEntry");
   });
 
   it("invokeBondingCurveBuy sends quote asset transfer with token hash and min out payload", async () => {
@@ -522,6 +522,7 @@ describe("lifecycle invoke functions", () => {
       scriptHash: string;
       operation: string;
       args: { type: string; value: unknown }[];
+      signers: { scopes: string }[];
     };
     expect(call.scriptHash).toBe("0xd2a4cff31913016155e38e474a2c06d08be276cf");
     expect(call.operation).toBe("transfer");
@@ -534,6 +535,7 @@ describe("lifecycle invoke functions", () => {
         { type: "Integer", value: "1234" },
       ],
     });
+    expect(call.signers[0].scopes).toBe("CalledByEntry");
   });
 
   it("invokeBondingCurveSell sends token transfer with min quote and declared gross token input", async () => {
@@ -545,6 +547,7 @@ describe("lifecycle invoke functions", () => {
       scriptHash: string;
       operation: string;
       args: { type: string; value: unknown }[];
+      signers: { scopes: string }[];
     };
     expect(call.scriptHash).toBe("0xtoken");
     expect(call.operation).toBe("transfer");
@@ -557,6 +560,7 @@ describe("lifecycle invoke functions", () => {
         { type: "Integer", value: "90000" },
       ],
     });
+    expect(call.signers[0].scopes).toBe("CalledByEntry");
   });
 
   it("invokeClaimCreatorFee calls the token contract with the requested amount", async () => {

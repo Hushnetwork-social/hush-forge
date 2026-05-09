@@ -74,6 +74,7 @@ declare global {
 let connectPromise: Promise<WalletConnectDapiLike> | null = null;
 let connectedDapi: WalletConnectDapiLike | null = null;
 const WALLETCONNECT_CONNECT_TIMEOUT_MS = 180_000;
+const FORGE_WALLETCONNECT_ICON_URL = "https://hushnetwork.social/forge-logo.png";
 
 export function isWalletConnectRuntimeConfigured(): boolean {
   return Boolean(REOWN_PROJECT_ID.trim());
@@ -151,7 +152,7 @@ async function createWalletConnectDapi(): Promise<WalletConnectDapiLike> {
     disableProviderPing: true,
     metadata: {
       description: "FORGE token launcher WalletConnect proof of work.",
-      icons: [],
+      icons: [FORGE_WALLETCONNECT_ICON_URL],
       name: "FORGE",
       url: window.location.origin,
     },
@@ -190,7 +191,7 @@ async function createWalletConnectDapi(): Promise<WalletConnectDapiLike> {
     },
     metadata: {
       description: "FORGE token launcher WalletConnect proof of work.",
-      icons: [],
+      icons: [FORGE_WALLETCONNECT_ICON_URL],
       name: "FORGE",
       url: window.location.origin,
     },

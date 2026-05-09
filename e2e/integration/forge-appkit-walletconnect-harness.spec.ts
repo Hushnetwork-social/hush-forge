@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { execSync } from "child_process";
+import { writeFile } from "fs/promises";
 import * as path from "path";
 import {
   assertNeoNetworkMagic,
@@ -7,13 +8,13 @@ import {
   startLocalWalletConnectRelay,
   startWalletConnectHarnessRuntime,
   type LocalWalletConnectRelay,
+  type WalletConnectHarnessRequest,
   type WalletConnectHarnessRuntime,
-} from "../../tools/forge-wallet-harness";
+} from "@hushnetwork/forge-wallet-harness";
 
-const DOCKER_COMPOSE_DIR = path.resolve(
-  __dirname,
-  "../../../neo3-privatenet-docker"
-);
+const DOCKER_COMPOSE_DIR = process.env.NEO3_PRIVATENET_DOCKER_DIR
+  ? path.resolve(process.env.NEO3_PRIVATENET_DOCKER_DIR)
+  : path.resolve(__dirname, "../../../neo3-privatenet-docker");
 const FORGE_ROOT_DIR = path.resolve(__dirname, "../..");
 const NEO_RPC_URL = "http://localhost:10332";
 const RELAY_PORT = 32102;
@@ -30,7 +31,19 @@ const harnessConfig = loadForgeWalletHarnessConfig({
 });
 
 let relay: LocalWalletConnectRelay | null = null;
+let harnessEvidenceAttached = false;
+let lastRpcMagic: number | null = null;
 let walletRuntime: WalletConnectHarnessRuntime | null = null;
+
+type HarnessEvidence = {
+  account: string;
+  chainId: string;
+  expectedMagic: number;
+  relayUrl: string;
+  requests: WalletConnectHarnessRequest[];
+  rpcMagic: number | null;
+  rpcUrl: string;
+};
 
 test.describe("FEAT-122 FORGE AppKit WalletConnect harness integration", () => {
   test.beforeAll(async () => {
@@ -44,12 +57,13 @@ test.describe("FEAT-122 FORGE AppKit WalletConnect harness integration", () => {
 
   test.beforeEach(async ({ page }, testInfo) => {
     await walletRuntime?.close();
+    harnessEvidenceAttached = false;
     walletRuntime = null;
 
     resetChain();
     await waitForChain();
     await waitForFunding(harnessConfig.account.address);
-    await assertNeoNetworkMagic({
+    lastRpcMagic = await assertNeoNetworkMagic({
       expectedMagic: harnessConfig.expectedMagic,
       rpcUrl: harnessConfig.rpcUrl,
     });
@@ -59,14 +73,20 @@ test.describe("FEAT-122 FORGE AppKit WalletConnect harness integration", () => {
     await installWalletConnectHarness(page, factoryHash, walletRuntime);
   });
 
-  test.afterEach(async () => {
+  test.afterEach(async ({}, testInfo) => {
+    await attachHarnessEvidence(testInfo).catch(async (error: unknown) => {
+      await testInfo.attach("walletconnect-harness-evidence-error.txt", {
+        body: error instanceof Error ? error.stack ?? error.message : String(error),
+        contentType: "text/plain",
+      });
+    });
     await walletRuntime?.close();
     walletRuntime = null;
   });
 
   test("Forge creation signs through AppKit WalletConnect and the harness wallet", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.goto("/tokens");
     await ensureWalletConnectConnected(page);
 
@@ -86,7 +106,9 @@ test.describe("FEAT-122 FORGE AppKit WalletConnect harness integration", () => {
 
     await overlay.getByRole("button", { name: /FORGE/ }).click();
 
-    await expectCreatedTokenCard(page, "AKHT");
+    const invokeRequest = await waitForHarnessRequest("invokeFunction");
+    await expectTransactionHalted(extractTxid(invokeRequest.result));
+    await expectAndAttachHarnessEvidence(testInfo);
   });
 });
 
@@ -172,27 +194,149 @@ async function hasVisibleAddressPrefix(
     .catch(() => false);
 }
 
-async function expectCreatedTokenCard(
-  page: Page,
-  symbol: string
-): Promise<void> {
-  const createdTokenCard = page
-    .getByRole("article")
-    .filter({ hasText: symbol })
-    .first();
-  const deadline = Date.now() + 180_000;
-
+async function waitForHarnessRequest(
+  method: string,
+  timeoutMs = 120_000,
+  pollMs = 1_000
+): Promise<WalletConnectHarnessRequest> {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await createdTokenCard.isVisible().catch(() => false)) {
-      await expect(createdTokenCard).toContainText("Yours");
-      return;
+    const request = findLastRequest(walletRuntime?.listRequests() ?? [], method);
+    if (request?.status === "approved") {
+      return request;
     }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  throw new Error(`Harness did not approve ${method} after ${timeoutMs}ms.`);
+}
 
-    await ensureWalletConnectConnected(page);
-    await page.waitForTimeout(1_000);
+async function attachHarnessEvidence(
+  testInfo: TestInfo
+): Promise<HarnessEvidence | null> {
+  if (harnessEvidenceAttached || !walletRuntime) {
+    return null;
   }
 
-  await expect(createdTokenCard).toBeVisible({ timeout: 1 });
+  const evidence: HarnessEvidence = {
+    account: harnessConfig.account.address,
+    chainId: harnessConfig.chainId,
+    expectedMagic: harnessConfig.expectedMagic,
+    relayUrl: harnessConfig.relayUrl,
+    requests: walletRuntime.listRequests(),
+    rpcMagic: lastRpcMagic,
+    rpcUrl: harnessConfig.rpcUrl,
+  };
+
+  const evidencePath = testInfo.outputPath("walletconnect-harness-evidence.json");
+  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+
+  await testInfo.attach("walletconnect-harness-evidence.json", {
+    path: evidencePath,
+    contentType: "application/json",
+  });
+  harnessEvidenceAttached = true;
+
+  return evidence;
+}
+
+async function expectAndAttachHarnessEvidence(
+  testInfo: TestInfo
+): Promise<void> {
+  const evidence = await attachHarnessEvidence(testInfo);
+  const requests = evidence?.requests ?? walletRuntime?.listRequests() ?? [];
+
+  const networkRequest = findLastRequest(requests, "getNetworkVersion");
+  if (!networkRequest) {
+    throw new Error("Harness evidence did not capture getNetworkVersion.");
+  }
+  expect(networkRequest).toMatchObject({
+    result: expect.objectContaining({
+      protocol: { network: harnessConfig.expectedMagic },
+      rpcAddress: harnessConfig.rpcUrl,
+    }),
+    status: "approved",
+    topic: expect.any(String),
+  });
+  expect(networkRequest.topic.length).toBeGreaterThan(0);
+
+  const invokeRequest = findLastRequest(requests, "invokeFunction");
+  if (!invokeRequest) {
+    throw new Error("Harness evidence did not capture invokeFunction.");
+  }
+  expect(invokeRequest).toMatchObject({
+    status: "approved",
+    topic: expect.any(String),
+  });
+  expect(invokeRequest.topic.length).toBeGreaterThan(0);
+  expect(extractTxid(invokeRequest.result)).toMatch(/^(0x)?[0-9a-f]{64}$/i);
+
+  const invokeParams = invokeRequest.params as {
+    invocations?: Array<{ operation?: string; scriptHash?: string }>;
+  };
+  expect(invokeParams.invocations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        operation: "transfer",
+      }),
+    ])
+  );
+}
+
+async function expectTransactionHalted(txid: string): Promise<void> {
+  expect(txid).toMatch(/^(0x)?[0-9a-f]{64}$/i);
+
+  const log = (await waitForRpcResult("getapplicationlog", [txid], {
+    timeoutMs: 120_000,
+  })) as {
+    executions?: Array<{ vmstate?: string }>;
+  };
+
+  expect(log.executions?.[0]?.vmstate).toBe("HALT");
+}
+
+async function waitForRpcResult(
+  method: string,
+  params: unknown[],
+  {
+    pollMs = 1_000,
+    timeoutMs = 60_000,
+  }: { pollMs?: number; timeoutMs?: number } = {}
+): Promise<unknown> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      return await rpcCall(method, params);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`RPC ${method} did not return after ${timeoutMs}ms.`);
+}
+
+function findLastRequest(
+  requests: WalletConnectHarnessRequest[],
+  method: string
+): WalletConnectHarnessRequest | undefined {
+  for (let index = requests.length - 1; index >= 0; index -= 1) {
+    if (requests[index].method === method) {
+      return requests[index];
+    }
+  }
+  return undefined;
+}
+
+function extractTxid(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object" && "txid" in result) {
+    return String((result as { txid?: unknown }).txid ?? "");
+  }
+  return "";
 }
 
 function resetChain(): void {
@@ -255,7 +399,7 @@ function deployFactoryAndParseHash(): string {
 }
 
 async function rpcCall(method: string, params: unknown[]): Promise<unknown> {
-  const res = await fetch(NEO_RPC_URL, {
+  const res = await fetch(harnessConfig.rpcUrl, {
     body: JSON.stringify({ id: 1, jsonrpc: "2.0", method, params }),
     headers: { "Content-Type": "application/json" },
     method: "POST",

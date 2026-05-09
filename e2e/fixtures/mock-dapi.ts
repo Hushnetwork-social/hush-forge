@@ -16,7 +16,7 @@ import {
   loadForgeWalletHarnessConfig,
   signAndSubmitNeoInvocation,
   type NeoInvocationRequest,
-} from "../../tools/forge-wallet-harness";
+} from "@hushnetwork/forge-wallet-harness";
 
 const harnessConfig = loadForgeWalletHarnessConfig({
   ...process.env,

@@ -6,7 +6,7 @@ import {
   loadForgeWalletHarnessConfig,
   signAndSubmitNeoInvocation,
   type NeoInvocationRequest,
-} from "../../tools/forge-wallet-harness";
+} from "@hushnetwork/forge-wallet-harness";
 
 const DOCKER_COMPOSE_DIR = path.resolve(
   __dirname,

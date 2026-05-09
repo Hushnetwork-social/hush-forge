@@ -365,7 +365,8 @@ async function invokeConnectedOperation(
   scriptHash: string,
   operation: string,
   args: NeoWalletInvokeArg[],
-  description: string
+  description: string,
+  scope: NeoDapiSigner["scopes"] = "Global"
 ): Promise<string> {
   if (!_dapi) throw new WalletNotConnectedError();
 
@@ -374,7 +375,7 @@ async function invokeConnectedOperation(
       scriptHash,
       operation,
       args,
-      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: "Global" as const }],
+      signers: [{ account: addressToScriptHash(_connectedAddress!), scopes: scope }],
       description,
     });
     return result.txid;
@@ -408,7 +409,7 @@ async function invokeConnectedTransfer(
         { type: "Integer", value: amount.toString() },
         data,
       ],
-      signers: [{ account: addressToScriptHash(_connectedAddress), scopes: "Global" as const }],
+      signers: [{ account: addressToScriptHash(_connectedAddress), scopes: "CalledByEntry" as const }],
       description,
     });
     return result.txid;
@@ -1028,7 +1029,8 @@ export async function invokeTokenTransfer(
       { type: "Integer", value: amount.toString() },
       { type: "Any", value: null },
     ],
-    `Transfer ${amount} raw token units`
+    `Transfer ${amount} raw token units`,
+    "CalledByEntry"
   );
 }
 

@@ -1,0 +1,75 @@
+name: FORGE CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  appkit-walletconnect-harness:
+    name: AppKit WalletConnect harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    defaults:
+      run:
+        working-directory: hush-forge
+
+    env:
+      CI: true
+      NEXT_TELEMETRY_DISABLED: 1
+      NEO3_PRIVATENET_DOCKER_DIR: ${{ github.workspace }}/neo3-privatenet-docker
+
+    steps:
+      - name: Checkout FORGE
+        uses: actions/checkout@v4
+        with:
+          path: hush-forge
+
+      - name: Checkout Neo3 private network
+        uses: actions/checkout@v4
+        with:
+          repository: AxLabs/neo3-privatenet-docker
+          path: neo3-privatenet-docker
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: hush-forge/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Run AppKit WalletConnect happy path
+        run: npm run test:integration:appkit-harness
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-appkit-walletconnect-harness-artifacts
+          if-no-files-found: ignore
+          path: |
+            hush-forge/playwright-report-appkit-harness/
+            hush-forge/test-results/

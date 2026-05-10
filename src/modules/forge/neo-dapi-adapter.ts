@@ -19,6 +19,7 @@ import { serializeChangeModeParams } from "./token-mode-params";
 import type { ForgeParams, MarketQuoteAsset, TokenProfile, WalletBalance, WalletType } from "./types";
 import {
   connectWalletConnectAppKit,
+  disconnectWalletConnectAppKit,
   isWalletConnectRuntimeConfigured,
 } from "./walletconnect-appkit-adapter";
 import {
@@ -228,6 +229,9 @@ export async function connect(type: WalletType): Promise<string> {
 
 /** Clears the in-memory connection state (does not revoke wallet permission). */
 export function disconnect(): void {
+  if (_walletType === "WalletConnect") {
+    disconnectWalletConnectAppKit();
+  }
   _connectedAddress = null;
   _walletType = "disconnected";
   _dapi = null;

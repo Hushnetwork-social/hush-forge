@@ -49,6 +49,7 @@ interface UniversalProviderLike {
   connect(params: {
     optionalNamespaces: Record<string, unknown>;
   }): Promise<WalletConnectSessionLike>;
+  disconnect?(): Promise<void>;
   request<T>(
     args: { method: string; params?: unknown },
     chainId?: string
@@ -73,6 +74,7 @@ declare global {
 
 let connectPromise: Promise<WalletConnectDapiLike> | null = null;
 let connectedDapi: WalletConnectDapiLike | null = null;
+let activeUniversalProvider: UniversalProviderLike | null = null;
 const WALLETCONNECT_CONNECT_TIMEOUT_MS = 180_000;
 const FORGE_WALLETCONNECT_ICON_URL = "https://hushnetwork.social/forge-logo.png";
 
@@ -93,6 +95,23 @@ export async function connectWalletConnectAppKit(): Promise<WalletConnectDapiLik
     return await connectPromise;
   } finally {
     connectPromise = null;
+  }
+}
+
+export function disconnectWalletConnectAppKit(): void {
+  const provider = activeUniversalProvider;
+  connectPromise = null;
+  connectedDapi = null;
+  activeUniversalProvider = null;
+
+  if (typeof window !== "undefined") {
+    delete window.__FORGE_LAST_WALLETCONNECT_URI;
+  }
+
+  if (typeof provider?.disconnect === "function") {
+    void provider.disconnect().catch((error: unknown) => {
+      console.warn("[walletconnect] disconnect failed:", error);
+    });
   }
 }
 
@@ -159,6 +178,7 @@ async function createWalletConnectDapi(): Promise<WalletConnectDapiLike> {
     projectId: REOWN_PROJECT_ID,
     relayUrl: REOWN_RELAY_URL,
   });
+  activeUniversalProvider = universalProvider as UniversalProviderLike;
 
   universalProvider.on("display_uri", (uri: string) => {
     window.__FORGE_LAST_WALLETCONNECT_URI = uri;
@@ -202,29 +222,34 @@ async function createWalletConnectDapi(): Promise<WalletConnectDapiLike> {
   });
   await neo3Adapter.setUniversalProvider(universalProvider as never);
 
-  const session = getReusableNeo3Session(universalProvider as UniversalProviderLike) ??
-    await withWalletConnectTimeout(
-      (universalProvider as UniversalProviderLike).connect({
-        optionalNamespaces: walletConnectNamespaces,
-      }),
+  try {
+    const session = getReusableNeo3Session(universalProvider as UniversalProviderLike) ??
+      await withWalletConnectTimeout(
+        (universalProvider as UniversalProviderLike).connect({
+          optionalNamespaces: walletConnectNamespaces,
+        }),
+        "WalletConnect/AppKit connection timed out."
+      );
+    const provider = createUniversalProviderBridge(
+      universalProvider as UniversalProviderLike,
+      session
+    );
+    const address = await withWalletConnectTimeout(
+      provider.connect(),
       "WalletConnect/AppKit connection timed out."
     );
-  const provider = createUniversalProviderBridge(
-    universalProvider as UniversalProviderLike,
-    session
-  );
-  const address = await withWalletConnectTimeout(
-    provider.connect(),
-    "WalletConnect/AppKit connection timed out."
-  );
 
-  if (!address) {
-    throw new Error("WalletConnect/AppKit connected without an account address.");
+    if (!address) {
+      throw new Error("WalletConnect/AppKit connected without an account address.");
+    }
+
+    await assertPrivateNetwork(provider as WalletConnectProviderLike);
+
+    return createDapi(address, provider as WalletConnectProviderLike);
+  } catch (error) {
+    disconnectWalletConnectAppKit();
+    throw error;
   }
-
-  await assertPrivateNetwork(provider as WalletConnectProviderLike);
-
-  return createDapi(address, provider as WalletConnectProviderLike);
 }
 
 function getReusableNeo3Session(
@@ -250,13 +275,42 @@ function createUniversalProviderBridge(
   return {
     connect: async () => address,
     invokeFunction: async (params) =>
-      universalProvider.request<string | { txid?: string }>(
+      requestWithSessionError(
+        universalProvider,
         { method: "invokeFunction", params },
         "neo3:private"
       ),
     request: async <T,>(args: { method: string; params?: unknown }) =>
-      universalProvider.request<T>(args, "neo3:private"),
+      requestWithSessionError<T>(universalProvider, args, "neo3:private"),
   };
+}
+
+async function requestWithSessionError<T>(
+  universalProvider: UniversalProviderLike,
+  args: { method: string; params?: unknown },
+  chainId: string
+): Promise<T> {
+  try {
+    return await universalProvider.request<T>(args, chainId);
+  } catch (error) {
+    if (isWalletConnectSessionError(error)) {
+      throw new Error(
+        "WalletConnect session expired or was disconnected in the wallet. Disconnect and reconnect FORGE."
+      );
+    }
+
+    throw error;
+  }
+}
+
+function isWalletConnectSessionError(error: unknown): boolean {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "object" && error !== null
+      ? String((error as Record<string, unknown>).message ?? "")
+      : String(error ?? "");
+
+  return /session|pairing|topic|expired|disconnected|unauthorized/iu.test(message);
 }
 
 function extractNeo3Address(session: WalletConnectSessionLike): string {

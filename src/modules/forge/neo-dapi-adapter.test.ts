@@ -31,6 +31,7 @@ import {
 import {
   isWalletConnectRuntimeConfigured as mockIsWalletConnectRuntimeConfigured,
   connectWalletConnectAppKit as mockConnectWalletConnectAppKit,
+  disconnectWalletConnectAppKit as mockDisconnectWalletConnectAppKit,
 } from "./walletconnect-appkit-adapter";
 import {
   isWalletConnectAppKitEnabled as mockIsWalletConnectAppKitEnabled,
@@ -50,6 +51,7 @@ vi.mock("./forge-config", () => ({
 
 vi.mock("./walletconnect-appkit-adapter", () => ({
   connectWalletConnectAppKit: vi.fn(),
+  disconnectWalletConnectAppKit: vi.fn(),
   isWalletConnectRuntimeConfigured: vi.fn(() => false),
 }));
 
@@ -231,6 +233,20 @@ describe("connect and disconnect", () => {
     expect(address).toBe("NwWalletConnect");
     expect(getAddress()).toBe("NwWalletConnect");
     expect(localStorage.getItem("forge_wallet_type")).toBe("WalletConnect");
+  });
+
+  it("disconnect revokes the WalletConnect/AppKit session when connected through WalletConnect", async () => {
+    const instance = makeMockDapi({
+      getAccount: vi.fn().mockResolvedValue({ address: "NwWalletConnect" }),
+    });
+    vi.mocked(mockConnectWalletConnectAppKit).mockResolvedValue(instance);
+
+    await connect("WalletConnect");
+    vi.mocked(mockDisconnectWalletConnectAppKit).mockClear();
+    disconnect();
+
+    expect(mockDisconnectWalletConnectAppKit).toHaveBeenCalledOnce();
+    expect(getAddress()).toBeNull();
   });
 });
 

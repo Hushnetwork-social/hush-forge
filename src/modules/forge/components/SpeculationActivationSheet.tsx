@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { GAS_CONTRACT_HASH, PRIVATE_NET_RPC_URL } from "../forge-config";
 import { fetchFactoryConfig } from "../factory-governance-service";
@@ -108,7 +108,7 @@ export function SpeculationActivationSheet({
   const [costQuoteError, setCostQuoteError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [bootstrapAttempted, setBootstrapAttempted] = useState(false);
+  const bootstrapAttemptedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -117,7 +117,7 @@ export function SpeculationActivationSheet({
     setCurveMode("all");
     setPartialInput("");
     setSubmitError(null);
-    setBootstrapAttempted(false);
+    bootstrapAttemptedRef.current = null;
   }, [defaultLaunchProfile, factoryHash, isVisible, token.contractHash]);
 
   useEffect(() => {
@@ -277,12 +277,13 @@ export function SpeculationActivationSheet({
             ? error.message
             : "Unable to estimate the launch transaction cost.";
 
+        const bootstrapKey = `${factoryHash}:${token.contractHash}`;
         if (
           isLocalDevnet &&
-          !bootstrapAttempted &&
+          bootstrapAttemptedRef.current !== bootstrapKey &&
           /BondingCurveRouter not configured/i.test(message)
         ) {
-          setBootstrapAttempted(true);
+          bootstrapAttemptedRef.current = bootstrapKey;
 
           try {
             await ensureDevnetSpeculationBootstrap(factoryHash);
@@ -321,7 +322,6 @@ export function SpeculationActivationSheet({
     };
   }, [
     address,
-    bootstrapAttempted,
     factoryHash,
     isVisible,
     isLocalDevnet,

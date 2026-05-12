@@ -12,7 +12,7 @@ const useWalletStore = vi.fn();
 
 vi.mock("../forge-config", () => ({
   GAS_CONTRACT_HASH: "0xgas",
-  PRIVATE_NET_RPC_URL: "",
+  PRIVATE_NET_RPC_URL: "/api/rpc",
 }));
 
 vi.mock("../factory-governance-service", () => ({
@@ -204,6 +204,46 @@ describe("SpeculationActivationSheet", () => {
     expect(await screen.findByText("1.0643 GAS")).toBeInTheDocument();
     expect(screen.getByText("1.5643 GAS")).toBeInTheDocument();
     expect(screen.getByText("9,999,931.1862 GAS")).toBeInTheDocument();
+  });
+
+  it("bootstraps the local router and retries cost quoting when the factory router is missing", async () => {
+    quoteChangeModeCost.mockReset();
+    quoteChangeModeCost
+      .mockRejectedValueOnce(
+        new Error(
+          "Contract invocation FAULT: ABORTMSG is executed. Reason: BondingCurveRouter not configured"
+        )
+      )
+      .mockResolvedValueOnce({
+        operationFeeDatoshi: 50_000_000n,
+        estimatedSystemFeeDatoshi: 1_000_000n,
+        estimatedNetworkFeeDatoshi: 1_000_000n,
+        estimatedChainFeeDatoshi: 2_000_000n,
+        estimatedTotalWalletOutflowDatoshi: 52_000_000n,
+      });
+
+    render(
+      <SpeculationActivationSheet
+        open
+        token={makeToken()}
+        factoryHash="0xfactory"
+        onClose={vi.fn()}
+        onTxSubmitted={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("0.52 GAS")).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(ensureDevnetSpeculationBootstrap).toHaveBeenCalledWith("0xfactory")
+    );
+    expect(quoteChangeModeCost).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByText(/BondingCurveRouter not configured/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Activate Speculation Market" })
+    ).not.toBeDisabled();
   });
 
   it("updates the launch preview when a higher profile is selected", async () => {
